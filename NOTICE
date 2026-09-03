@@ -1,0 +1,24 @@
+agent-builder
+Copyright 2026 Pornthep Nivatyakul
+
+Licensed under the Apache License, Version 2.0. See LICENSE.
+
+Scope of this license
+---------------------
+This license covers the agent-builder source code: the AgentSpec schema,
+the generator, templates, audit/live-test tooling, and the example packs
+in this repository.
+
+It does NOT cover the agent packages that agent-builder generates for you.
+A generated package (AGENTS.md, skills, schemas, manifest.json, scripts)
+is your own work product. Its license is whatever you declare in the
+AgentSpec `license` field, which the generator writes into the package's
+manifest.json. No attribution to agent-builder is required in generated
+packages.
+
+Third-party components
+----------------------
+agent-builder invokes the thClaws CLI (`thclaws agent validate`,
+`thclaws agent pack`, `thclaws --serve`) as an external tool. thClaws is
+licensed under MIT OR Apache-2.0 by ThaiGPT Co., Ltd. and is not bundled
+in this repository.

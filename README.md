@@ -39,3 +39,7 @@ M0 (repo + design + plan) — เริ่ม 2026-09-03. ยังไม่ม�
 - Python 3.11+
 - thClaws >= 0.116.0 (`thclaws agent validate` / `thclaws agent pack` ต้องอยู่ใน PATH สำหรับ M4 ขึ้นไป)
 - Atlas control plane สำหรับ M8 (export registration data ทำงานได้โดยไม่ต้องมี Atlas)
+
+## License
+
+Apache-2.0 (ดู [LICENSE](LICENSE) และ [NOTICE](NOTICE)) — ครอบเฉพาะโค้ดของ builder; package ที่ generate ออกมาเป็นของผู้ใช้ ใช้ license ตาม field `license` ใน AgentSpec
