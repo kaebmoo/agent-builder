@@ -1,0 +1,22 @@
+__pycache__/
+*.pyc
+.venv/
+venv/
+.env
+*.env
+!.env.example
+dist/
+build/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+# generated packages / live-audit output
+out/
+.forge-cache/
+*.thclaws-pack.tar.gz
+# never commit data or credentials
+fixtures/**/data/
+*.sqlite
+*.db
+.DS_Store
