@@ -20,3 +20,7 @@ fixtures/**/data/
 *.sqlite
 *.db
 .DS_Store
+
+# local agent settings
+.claude/settings.local.json
+.claude/tmp/
