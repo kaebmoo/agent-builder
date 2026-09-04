@@ -1,0 +1,365 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://thclaws.cloud/schemas/agent-builder/agentspec.schema.json",
+  "title": "AgentSpec",
+  "description": "The single source of truth for generating an auditable thClaws agent package.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "identity",
+    "mission",
+    "target",
+    "inputs",
+    "outputs",
+    "capabilities",
+    "permissions",
+    "refusal",
+    "model",
+    "env",
+    "evaluation",
+    "state"
+  ],
+  "properties": {
+    "identity": {"$ref": "#/$defs/identity"},
+    "mission": {"$ref": "#/$defs/mission"},
+    "package_pattern": {
+      "type": "string",
+      "enum": ["static-pipeline", "batch-fanout", "dynamic"]
+    },
+    "target": {
+      "type": "string",
+      "enum": ["thclaws-standalone", "atlas-worker", "atlas-workflow"]
+    },
+    "routing": {"$ref": "#/$defs/routing"},
+    "inputs": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"$ref": "#/$defs/input"}
+    },
+    "outputs": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"$ref": "#/$defs/output"}
+    },
+    "capabilities": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/capability"}
+    },
+    "permissions": {"$ref": "#/$defs/permissions"},
+    "refusal": {"$ref": "#/$defs/refusal"},
+    "model": {"$ref": "#/$defs/model"},
+    "env": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "pattern": "^[A-Z][A-Z0-9_]*$"
+      }
+    },
+    "evaluation": {"$ref": "#/$defs/evaluation"},
+    "state": {"$ref": "#/$defs/state"}
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"target": {"const": "thclaws-standalone"}}},
+      "then": {
+        "required": ["package_pattern"],
+        "not": {"required": ["routing"]}
+      }
+    },
+    {
+      "if": {"properties": {"target": {"enum": ["atlas-worker", "atlas-workflow"]}}},
+      "then": {
+        "required": ["routing"],
+        "not": {"required": ["package_pattern"]},
+        "properties": {
+          "model": {
+            "properties": {"mode": {"const": "pinned"}}
+          },
+          "outputs": {"maxItems": 1}
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "slug": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$"
+    },
+    "nonEmptyString": {
+      "type": "string",
+      "minLength": 1
+    },
+    "identity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "version", "owner", "license", "thclaws_min_version"],
+      "properties": {
+        "name": {"$ref": "#/$defs/slug"},
+        "version": {
+          "type": "string",
+          "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(-[0-9A-Za-z.-]+)?$"
+        },
+        "owner": {"$ref": "#/$defs/nonEmptyString"},
+        "license": {"$ref": "#/$defs/nonEmptyString"},
+        "thclaws_min_version": {
+          "type": "string",
+          "description": "Minimum version with optional compatible upper bound: comma-separated <, <=, ==, >, or >= clauses using x.y.z.",
+          "pattern": "^(?:(?:>=|<=|==|>|<)?[0-9]+\\.[0-9]+\\.[0-9]+)(?:,(?:(?:>=|<=|==|>|<)?[0-9]+\\.[0-9]+\\.[0-9]+))*$"
+        }
+      }
+    },
+    "mission": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["purpose", "domain"],
+      "properties": {
+        "purpose": {
+          "type": "string",
+          "minLength": 20,
+          "maxLength": 2000
+        },
+        "domain": {"$ref": "#/$defs/nonEmptyString"}
+      }
+    },
+    "routing": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["role", "tags"],
+      "properties": {
+        "role": {"$ref": "#/$defs/slug"},
+        "tags": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"$ref": "#/$defs/slug"}
+        }
+      }
+    },
+    "input": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "transport"],
+      "properties": {
+        "name": {"$ref": "#/$defs/slug"},
+        "transport": {
+          "type": "string",
+          "enum": ["prompt_json", "atlas_file_handoff", "local_workspace"]
+        },
+        "path": {"type": "string", "minLength": 1},
+        "mime_types": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"type": "string", "minLength": 1}
+        },
+        "schema": {"type": "object", "minProperties": 1}
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"transport": {"const": "atlas_file_handoff"}}},
+          "then": {"not": {"required": ["path"]}}
+        }
+      ]
+    },
+    "output": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "transport"],
+      "properties": {
+        "name": {"$ref": "#/$defs/slug"},
+        "transport": {
+          "type": "string",
+          "enum": ["assistant_json", "collect_files"]
+        },
+        "schema": {
+          "type": "object",
+          "minProperties": 1,
+          "description": "Response schema for assistant_json, or optional artifact-manifest schema for collect_files."
+        },
+        "files": {"$ref": "#/$defs/files"}
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"transport": {"const": "collect_files"}}},
+          "then": {"required": ["files"]}
+        },
+        {
+          "if": {"properties": {"transport": {"const": "assistant_json"}}},
+          "then": {
+            "required": ["schema"],
+            "not": {"required": ["files"]}
+          }
+        }
+      ]
+    },
+    "files": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["globs"],
+      "properties": {
+        "globs": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {"type": "string", "minLength": 1}
+        }
+      }
+    },
+    "capability": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["pack", "params"],
+      "properties": {
+        "pack": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$"
+        },
+        "params": {"type": "object"}
+      }
+    },
+    "permissions": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["tier", "tools", "shell", "network", "write_scope"],
+      "properties": {
+        "tier": {"type": "string", "enum": ["T0", "T1", "T2"]},
+        "tools": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"type": "string", "minLength": 1}
+        },
+        "shell": {"type": "string", "enum": ["none", "sandboxed"]},
+        "network": {"type": "string", "enum": ["none", "general-http", "allowlist"]},
+        "write_scope": {
+          "type": "string",
+          "enum": ["none", "output", "workspace"],
+          "description": "Agent-declared write boundary. Artifact snapshots are runtime writes, not agent writes. Runtime enforcement is target-dependent."
+        }
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"tier": {"const": "T0"}}},
+          "then": {
+            "properties": {
+              "shell": {"const": "none"},
+              "network": {"const": "none"},
+              "write_scope": {"const": "none"}
+            }
+          }
+        },
+        {
+          "if": {"properties": {"tier": {"const": "T1"}}},
+          "then": {
+            "properties": {
+              "write_scope": {"const": "output"},
+              "shell": {"const": "none"},
+              "network": {"const": "none"}
+            }
+          }
+        },
+        {
+          "if": {"properties": {"tier": {"const": "T2"}}},
+          "then": {"properties": {"write_scope": {"const": "workspace"}}}
+        }
+      ]
+    },
+    "refusal": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["conditions", "response", "schema"],
+      "properties": {
+        "conditions": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"type": "string", "minLength": 1}
+        },
+        "response": {
+          "type": "string",
+          "minLength": 1
+        },
+        "schema": {"type": "object", "minProperties": 1}
+      }
+    },
+    "model": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode"],
+      "properties": {
+        "mode": {"type": "string", "enum": ["pinned", "policy"]},
+        "id": {"type": "string", "minLength": 1},
+        "policy": {"type": "string", "minLength": 1}
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"mode": {"const": "pinned"}}},
+          "then": {"required": ["id"], "not": {"required": ["policy"]}}
+        },
+        {
+          "if": {"properties": {"mode": {"const": "policy"}}},
+          "then": {"required": ["policy"], "not": {"required": ["id"]}}
+        }
+      ]
+    },
+    "evaluation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["golden_cases"],
+      "properties": {
+        "golden_cases": {
+          "type": "array",
+          "minItems": 4,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "kind", "expect", "input"],
+            "properties": {
+              "id": {"$ref": "#/$defs/slug"},
+              "kind": {
+                "type": "string",
+                "enum": ["normal", "missing_input", "refusal", "malformed"]
+              },
+              "expect": {
+                "type": "string",
+                "enum": ["result", "refusal"],
+                "description": "Output branch validated by live audit."
+              },
+              "input": {"type": "object"}
+            },
+            "allOf": [
+              {
+                "if": {"properties": {"kind": {"const": "normal"}}},
+                "then": {"properties": {"expect": {"const": "result"}}}
+              },
+              {
+                "if": {"properties": {"kind": {"const": "refusal"}}},
+                "then": {"properties": {"expect": {"const": "refusal"}}}
+              }
+            ]
+          }
+        }
+      }
+    },
+    "state": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode", "scope"],
+      "properties": {
+        "mode": {"type": "string", "enum": ["none", "session", "durable_memory"]},
+        "scope": {"type": "string", "enum": ["turn", "session", "workspace"]}
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"mode": {"const": "none"}}},
+          "then": {"properties": {"scope": {"const": "turn"}}}
+        },
+        {
+          "if": {"properties": {"mode": {"const": "session"}}},
+          "then": {"properties": {"scope": {"const": "session"}}}
+        },
+        {
+          "if": {"properties": {"mode": {"const": "durable_memory"}}},
+          "then": {"properties": {"scope": {"const": "workspace"}}}
+        }
+      ]
+    }
+  }
+}

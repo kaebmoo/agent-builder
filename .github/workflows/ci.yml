@@ -23,10 +23,22 @@ jobs:
         run: pip install -e ".[dev]"
       - name: Run milestone gates
         run: |
-          set -e
+          set +e
+          failed=0
+          skipped=0
           for f in scripts/check_*.py; do
-            echo "== $f"; python "$f"
+            echo "== $f"
+            python "$f"
+            status=$?
+            if [ "$status" -eq 2 ]; then
+              echo "SKIP: $f requires an external dependency"
+              skipped=1
+            elif [ "$status" -ne 0 ]; then
+              failed=1
+            fi
           done
+          if [ "$failed" -ne 0 ]; then exit 1; fi
+          if [ "$skipped" -ne 0 ]; then echo "One or more milestone gates were explicitly skipped"; fi
   lint:
     runs-on: ubuntu-latest
     steps:

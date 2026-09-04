@@ -1,0 +1,92 @@
+identity:
+  name: sql-reader
+  version: 0.1.0
+  owner: agent-builder
+  license: Apache-2.0
+  thclaws_min_version: ">=0.116.0"
+mission:
+  purpose: Answer a read-only analytical question with a validated SQL result and no database mutation.
+  domain: analytics
+target: atlas-worker
+routing:
+  role: sql-reader
+  tags: [analytics, sql, read-only]
+inputs:
+  - name: query
+    transport: prompt_json
+    schema:
+      type: object
+      additionalProperties: false
+      required: [question]
+      properties:
+        question: {type: string}
+outputs:
+  - name: query_result
+    transport: assistant_json
+    schema:
+      type: object
+      additionalProperties: false
+      required: [statement, columns, rows]
+      properties:
+        statement: {type: string}
+        columns:
+          type: array
+          items: {type: string}
+        rows:
+          type: array
+          items: {type: object}
+capabilities:
+  - pack: sql-readonly
+    params: {}
+permissions:
+  tier: T0
+  tools: [Read, sql.metadata, sql.query, sql.validate]
+  shell: none
+  network: none
+  write_scope: none
+refusal:
+  conditions:
+    - A required query input is missing or malformed.
+    - The request requires a mutating SQL operation or administrative access.
+    - The requested data is outside the configured read-only source.
+  response: Return a JSON refusal with the reason and the required data-owner handoff.
+  schema:
+    type: object
+    additionalProperties: false
+    required: [refused, reason, handoff]
+    properties:
+      refused: {const: true}
+      reason: {type: string}
+      handoff: {type: string}
+model:
+  mode: pinned
+  id: gpt-5.4
+env: []
+evaluation:
+  golden_cases:
+    - id: normal
+      kind: normal
+      expect: result
+      input:
+        query:
+          question: Show invoice totals by vendor for August 2026.
+    - id: missing-input
+      kind: missing_input
+      expect: refusal
+      input: {}
+    - id: refusal
+      kind: refusal
+      expect: refusal
+      input:
+        query:
+          question: Delete all invoices from August 2026.
+    - id: malformed
+      kind: malformed
+      expect: refusal
+      input:
+        query:
+          question: Show invoice totals by vendor for August 2026.
+          unexpected_filter: true
+state:
+  mode: none
+  scope: turn

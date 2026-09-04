@@ -1,0 +1,112 @@
+identity:
+  name: invoice-reviewer
+  version: 0.1.0
+  owner: agent-builder
+  license: Apache-2.0
+  thclaws_min_version: ">=0.116.0"
+mission:
+  purpose: Review an incoming invoice and return structured facts and review findings without approving payment.
+  domain: finance-operations
+target: atlas-worker
+routing:
+  role: invoice-reviewer
+  tags: [finance, invoice, read-only]
+inputs:
+  - name: invoice_file
+    transport: atlas_file_handoff
+    mime_types: [application/pdf, image/jpeg, image/png]
+    schema:
+      type: object
+      additionalProperties: false
+      required: [name, mime_type]
+      properties:
+        name: {type: string}
+        mime_type: {enum: [application/pdf, image/jpeg, image/png]}
+  - name: request
+    transport: prompt_json
+    schema:
+      type: object
+      additionalProperties: false
+      required: [instruction]
+      properties:
+        instruction: {type: string, minLength: 1}
+outputs:
+  - name: invoice_review
+    transport: assistant_json
+    schema:
+      type: object
+      additionalProperties: false
+      required: [invoice_number, vendor, currency, total_amount, review_status, findings]
+      properties:
+        invoice_number: {type: string}
+        vendor: {type: string}
+        currency: {type: string}
+        total_amount: {type: number}
+        review_status: {enum: [ready_for_approval, needs_review]}
+        findings:
+          type: array
+          items: {type: string}
+capabilities: []
+permissions:
+  tier: T0
+  tools: [Read]
+  shell: none
+  network: none
+  write_scope: none
+refusal:
+  conditions:
+    - A required input is missing or malformed.
+    - The incoming file is not a supported invoice format.
+    - The request asks the agent to approve payment or perform another side effect.
+  response: Return a JSON refusal with the reason and the required human handoff.
+  schema:
+    type: object
+    additionalProperties: false
+    required: [refused, reason, handoff]
+    properties:
+      refused: {const: true}
+      reason: {type: string}
+      handoff: {type: string}
+model:
+  mode: pinned
+  id: gpt-5.4
+env: []
+evaluation:
+  golden_cases:
+    - id: normal
+      kind: normal
+      expect: result
+      input:
+        invoice_file:
+          name: vendor-invoice-1042.pdf
+          mime_type: application/pdf
+        request:
+          instruction: Review this invoice for approval.
+    - id: missing-input
+      kind: missing_input
+      expect: refusal
+      input:
+        request:
+          instruction: Review this invoice for approval.
+    - id: refusal
+      kind: refusal
+      expect: refusal
+      input:
+        invoice_file:
+          name: vendor-invoice-1042.pdf
+          mime_type: application/pdf
+        request:
+          instruction: Approve and pay this invoice today.
+    - id: malformed
+      kind: malformed
+      expect: refusal
+      input:
+        invoice_file:
+          name: vendor-invoice-1042.pdf
+          mime_type: application/pdf
+          unexpected_metadata: true
+        request:
+          instruction: Review this invoice for approval.
+state:
+  mode: none
+  scope: turn

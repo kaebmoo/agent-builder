@@ -32,7 +32,7 @@ User goal → Discovery (7 questions) → AgentSpec (SSOT)
 
 ## สถานะ
 
-M0 (repo + design + plan) — เริ่ม 2026-09-03. ยังไม่มีโค้ดที่รันได้
+M2 (fixtures + golden-case gate) — เสร็จ 2026-09-04. ถัดไปคือ compatibility matrix (M3); generator และ audit ยังไม่เริ่ม
 
 ## ข้อกำหนดขั้นต่ำ
 
@@ -42,4 +42,4 @@ M0 (repo + design + plan) — เริ่ม 2026-09-03. ยังไม่ม�
 
 ## License
 
-Apache-2.0 (ดู [LICENSE](LICENSE) และ [NOTICE](NOTICE)) — ครอบเฉพาะโค้ดของ builder; package ที่ generate ออกมาเป็นของผู้ใช้ ใช้ license ตาม field `license` ใน AgentSpec
+Apache-2.0 (ดู [LICENSE](LICENSE) และ [NOTICE](NOTICE)) — ครอบเฉพาะโค้ดของ builder; package ที่ generate ออกมาเป็นของผู้ใช้ ใช้ license ตาม `identity.license` ใน AgentSpec
