@@ -35,4 +35,6 @@
 
 ## ขั้นถัดไป
 
-M3: สร้าง `patterns/matrix.yaml` และ `forge/compat.py` ก่อนเริ่ม generator
+M3 เสร็จ 2026-09-06: `patterns/matrix.yaml`, `forge/compat.py` และ `scripts/check_m3_matrix.py` ผ่าน gate แล้ว; ตรวจ M1/M2 ผ่านก่อนเริ่มงาน
+
+M4: สร้าง generator และ build report แบบ deterministic โดยใช้ผลจาก `resolve_compatibility(spec)`; ตรวจ package ผ่าน `thclaws agent validate` (ถ้าไม่มี binary ต้องประกาศ skip)

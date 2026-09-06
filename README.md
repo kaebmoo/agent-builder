@@ -32,7 +32,9 @@ User goal → Discovery (7 questions) → AgentSpec (SSOT)
 
 ## สถานะ
 
-M2 (fixtures + golden-case gate) — เสร็จ 2026-09-04. ถัดไปคือ compatibility matrix (M3); generator และ audit ยังไม่เริ่ม
+M3 (compatibility matrix) — เสร็จ 2026-09-06 หลังตรวจ M1/M2 ผ่านอีกครั้ง. ถัดไปคือ generator (M4); audit ยังไม่เริ่ม
+
+รัน gate ด้วย `python3 scripts/check_m3_matrix.py` — ตรวจ matrix ตาม DESIGN §3, combination ที่ต้อง reject, ความสอดคล้องกับ AgentSpec และ fixture ทั้งสองชุด
 
 ## ข้อกำหนดขั้นต่ำ
 

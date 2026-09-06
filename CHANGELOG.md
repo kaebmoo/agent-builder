@@ -1,6 +1,10 @@
 # Changelog
 
-## Unreleased
+## [Unreleased]
+
+### Added
+
+- M3 (2026-09-06): compatibility matrix and deterministic AgentSpec resolver for execution surface, package pattern and flow location, with a gate covering valid/rejected combinations and schema agreement
 
 - M0 (2026-09-03): repo skeleton, docs/DESIGN.md baseline, docs/PLAN.md M0–M8, `scripts/check_m0_layout.py`
 - M1 (2026-09-04): AgentSpec schema, target/pattern routing rules, tier/write boundaries, embedded-schema validation, and semantic gate
@@ -8,3 +12,5 @@
 - M1 follow-up (2026-09-04): network-tool declaration checks and friendly schema-load failures
 - M2 (2026-09-04): invoice-reviewer and sql-reader fixtures, plus deterministic golden-case validation
 - M1/M2 follow-up (2026-09-04): explicit golden-case output branches for live audit
+
+[Unreleased]: https://github.com/kaebmoo/agent-builder/commits/main

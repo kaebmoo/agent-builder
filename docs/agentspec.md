@@ -33,6 +33,11 @@
 
 `human-approval` และ `manager-loop` เป็น flow ของ Atlas ไม่ใช่ package pattern
 
+M3 ใช้ `patterns/matrix.yaml` และ `forge.compat.resolve_compatibility(spec)` คืนค่า `target`, `execution_surface`, `allowed_patterns`, `package_pattern` ที่เลือก/คำนวณ และ `flow_location` โดยไม่แก้ input
+`execution_surface` ใช้ค่า `thclaws-gui-cli-catalog`, `POST /agent/run`, `atlas-workflow-engine` ตามลำดับ target ในตาราง; `flow_location` เป็น `.thclaws/agent_workflow/run.js`, `null`, `atlas-workflow-json` ตามลำดับ
+Atlas ต้องไม่ส่ง `package_pattern` แม้เป็น `single-worker`; ค่านี้คำนวณให้ในผลลัพธ์เท่านั้น
+resolver ตรวจ target/pattern และการมี/ไม่มี routing กับ execution_surface โดยโยน `ValueError` เมื่อไม่เข้ากัน (`TypeError` ถ้า spec ไม่ใช่ object); ผู้เรียกยังต้องตรวจ AgentSpec เต็มตาม M1 รวมถึงเนื้อหา routing, permission และ state ก่อนใช้งาน ผล compatibility นี้ไม่ใช่สถานะ audit หรือ runtime guarantee
+
 `routing.role` และ `routing.tags` เป็นความตั้งใจด้าน routing ของ package ส่วน `worker_id`, `workspace_id`, `workspace_dir` และ `base_url` เป็น deployment-time values ที่เกิดตอน export/register ไม่อยู่ใน AgentSpec
 `tags: []` หมายถึง route ด้วย `role` อย่างเดียวและเป็นค่าที่ถูกต้อง
 

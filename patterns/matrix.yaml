@@ -1,0 +1,13 @@
+# DESIGN §3, thClaws v0.116.0. Package compatibility, not runtime guarantees.
+thclaws-standalone:
+  execution_surface: thclaws-gui-cli-catalog
+  allowed_patterns: [static-pipeline, batch-fanout, dynamic]
+  flow_location: .thclaws/agent_workflow/run.js
+atlas-worker:
+  execution_surface: POST /agent/run
+  allowed_patterns: [single-worker]
+  flow_location: null
+atlas-workflow:
+  execution_surface: atlas-workflow-engine
+  allowed_patterns: [single-worker]
+  flow_location: atlas-workflow-json
