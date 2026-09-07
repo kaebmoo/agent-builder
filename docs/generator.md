@@ -30,24 +30,26 @@ Atlas ไม่มี subagent definition หรือ run.js ใน package. `a
 
 ## Capability assets
 
-M4 รับ descriptor `packs/<name>/pack.yaml` รูปแบบขั้นต่ำนี้:
+M7a แทน descriptor เดิมด้วย contract v2 ตาม [DESIGN §5](DESIGN.md) ทั้งชุด ไม่รองรับ v1.
+ดูตัวอย่างจริงที่ `packs/sql-readonly/pack.yaml` และ [คู่มือ SQL pack](../packs/sql-readonly/README.md).
 
-```yaml
-min_tier: T0
-tools: [Read]
-env: []
-mcp_servers: []
-scripts: [example.py]
-skills: [guide]
-```
+`scripts` อ้างไฟล์ `.py` ใต้ `scripts/`; `skills` อ้าง `<name>/SKILL.md` ใต้ `skills/`.
+ไม่รับ symlink หรือ path traversal. Asset ถูกคัดลอกเป็น `.thclaws/scripts/<pack>--<file>.py`
+และ `.thclaws/skills/<pack>--<skill>/SKILL.md`; argument ที่ตรง `scripts/<file>.py`
+จะถูกเปลี่ยนเป็น path ของ asset ใน package. Argument อื่นคงเดิม ไม่มี shell หรือ env interpolation.
 
-ต้องมีทั้ง 6 field และไม่รับ field อื่น. `scripts` อ้างไฟล์ `.py` ตรงใต้ `scripts/` ของ pack; `skills` อ้าง `<name>/SKILL.md` ตรงใต้ `skills/`. ชื่อ asset ต้องเป็น lowercase/digits/underscore/hyphen และไม่รับ symlink หรือ path traversal
+Generator สร้าง `.thclaws/mcp.json` จาก server command/args และ `manifest.requires.mcp_servers`.
+ห้าม server name ซ้ำข้าม pack. ค่า secret ไม่อยู่ใน MCP config; operator ตั้ง env ตามชื่อใน spec
+แล้ว start daemon โดยใช้ CWD=package. การติดตั้ง runtime, daemon isolation และ egress เป็นงาน deployment.
 
-script ถูกคัดลอกเป็น `.thclaws/scripts/<pack>--<file>.py`; skill เป็น `.thclaws/skills/<pack>--<skill>/SKILL.md`. Prefix กันการทับชื่อข้าม pack และ collision จะ fail. ไม่มีการ execute asset ตอน generate
+Spec ต้องประกาศ tools ครบทุกตัวที่ server advertise รวม built-ins ที่ pack ต้องใช้, env ครบ,
+tier ไม่น้อยกว่า min_tier และ network ไม่น้อยกว่า pack. `mutating` ต้องเป็น subset ของ server tools
+และใช้ T2. `params` ยังไม่รองรับเมื่อมี descriptor.
 
-spec ต้องประกาศ tools/env ที่ descriptor ต้องการ และ tier ต้องไม่น้อยกว่า `min_tier`. M4 ยังไม่แปลง `params` ของ pack ที่มี descriptor จึง reject ถ้าไม่ว่าง. MCP เป็นเพียงชื่อ requirement ใน manifest; operator ต้องติดตั้งบน daemon เอง
-
-ถ้าไม่มี descriptor ผล build ระบุ dependency `missing` และ CLI พิมพ์ `UNRESOLVED pack`. ไม่สมมติชื่อ server, command หรือ secret เพื่อให้ดูเหมือนใช้งานได้. `sql-readonly` ใน fixture ยังอยู่ในกรณีนี้จนกว่า M7 จะเพิ่ม implementation จริง. Gate ใช้ pack สังเคราะห์ใน temporary directory เพื่อทดสอบตำแหน่งและ byte ของ assets
+ไม่มี descriptor = `missing`; มี descriptor/assets = `assets_bundled`; มีหลักฐานจาก
+`forge pack test` ที่ผ่านและ digest ตรง descriptor/assets = `conformant` พร้อมอ้าง evidence ใน report.
+ผล test ที่ fail/skip หรือ stale จะกัน generation/static audit จนกว่าจะ test ใหม่ผ่าน.
+Generator ไม่รัน MCP และไม่เลื่อนสถานะ package จาก `unverified` เอง.
 
 ## Gate และสถานะ
 

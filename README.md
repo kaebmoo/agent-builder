@@ -34,9 +34,15 @@ User goal → Discovery (7 questions) → AgentSpec (SSOT)
 
 ## สถานะ
 
-M5 (static audit) — เสร็จ 2026-09-07; `forge audit` / `audit.py` / `studio.py` ตรวจ package ตามกฎ DESIGN §7 และ `thclaws agent validate` v0.116.0. `invoice-reviewer` ได้สถานะ `draft`; `sql-reader` ยัง `unverified` เพราะ pack `sql-readonly` ยังไม่มี (M7a). ถัดไปคือ M7a แล้ว live audit (M6)
+M7a (pack contract + SQL pack) — เสร็จ 2026-09-07. `forge pack test sql-readonly` ตรวจ MCP โดยตรงโดยไม่ใช้ provider key;
+`forge generate` สร้าง config v2 และ `forge audit` ให้ `sql-reader` เป็น `draft` เมื่อ native validate ผ่าน.
+ถัดไปคือ live audit M6; ยังไม่มีหลักฐาน runtime ของ agent หรือสถานะ candidate/shippable.
 
-รัน gate ด้วย `python3 scripts/check_m4_generate.py` และ `python3 scripts/check_m5_static_audit.py` — ถ้าไม่มี `thclaws` ใน PATH จะประกาศ skip ส่วน native และคืน exit 2
+```bash
+python3 scripts/check_m7a_sql_pack.py
+```
+
+ดู [SQL pack](packs/sql-readonly/README.md) สำหรับ runtime, fixture และ exit code 0/1/2.
 
 ## ข้อกำหนดขั้นต่ำ
 

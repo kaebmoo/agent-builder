@@ -84,14 +84,14 @@ def check(temporary: Path) -> int:
 
     assert tampered("customized", customize)["static_audit"]["findings"] == []
 
-    # Missing pack: sql-reader cannot reach draft until M7a ships the descriptor.
+    # A missing descriptor still fails even after SQL pack ships.
     sql = temporary / "sql-reader"
-    generate(load_spec(ROOT / "fixtures/sql-reader/spec.yaml"), sql)
-    report = audit_package(sql, thclaws=False)
+    empty_packs = temporary / "empty-packs"
+    empty_packs.mkdir()
+    generate(load_spec(ROOT / "fixtures/sql-reader/spec.yaml"), sql, packs_dir=empty_packs)
+    report = audit_package(sql, packs_dir=empty_packs, thclaws=False)
     validator.validate(report)
-    expect(report, "packs", "sql-readonly")
     expect(report, "packs", "missing")
-    assert report["audit"]["static"] == "failed" and report["package_status"] == "unverified"
     assert exit_code(report) == 1
 
     # Broken packages fail with a readable reason.
@@ -207,7 +207,8 @@ def check(temporary: Path) -> int:
     (pack / "scripts").mkdir(parents=True)
     (pack / "scripts/probe.py").write_text('print("synthetic fixture only")\n', encoding="utf-8")
     metadata = {"min_tier": "T0", "tools": ["Read"], "env": ["EXAMPLE_FIXTURE_TOKEN"],
-                "mcp_servers": ["fixture-mcp"], "scripts": ["probe.py"], "skills": []}
+                "network": "none", "hosts": [],
+                "fixture": {"setup": "scripts/probe.py", "cases": []}, "mcp_servers": [], "scripts": ["probe.py"], "skills": []}
     (pack / "pack.yaml").write_text(yaml.safe_dump(metadata), encoding="utf-8")
     with_pack = copy.deepcopy(spec)
     with_pack["capabilities"] = [{"pack": "fixture-pack", "params": {}}]
@@ -220,10 +221,10 @@ def check(temporary: Path) -> int:
     (pack / "scripts/probe.py").write_text('print("edited after generation")\n', encoding="utf-8")
     expect(audit_package(packaged, packs_dir=packs, thclaws=False), "drift", "fixture-pack--probe.py")
     (pack / "scripts/probe.py").write_text('print("synthetic fixture only")\n', encoding="utf-8")
-    metadata.update(min_tier="T2", mcp_servers=["sql-admin"])
+    metadata.update(min_tier="T2")
     (pack / "pack.yaml").write_text(yaml.safe_dump(metadata), encoding="utf-8")
     expect(audit_package(packaged, packs_dir=packs, thclaws=False), "packs", "requires T2")
-    metadata.update(min_tier="T0", mcp_servers=["fixture-mcp"])
+    metadata.update(min_tier="T0")
     (pack / "pack.yaml").write_text(yaml.safe_dump(metadata), encoding="utf-8")
     edited = json.loads((packaged / "agentspec.json").read_text(encoding="utf-8"))
     edited["env"] = []
@@ -293,7 +294,7 @@ def check(temporary: Path) -> int:
     for folder, code in ((sql, 1), (temporary / "admin-mcp", 1)):
         result = subprocess.run([sys.executable, "audit.py"], cwd=folder, env=env, capture_output=True, text=True, check=False)
         assert result.returncode == code and "package_status=unverified" in result.stdout, result.stdout + result.stderr
-    print(f"M5 native OK: invoice-reviewer reached draft on {version.stdout.splitlines()[0]}; sql-reader stays unverified")
+    print(f"M5 native OK: invoice-reviewer reached draft on {version.stdout.splitlines()[0]}; synthetic missing-pack package stays unverified")
     return 0
 
 

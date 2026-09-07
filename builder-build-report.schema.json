@@ -186,7 +186,8 @@
           "status": {
             "enum": [
               "missing",
-              "assets_bundled"
+              "assets_bundled",
+              "conformant"
             ]
           },
           "mcp_servers": {
@@ -196,8 +197,153 @@
               "minLength": 1
             },
             "uniqueItems": true
+          },
+          "conformance": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "status",
+              "pack_digest",
+              "servers",
+              "cases",
+              "detail"
+            ],
+            "properties": {
+              "status": {
+                "const": "conformant"
+              },
+              "pack_digest": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              },
+              "detail": {
+                "const": ""
+              },
+              "servers": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "tools",
+                    "tools_digest"
+                  ],
+                  "properties": {
+                    "tools": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      },
+                      "uniqueItems": true
+                    },
+                    "tools_digest": {
+                      "type": "string",
+                      "pattern": "^[0-9a-f]{64}$"
+                    }
+                  }
+                }
+              },
+              "cases": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "index",
+                    "tool",
+                    "expect",
+                    "actual",
+                    "passed"
+                  ],
+                  "properties": {
+                    "index": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "tool": {
+                      "type": "string"
+                    },
+                    "expect": {
+                      "enum": [
+                        "ok",
+                        "error"
+                      ]
+                    },
+                    "actual": {
+                      "enum": [
+                        "ok",
+                        "error"
+                      ]
+                    },
+                    "passed": {
+                      "const": true
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "network": {
+            "enum": [
+              "none",
+              "allowlist",
+              "general-http"
+            ]
+          },
+          "hosts": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "uniqueItems": true
+          },
+          "env": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[A-Z_][A-Z0-9_]*$"
+            },
+            "uniqueItems": true
           }
-        }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "status": {
+                  "const": "conformant"
+                }
+              }
+            },
+            "then": {
+              "required": [
+                "conformance"
+              ],
+              "properties": {
+                "conformance": {
+                  "required": [
+                    "status",
+                    "pack_digest",
+                    "servers",
+                    "cases"
+                  ],
+                  "properties": {
+                    "status": {
+                      "const": "conformant"
+                    }
+                  }
+                }
+              }
+            },
+            "else": {
+              "not": {
+                "required": [
+                  "conformance"
+                ]
+              }
+            }
+          }
+        ]
       }
     },
     "deployment_hints": {

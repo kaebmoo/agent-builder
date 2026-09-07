@@ -1,0 +1,30 @@
+min_tier: T0
+network: none
+hosts: []
+env: [SQL_READONLY_DSN, SQL_READONLY_AI_ROOT]
+tools: []
+mcp_servers:
+  - name: sql-readonly
+    command: python3
+    args: [scripts/server.py]
+    tools: [metadata, query, validate]
+    mutating: []
+scripts: [server.py]
+skills: [sql-readonly]
+fixture:
+  setup: fixture/setup.py
+  cases:
+    - {tool: sql-readonly__metadata, args: {table: invoices}, expect: ok}
+    - {tool: sql-readonly__validate, args: {statement: 'SELECT vendor, SUM(total) FROM invoices GROUP BY vendor'}, expect: ok}
+    - {tool: sql-readonly__query, args: {statement: 'SELECT vendor, SUM(total) FROM invoices GROUP BY vendor'}, expect: ok}
+    - {tool: sql-readonly__query, args: {statement: 'DELETE FROM invoices'}, expect: error}
+    - {tool: sql-readonly__validate, args: {statement: 'UPDATE invoices SET total = 0'}, expect: error}
+    - {tool: sql-readonly__query, args: {statement: "ATTACH DATABASE '/tmp/forbidden.db' AS other"}, expect: error}
+    - {tool: sql-readonly__query, args: {statement: 'WITH x AS (SELECT 1) DELETE FROM invoices'}, expect: error}
+    - {tool: sql-readonly__query, args: {statement: 'PRAGMA writable_schema=ON'}, expect: error}
+    - {tool: sql-readonly__query, args: {statement: 'SELECT 1; DELETE FROM invoices'}, expect: error}
+    - {tool: sql-readonly__metadata, args: {table: 'invoices; DROP TABLE invoices'}, expect: error}
+    - {tool: sql-readonly__query, args: {statement: 'SELECT COUNT(*) AS count FROM invoices'}, expect: ok}
+source:
+  repo: https://github.com/kaebmoo/AI
+  ref: d95dc28628673d7adef1d6f1958116922fea1946

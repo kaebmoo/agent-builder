@@ -173,6 +173,7 @@ M1 ตรวจว่า embedded schema เป็น JSON Schema ที่ถ�
 ## 8. ผลลัพธ์ของ builder
 
 - package โฟลเดอร์ตาม format `thclaws agent new` (manifest.json, AGENTS.md, `.thclaws/{settings.json,skills/,schemas/,scripts/,agents/}`) — script ของ pack วางใน `.thclaws/scripts/` เพราะเป็นที่เดียวที่ `thclaws agent validate` syntax-check python
+- `.thclaws/mcp.json` เมื่อ pack ประกาศ MCP servers (M7a): generate `mcpServers` จาก command/args ของ pack เท่านั้น ไม่มีค่า secret; operator ตั้ง env และ start daemon โดยใช้ CWD=package ตาม §4
 - `builder-build-report.json` (schema: `builder-build-report.schema.json`, สร้างและตรวจใน M4): target, generated files, guarantee matrix, audit result, compatibility result, deployment hints
 - `atlas-register.json`: worker `role` / `tags` จาก `routing`, deployment-time `workspace_dir`, node template (`model`, `collect_files`, และ `output_format: json` เฉพาะ `assistant_json`; omit เมื่อเป็น `collect_files` ล้วน) และ edge template (`push_files` + `policy.file_handoff`), flow template เมื่อ target = `atlas-workflow`
 - archive จาก `thclaws agent pack`

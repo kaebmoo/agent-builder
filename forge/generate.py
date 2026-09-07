@@ -12,6 +12,7 @@ from jinja2 import Environment, FileSystemLoader, StrictUndefined
 from jsonschema import Draft202012Validator
 
 from forge.compat import resolve_compatibility
+from forge.packs import NETWORK, conformance, mcp_tools, server_config, validate_pack
 from forge.spec import validate_spec
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -19,7 +20,6 @@ REPORT_SCHEMA_PATH = ROOT / "builder-build-report.schema.json"
 THCLAWS_BASELINE = "0.116.0"
 # Thin runners copied verbatim into every package; the audit rules live in forge.audit only.
 WRAPPERS = ("audit.py", "studio.py")
-PACK_FIELDS = {"min_tier", "tools", "env", "mcp_servers", "scripts", "skills"}
 
 
 def json_text(value: Any) -> str:
@@ -34,23 +34,17 @@ def editable_files(spec: dict[str, Any]) -> set[str]:
 def load_pack(name: str, capability: dict[str, Any], spec: dict[str, Any], folder: Path,
               pack: Any) -> tuple[dict[str, bytes], list[str]]:
     """Check one descriptor against the spec and read its assets. Raises ValueError/TypeError with the reason."""
-    if not isinstance(pack, dict):
-        raise TypeError(f"pack {name}: pack.yaml must be an object")
-    if set(pack) != PACK_FIELDS or pack["min_tier"] not in ("T0", "T1", "T2"):
-        raise ValueError(f"pack {name}: expected fields {sorted(PACK_FIELDS)} and min_tier T0/T1/T2")
-    for key in PACK_FIELDS - {"min_tier"}:
-        values = pack[key]
-        if not isinstance(values, list) or any(not isinstance(v, str) or not v for v in values):
-            raise ValueError(f"pack {name}: {key} must be a list of non-empty strings")
-        if len(values) != len(set(values)):
-            raise ValueError(f"pack {name}: duplicate {key}")
+    validate_pack(pack, folder)
     if capability["params"]:
         raise ValueError(f"pack {name}: parameter expansion is not supported yet")
     # Both values are validated as T0/T1/T2, whose lexical order matches tier order.
     if spec["permissions"]["tier"] < pack["min_tier"]:
         raise ValueError(f"pack {name} requires {pack['min_tier']}")
-    for key, declared in (("tools", spec["permissions"]["tools"]), ("env", spec["env"])):
-        if not set(pack[key]) <= set(declared):
+    if NETWORK.index(spec["permissions"]["network"]) < NETWORK.index(pack["network"]):
+        raise ValueError(f"pack {name}: required network {pack['network']} exceeds AgentSpec")
+    for key, required, declared in (("tools", set(pack["tools"]) | mcp_tools(pack), spec["permissions"]["tools"]),
+                                    ("env", set(pack["env"]), spec["env"])):
+        if not required <= set(declared):
             raise ValueError(f"pack {name}: required {key} must be declared in AgentSpec")
     bundled: dict[str, bytes] = {}
     for kind in ("scripts", "skills"):
@@ -67,7 +61,7 @@ def load_pack(name: str, capability: dict[str, Any], spec: dict[str, Any], folde
             if any(part.is_symlink() for part in [source, *source.parents]):
                 raise ValueError(f"pack {name}: asset must not use symlinks: {relative}")
             bundled[destination] = source.read_bytes()
-    return bundled, sorted(pack["mcp_servers"])
+    return bundled, sorted(s["name"] for s in pack["mcp_servers"])
 
 
 def pack_assets(spec: dict[str, Any], packs_dir: Path) -> tuple[dict[str, bytes], list[dict[str, Any]], list[str]]:
@@ -80,6 +74,7 @@ def pack_assets(spec: dict[str, Any], packs_dir: Path) -> tuple[dict[str, bytes]
     dependencies = []
     problems: list[str] = []
     seen = set()
+    configs = {}
     for capability in spec["capabilities"]:
         name = capability["pack"]
         if name in seen:
@@ -95,16 +90,27 @@ def pack_assets(spec: dict[str, Any], packs_dir: Path) -> tuple[dict[str, bytes]
             dependencies.append({"pack": name, "status": "missing", "mcp_servers": []})
             continue
         try:
-            bundled, servers = load_pack(name, capability, spec, folder,
-                                        yaml.safe_load(manifest.read_text(encoding="utf-8")))
-        except (ValueError, TypeError, OSError, yaml.YAMLError) as error:
+            pack = yaml.safe_load(manifest.read_text(encoding="utf-8"))
+            bundled, servers = load_pack(name, capability, spec, folder, pack)
+            evidence = conformance(folder, pack)
+        except (ValueError, TypeError, KeyError, OSError, yaml.YAMLError) as error:
             problems.append(str(error))
             continue
         for destination in bundled:
             if destination in files:
                 problems.append(f"pack asset collision: {destination}")
         files.update(bundled)
-        dependencies.append({"pack": name, "status": "assets_bundled", "mcp_servers": servers})
+        for server, config in server_config(name, pack).items():
+            if server in configs:
+                problems.append(f"duplicate MCP server across packs: {server}")
+            configs[server] = config
+        dependency = {"pack": name, "status": "conformant" if evidence else "assets_bundled", "mcp_servers": servers,
+                      "network": pack["network"], "hosts": sorted(pack["hosts"]), "env": sorted(pack["env"])}
+        if evidence:
+            dependency["conformance"] = evidence
+        dependencies.append(dependency)
+    if configs:
+        files[".thclaws/mcp.json"] = json_text({"mcpServers": configs}).encode()
     return files, dependencies, problems
 
 
@@ -200,10 +206,13 @@ def render(spec: dict[str, Any], packs_dir: Path | None = None) -> tuple[dict[st
         "dependencies": dependencies,
         "deployment_hints": [
             "Run thclaws agent validate, then static/live/security audits before promoting package status.",
-            "Configure MCP on the daemon; workspace settings do not install or isolate MCP servers.",
+            "Start the daemon with CWD=package to load .thclaws/mcp.json; install external MCP runtimes separately.",
             "Provision model and environment variable names from agentspec.json at deployment time; no secret values are bundled.",
             "Manifest filesystem_scope=workspace is the packaging scope, not enforcement of the AgentSpec write_scope.",
-            "Network policy remains in AgentSpec; M4 does not invent host allowlists or install egress controls.",
+            "Provision host egress controls outside the package according to pack network/hosts requirements.",
+            *[f"Pack {p['pack']}: network={p['network']}; hosts={', '.join(p['hosts']) or 'none'}; "
+              f"daemon env names={', '.join(p['env']) or 'none'}."
+              for p in dependencies if p["status"] != "missing"],
             "Atlas chooses file-handoff landing paths. collect_files snapshots do not prove file authorship.",
             *[f"Missing pack: {pack['pack']}; implement/install it before static audit or live use."
               for pack in dependencies if pack["status"] == "missing"],

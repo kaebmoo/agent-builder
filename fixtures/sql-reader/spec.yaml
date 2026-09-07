@@ -61,7 +61,7 @@ refusal:
 model:
   mode: pinned
   id: gpt-5.4
-env: []
+env: [SQL_READONLY_DSN, SQL_READONLY_AI_ROOT]
 evaluation:
   golden_cases:
     - id: normal

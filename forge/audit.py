@@ -11,16 +11,18 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
+import yaml
 from jinja2 import TemplateError
 from jsonschema import Draft202012Validator
 
-from forge.generate import REPORT_SCHEMA_PATH, THCLAWS_BASELINE, editable_files, json_text, render
+from forge.generate import REPORT_SCHEMA_PATH, ROOT, THCLAWS_BASELINE, editable_files, json_text, render
+from forge.packs import mcp_tools, read_pack
 from forge.spec import ATLAS_TARGETS
 
 Finding = dict[str, str]
 REQUIRED_SECTIONS = ("Mission", "Must", "Refuse", "Output")
 PURE_JSON_SENTENCE = "ตอบ JSON ล้วน"
-UNIVERSAL_RULES = ("spec", "packs", "inventory", "drift", "agents_md", "refusal", "schema_vocabulary")
+UNIVERSAL_RULES = ("spec", "packs", "inventory", "drift", "agents_md", "refusal", "schema_vocabulary", "tools")
 # Rules that only hold for one execution surface. single-worker constraints come from /agent/run
 # (DESIGN §3-4); the standalone generator (M9) legitimately ships .thclaws/agents/ and WorkflowRun.
 TARGET_RULES = {"single_worker": frozenset(ATLAS_TARGETS)}
@@ -134,6 +136,19 @@ def static_findings(package: Path, packs_dir: Path | None = None) -> tuple[list[
         if dependency["status"] == "missing":
             findings.append(error("packs", f"pack {dependency['pack']}: no descriptor under packs/; "
                                   "a missing pack cannot pass static audit"))
+
+    catalog = json.loads((ROOT / f"patterns/tools-{THCLAWS_BASELINE}.json").read_text())
+    known = set(catalog["tools"])
+    for capability in spec["capabilities"]:
+        folder = (packs_dir or ROOT / "packs") / capability["pack"]
+        if (folder / "pack.yaml").exists():
+            try:
+                known |= mcp_tools(read_pack(folder))
+            except (ValueError, TypeError, KeyError, OSError, yaml.YAMLError):
+                pass  # render already reported the invalid descriptor
+    for tool in sorted(set(spec["permissions"]["tools"]) - known):
+        findings.append({"rule": "tools", "severity": "warning",
+                         "message": f"unknown tool {tool}: absent from thClaws {THCLAWS_BASELINE} catalog and packs; blocks shippable"})
 
     editable = editable_files(spec)
     for path, expected in sorted(files.items()):

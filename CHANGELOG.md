@@ -4,6 +4,8 @@
 
 ### Added
 
+- M7a (2026-09-07): SQL capability pack wrapping project AI, direct MCP conformance testing with `forge pack test`, generated `.thclaws/mcp.json`, pinned thClaws tool catalog, and static audit of pack tool/env/network requirements; SQL conformance uses synthetic SQLite data without a provider key
+
 - M1/M2 follow-up (2026-09-07): tool names must be runtime names (provider regex; MCP tools as `<server>__<tool>`), and the `sql-reader` fixture now declares `sql-readonly__*`
 - M5 (2026-09-07): deterministic static audit (`forge audit`, `forge/audit.py`) that re-renders a package from its `agentspec.json` and reports readable findings, warning/strict handling for unknown schema keywords, Atlas-only single-worker rules, `audit.py`/`studio.py` runners in every package, and `draft` promotion gated on `thclaws agent validate`
 - M4 (2026-09-07): deterministic Atlas single-worker generator and `forge generate` CLI, shared AgentSpec validation, schema-checked build reports with explicit unverified guarantees/dependencies, and native thClaws validation gate
@@ -15,6 +17,10 @@
 - M1 follow-up (2026-09-04): network-tool declaration checks and friendly schema-load failures
 - M2 (2026-09-04): invoice-reviewer and sql-reader fixtures, plus deterministic golden-case validation
 - M1/M2 follow-up (2026-09-04): explicit golden-case output branches for live audit
+
+### Changed
+
+- M7a: capability pack descriptors now require the v2 contract in DESIGN §5; v1 descriptors are no longer supported. Build reports include pack conformance evidence and deployment requirements when available
 
 ### Fixed
 

@@ -24,3 +24,6 @@ fixtures/**/data/
 # local agent settings
 .claude/settings.local.json
 .claude/tmp/
+
+# Local MCP conformance evidence (fixture values and databases are never bundled).
+packs/*/pack-conformance.json

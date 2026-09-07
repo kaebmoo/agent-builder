@@ -10,7 +10,8 @@ from jsonschema import ValidationError
 
 from forge.audit import command as audit_command
 from forge.audit import configure as configure_audit
-from forge.generate import generate
+from forge.generate import ROOT, generate
+from forge.pack_test import test_pack
 from forge.spec import load_spec
 
 
@@ -21,7 +22,18 @@ def main() -> int:
     build.add_argument("spec", type=Path)
     build.add_argument("--out", required=True, type=Path, help="new package directory; existing paths are refused")
     configure_audit(commands.add_parser("audit", help="static audit of a package; --write records the verdict"))
+    pack = commands.add_parser("pack", help="capability pack conformance")
+    pack_commands = pack.add_subparsers(dest="pack_command", required=True)
+    test = pack_commands.add_parser("test", help="test an external MCP directly without an LLM")
+    test.add_argument("name")
     args = parser.parse_args()
+    if args.command == "pack":
+        try:
+            report, code = test_pack(args.name, ROOT / "packs")
+        except (ValueError, OSError) as error:
+            parser.exit(1, f"forge pack FAIL: {error}\n")
+        print(f"pack {args.name}: {report['status']} ({['PASS', 'FAIL', 'SKIP'][code]}) {report['detail']}")
+        return code
     if args.command == "audit":
         return audit_command(args)
     try:

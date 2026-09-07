@@ -19,12 +19,13 @@ Exit code: `0` = package เป็น `draft`, `1` = มี error (กฎ static
 | rule | ตรวจอะไร | severity |
 |---|---|---|
 | `spec` | `agentspec.json` ผ่าน M1 (schema + semantic) และ M3 (compatibility) และ generator render ได้ | error |
-| `packs` | descriptor ของทุก pack ต้องมี (`missing` = fail), `min_tier` ไม่เกิน tier ของ spec, `tools`/`env` ที่ pack ต้องการถูกประกาศใน spec, ชื่อ asset และ symlink ถูกกฎ M4 | error |
+| `packs` | descriptor ของทุก pack ต้องมี (`missing` = fail), `min_tier` ไม่เกิน tier ของ spec, `tools`/`env` ที่ pack ต้องการถูกประกาศใน spec, network ไม่ต่ำกว่า pack, contract v2 / conformance digest / asset paths ถูกต้อง | error |
 | `inventory` | ไฟล์ที่ generate ต้องมีครบ; ไฟล์ใด ๆ ในทั้ง package ที่ไม่ได้มาจาก spec หรือ pack ที่ประกาศ = fail (เช่น `secrets.env` หรือ README ที่ใส่เพิ่ม) และ symlink ทุกชนิด = fail; ยกเว้นเฉพาะสิ่งที่ runtime/VCS สร้างและ `thclaws agent pack` ตัดทิ้ง: `.thclaws/state/`, `.git/`, `__pycache__/`, `*.pyc`, `.DS_Store`; `.thclaws/agents/` และ `.thclaws/agent_workflow/` เป็นของกฎ `single_worker` | error |
 | `drift` | ไฟล์ที่ไม่ใช่ prose ต้องตรงกับที่ render จาก `agentspec.json` ทุก byte: `manifest.json`, `.thclaws/settings.json`, schemas, golden cases, script/skill ของ pack, `audit.py`/`studio.py`, report schema; ไฟล์ JSON บอกตำแหน่งที่ต่าง เช่น `requires.mcp_servers: expected [] found ["sql-admin"]` | error |
 | `agents_md` | มี section `## Mission` / `## Must` / `## Refuse` / `## Output`, มีประโยค "ตอบ JSON ล้วน" เมื่อ output เป็น `assistant_json`, และ block `permissions` / `model` / `state` ตรงกับ spec | error |
 | `refusal` | ทุกข้อใน `refusal.conditions` และ `refusal.response` ต้องอยู่ใน AGENTS.md (`refusal.json` ตรวจผ่าน `drift`) | error |
 | `schema_vocabulary` | keyword ใน embedded schema (inputs / outputs / refusal) ที่อยู่นอก JSON Schema 2020-12 vocabularies เพราะ validator ไม่สนใจ keyword นั้น | warning: `draft` ผ่าน, `--strict` fail |
+| `tools` | ชื่อ tool อยู่ใน catalog `patterns/tools-0.116.0.json` หรือเป็น qualified MCP tool จาก pack; catalog รวม tool แบบ conditional ไม่ได้ยืนยันว่าเปิดอยู่บน daemon | warning: `draft` ผ่าน, `--strict` fail |
 | `single_worker` | เฉพาะ target Atlas: `.thclaws/agents/` และ `.thclaws/agent_workflow/` ต้องว่าง และ AGENTS.md ห้ามสั่ง `WorkflowRun` เพราะ `/agent/run` ไม่มี subagent factory | error |
 | manifest layer | `thclaws agent validate` ผ่าน; binary ต้องเป็น baseline `0.116.0` (ต่างจากนี้ = fail จนกว่าจะตรวจ DESIGN §4 ใหม่); รันโดยตั้ง `PYTHONPYCACHEPREFIX` นอก package จึงไม่ทิ้ง bytecode | passed / failed / skipped |
 
@@ -48,7 +49,7 @@ Exit code: `0` = package เป็น `draft`, `1` = มี error (กฎ static
 
 - MCP ถูกติดตั้งบน daemon จริงหรือไม่ และ agent เรียก skill/MCP จริงหรือไม่ (live audit M6)
 - permission ถูกบังคับที่ runtime: guarantee matrix ไม่เปลี่ยนจาก M4 เพราะ `/agent/run` ยังไม่ enforce (DESIGN §4, §6)
-- `sql-reader` ยัง fail ที่ `packs` จนกว่า M7a จะเพิ่ม `packs/sql-readonly/pack.yaml`; ห้ามใส่ descriptor หลอกเพื่อให้ผ่าน
+- `sql-reader` ผ่าน static audit ได้ด้วย SQL pack v2 ของ M7a; การมี descriptor ไม่ยืนยันว่า runtime ถูกติดตั้ง ต้องใช้ `forge pack test` และ live audit ตามลำดับ
 - standalone package: generator ยัง render ไม่ได้จน M9 จึง fail ที่ `spec`
 
 ## Gate
@@ -61,7 +62,7 @@ python3 scripts/check_m5_static_audit.py
 - `1`: verdict, ข้อความ finding, warning/strict, target binding, schema ของ report หรือ wrapper ผิด
 - `2`: offline ผ่านแต่ไม่มี `thclaws` ใน PATH จึงประกาศ skip ส่วน native
 
-offline ตรวจ: package ถูกต้องไม่มี finding และไม่ถูกเลื่อนสถานะ, `sql-reader` fail เพราะ pack missing, package ที่แก้ให้ผิด (ลบ `## Refuse`, ใส่ admin MCP ใน manifest ของ T0, pack T2 ใน spec T0, env หาย, model ใน `agentspec.json` ไม่ตรง AGENTS.md, ไฟล์เกิน/หาย/ถูกแก้, spec ผิดกฎ M1) fail พร้อมข้อความ, unknown keyword เป็น warning และ fail เมื่อ `--strict`, `single_worker` ผูกกับ Atlas เท่านั้น, report schema ปฏิเสธ status ที่ไม่มีหลักฐาน. บนเครื่องที่ binary อยู่ใน source checkout:
+offline ตรวจ: package ถูกต้องไม่มี finding และไม่ถูกเลื่อนสถานะ, package สังเคราะห์ที่ไม่มี pack descriptor ต้อง fail, package ที่แก้ให้ผิด (ลบ `## Refuse`, ใส่ admin MCP ใน manifest ของ T0, pack T2 ใน spec T0, env หาย, model ใน `agentspec.json` ไม่ตรง AGENTS.md, ไฟล์เกิน/หาย/ถูกแก้, spec ผิดกฎ M1) fail พร้อมข้อความ, unknown keyword เป็น warning และ fail เมื่อ `--strict`, `single_worker` ผูกกับ Atlas เท่านั้น, report schema ปฏิเสธ status ที่ไม่มีหลักฐาน. บนเครื่องที่ binary อยู่ใน source checkout:
 
 ```bash
 PATH="/path/to/thClaws/target/debug:$PATH" python3 scripts/check_m5_static_audit.py

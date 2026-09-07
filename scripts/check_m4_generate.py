@@ -81,9 +81,11 @@ def check(temporary: Path) -> int:
         assert not any(path.startswith((".thclaws/agents/", ".thclaws/agent_workflow/")) for path in files)
         for directory in ("agents", "scripts", "skills", "schemas"):
             assert (first / ".thclaws" / directory).is_dir()
-        assert report["dependencies"] == (
-            [{"pack": "sql-readonly", "status": "missing", "mcp_servers": []}] if name == "sql-reader" else []
-        ), "M4 must not claim the deferred SQL pack is implemented"
+        if name == "sql-reader":
+            assert report["dependencies"][0]["status"] in ("assets_bundled", "conformant")
+            assert report["dependencies"][0]["mcp_servers"] == ["sql-readonly"]
+        else:
+            assert report["dependencies"] == []
         try:
             generate(spec, first)
         except FileExistsError:
@@ -126,7 +128,8 @@ def check(temporary: Path) -> int:
     (pack / "skills/guide").mkdir(parents=True)
     (pack / "skills/guide/SKILL.md").write_text("# Synthetic guide\n", encoding="utf-8")
     metadata = {"min_tier": "T0", "tools": ["Read"], "env": ["EXAMPLE_FIXTURE_TOKEN"],
-                "mcp_servers": ["fixture-mcp"], "scripts": ["probe.py"], "skills": ["guide"]}
+                "network": "none", "hosts": [],
+                "fixture": {"setup": "scripts/probe.py", "cases": []}, "mcp_servers": [], "scripts": ["probe.py"], "skills": ["guide"]}
     (pack / "pack.yaml").write_text(yaml.safe_dump(metadata), encoding="utf-8")
     with_pack = copy.deepcopy(spec)
     with_pack["capabilities"] = [{"pack": "fixture-pack", "params": {}}]
@@ -138,14 +141,14 @@ def check(temporary: Path) -> int:
     assert files[".thclaws/scripts/fixture-pack--probe.py"] == (pack / "scripts/probe.py").read_bytes()
     assert files[".thclaws/skills/fixture-pack--guide/SKILL.md"] == (pack / "skills/guide/SKILL.md").read_bytes()
     assert not any("mcp_servers" in key for key in json.loads(files[".thclaws/settings.json"]))
-    assert json.loads(files["manifest.json"])["requires"]["mcp_servers"] == ["fixture-mcp"]
+    assert json.loads(files["manifest.json"])["requires"]["mcp_servers"] == []
     repeated_pack = temporary / "with-pack-repeat"
     generate(with_pack, repeated_pack, packs_dir=packs)
     assert files == snapshot(repeated_pack), "pack assets are not deterministic"
     packages.append(output)
     metadata["scripts"] = ["../escape.py"]
     (pack / "pack.yaml").write_text(yaml.safe_dump(metadata), encoding="utf-8")
-    rejects(with_pack, "invalid scripts asset name", packs=packs)
+    rejects(with_pack, "scripts: duplicate or invalid name", packs=packs)
     metadata["scripts"] = ["probe.py"]
     metadata["min_tier"] = "T2"
     (pack / "pack.yaml").write_text(yaml.safe_dump(metadata), encoding="utf-8")
