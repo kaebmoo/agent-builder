@@ -77,6 +77,8 @@ MCP config, tool naming และ isolation (ตรวจ source 2026-09-07 v0.1
 - built-in tools ของ `/agent/run` = `ToolRegistry::with_builtins()` + KMS / Memory / Task / WorkflowRun ที่ `agent_runtime.rs::build_runtime_with_provider` ลงทะเบียนเพิ่ม เป็นแหล่งของ catalog `patterns/tools-<version>.json` ที่ static audit ใช้
 - thClaws ลงทะเบียน **ทุก** tool ที่ server advertise โดยไม่กรอง และไม่อ่าน MCP tool annotations (`readOnlyHint` ฯลฯ; `McpToolInfo` มีเพียง name / description / input_schema / ui). ถ้า spawn หรือ `tools/list` ล้มเหลว `agent_runtime.rs::load_mcp_servers_silent` แค่ `eprintln!` แล้ว run ต่อโดยไม่มี tool ของ server นั้น → การมี/ไม่มี tool ต้องพิสูจน์ด้วยหลักฐานเชิงบวก (SSE tool event, `/v1/agent/info`) ไม่ใช่จากการที่ run ไม่ error
 
+OpenAI-compatible provider สำหรับ live audit (ตรวจ source v0.116.0 revision `75edc48`, 2026-09-07): model `oai/<id>` ใช้ `OPENAI_COMPAT_API_KEY` และ `OPENAI_COMPAT_BASE_URL` ใน `repl.rs::build_provider`; ตัด prefix `oai/` ก่อนส่ง request และเติม `/chat/completions` ถ้า URL ยังไม่มี suffix นี้. ไม่พบตัวเลือกปิด TLS certificate verification ของ provider นี้; ใช้การตรวจ TLS ตาม runtime ปกติ. การทดสอบผ่าน custom provider ต้อง pin model ใน spec ของ package ที่ทดสอบ ไม่แทน model อย่างเงียบ ๆ.
+
 ## 5. Capability pack
 
 pack คือความสามารถสำเร็จรูปที่ประกอบเข้า package ได้ อยู่ใน `packs/<name>/pack.yaml` ประกาศ: MCP servers / skills / scripts ที่เพิ่ม, env ที่ต้องการ (ชื่อ), tier ต่ำสุดที่ต้องใช้, fixture สำหรับ live audit ที่รันได้โดยไม่ต้องมีข้อมูลจริง

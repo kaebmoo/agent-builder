@@ -36,7 +36,7 @@ def validate_pack(pack, folder: Path) -> None:
         raise ValueError(f'pack v2 expected fields {sorted(FIELDS)} (source optional)')
     if pack['min_tier'] not in ('T0', 'T1', 'T2') or pack['network'] not in NETWORK:
         raise ValueError('invalid min_tier or network')
-    for key, pattern in [('env', r'[A-Z_][A-Z0-9_]*'), ('tools', r'[A-Za-z0-9_-]+'),
+    for key, pattern in [('env', r'[A-Z][A-Z0-9_]*'), ('tools', r'[A-Za-z0-9_-]+'),
                          ('hosts', r'[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?'),
                          ('scripts', r'[a-z0-9][a-z0-9_-]*\.py'), ('skills', r'[a-z0-9][a-z0-9_-]*')]:
         strings(pack[key], key, pattern)
@@ -131,6 +131,13 @@ def conformance(folder: Path, pack: dict) -> dict | None:
         raise TypeError('invalid pack-conformance.json')
     if report.get('status') != 'conformant' or report.get('pack_digest') != pack_digest(pack, folder):
         raise ValueError('pack conformance failed, skipped or stale; rerun forge pack test')
+    if 'SQL_READONLY_AI_ROOT' in pack['env']:
+        proof = report.get('provenance', {})
+        if (not isinstance(proof, dict) or proof.get('matched') is not True
+                or proof.get('actual_ref') != pack['source']['ref']
+                or proof.get('expected_ref') != pack['source']['ref']
+                or proof.get('repo') != pack['source']['repo']):
+            raise ValueError('missing or mismatched SQL source provenance; rerun forge pack test')
     expected_cases = [{'index': i, 'tool': c['tool'], 'expect': c['expect'], 'actual': c['expect'], 'passed': True}
                       for i, c in enumerate(pack['fixture']['cases'])]
     if sorted(report.get('cases', []), key=lambda c: c['index']) != expected_cases:

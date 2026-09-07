@@ -92,7 +92,6 @@ def pack_assets(spec: dict[str, Any], packs_dir: Path) -> tuple[dict[str, bytes]
         try:
             pack = yaml.safe_load(manifest.read_text(encoding="utf-8"))
             bundled, servers = load_pack(name, capability, spec, folder, pack)
-            evidence = conformance(folder, pack)
         except (ValueError, TypeError, KeyError, OSError, yaml.YAMLError) as error:
             problems.append(str(error))
             continue
@@ -104,6 +103,10 @@ def pack_assets(spec: dict[str, Any], packs_dir: Path) -> tuple[dict[str, bytes]
             if server in configs:
                 problems.append(f"duplicate MCP server across packs: {server}")
             configs[server] = config
+        try:
+            evidence = conformance(folder, pack)
+        except (ValueError, TypeError, KeyError, OSError):
+            evidence = None  # Rendering does not depend on a successful external test; static audit checks it.
         dependency = {"pack": name, "status": "conformant" if evidence else "assets_bundled", "mcp_servers": servers,
                       "network": pack["network"], "hosts": sorted(pack["hosts"]), "env": sorted(pack["env"])}
         if evidence:

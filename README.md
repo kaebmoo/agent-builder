@@ -53,3 +53,8 @@ python3 scripts/check_m7a_sql_pack.py
 ## License
 
 Apache-2.0 (ดู [LICENSE](LICENSE) และ [NOTICE](NOTICE)) — ครอบเฉพาะโค้ดของ builder; package ที่ generate ออกมาเป็นของผู้ใช้ ใช้ license ตาม `identity.license` ใน AgentSpec
+
+Live audit (M6): `forge live-test out/sql-reader --write` หรือ `forge audit out/sql-reader --live --write`.
+ต้องมี thClaws v0.116.0 และ provider key ใน environment (`OPENAI_API_KEY` สำหรับ fixture SQL).
+ไม่มี key จะรายงาน SKIP (exit 2) และคง `draft`; ผ่าน golden cases และหลักฐาน MCP จึงเป็น `candidate`.
+รายละเอียดและขอบเขตการตรวจอยู่ใน [docs/audit.md](docs/audit.md).

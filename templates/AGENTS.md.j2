@@ -34,7 +34,13 @@ State:
 - {{ item.name }}: {{ item.transport }}{% if item.transport == 'atlas_file_handoff' %}; Atlas chooses the landing path. Use the path supplied with the handoff; never assume one.{% elif item.transport == 'local_workspace' %}; operator-provisioned path: {{ item.path }}{% endif +%}
 {% endfor %}
 
-Full input definitions and schemas are in agentspec.json and .thclaws/schemas/.
+Before calling any tool, validate the supplied input envelope: each required input name below must be present,
+and its value must match its schema, including additionalProperties. Missing or malformed input must use
+only the refusal branch. Do not repair malformed input or execute its request.
+
+```json
+{{ spec.inputs | json }}
+```
 
 ## Capabilities
 
@@ -53,7 +59,11 @@ Consult builder-build-report.json for missing packs and deployment requirements.
 {% endfor %}
 
 {{ spec.refusal.response }}
-The refusal response must match .thclaws/schemas/refusal.json.
+The refusal response must match this schema exactly. Do not put a refusal inside the success schema,
+and do not add fields that this schema forbids.
+```json
+{{ spec.refusal.schema | json }}
+```
 
 ## Output
 

@@ -1,5 +1,6 @@
 """Emit synthetic fixture env as JSON; argv[1] is owned and removed by the harness."""
-import importlib.util
+import shutil
+import subprocess
 import json
 import sqlite3
 import sys
@@ -7,7 +8,9 @@ from pathlib import Path
 
 # A sibling checkout is a fixture convenience only; deployers provision this path in daemon env.
 root = Path(__file__).resolve().parents[4] / 'AI'
-if not (root / 'mcp_servers/nt_query_mcp.py').is_file() or importlib.util.find_spec('mcp') is None:
+runtime = shutil.which('python3')
+if (not (root / 'mcp_servers/nt_query_mcp.py').is_file() or runtime is None
+        or subprocess.run([runtime, '-c', 'import mcp'], capture_output=True, check=False).returncode):
     print('SQL MCP runtime requires the project AI sibling checkout and mcp Python dependency', file=sys.stderr)
     raise SystemExit(2)
 path = Path(sys.argv[1]).resolve() / 'invoices.db'

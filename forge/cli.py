@@ -12,6 +12,7 @@ from forge.audit import command as audit_command
 from forge.audit import configure as configure_audit
 from forge.generate import ROOT, generate
 from forge.pack_test import test_pack
+from forge.live_test import command as live_command, configure as configure_live
 from forge.spec import load_spec
 
 
@@ -22,11 +23,14 @@ def main() -> int:
     build.add_argument("spec", type=Path)
     build.add_argument("--out", required=True, type=Path, help="new package directory; existing paths are refused")
     configure_audit(commands.add_parser("audit", help="static audit of a package; --write records the verdict"))
+    configure_live(commands.add_parser("live-test", help="isolated golden-case live audit"))
     pack = commands.add_parser("pack", help="capability pack conformance")
     pack_commands = pack.add_subparsers(dest="pack_command", required=True)
     test = pack_commands.add_parser("test", help="test an external MCP directly without an LLM")
     test.add_argument("name")
     args = parser.parse_args()
+    if args.command == "live-test":
+        return live_command(args)
     if args.command == "pack":
         try:
             report, code = test_pack(args.name, ROOT / "packs")

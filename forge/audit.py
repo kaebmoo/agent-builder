@@ -16,7 +16,7 @@ from jinja2 import TemplateError
 from jsonschema import Draft202012Validator
 
 from forge.generate import REPORT_SCHEMA_PATH, ROOT, THCLAWS_BASELINE, editable_files, json_text, render
-from forge.packs import mcp_tools, read_pack
+from forge.packs import conformance, mcp_tools, read_pack
 from forge.spec import ATLAS_TARGETS
 
 Finding = dict[str, str]
@@ -140,12 +140,14 @@ def static_findings(package: Path, packs_dir: Path | None = None) -> tuple[list[
     catalog = json.loads((ROOT / f"patterns/tools-{THCLAWS_BASELINE}.json").read_text())
     known = set(catalog["tools"])
     for capability in spec["capabilities"]:
-        folder = (packs_dir or ROOT / "packs") / capability["pack"]
+        folder = (packs_dir or ROOT / "packs").resolve() / capability["pack"]
         if (folder / "pack.yaml").exists():
             try:
-                known |= mcp_tools(read_pack(folder))
+                pack = read_pack(folder)
+                known |= mcp_tools(pack)
+                conformance(folder, pack)
             except (ValueError, TypeError, KeyError, OSError, yaml.YAMLError):
-                pass  # render already reported the invalid descriptor
+                findings.append(error("packs", f"pack {capability['pack']}: invalid, failed, skipped or stale conformance; rerun forge pack test"))
     for tool in sorted(set(spec["permissions"]["tools"]) - known):
         findings.append({"rule": "tools", "severity": "warning",
                          "message": f"unknown tool {tool}: absent from thClaws {THCLAWS_BASELINE} catalog and packs; blocks shippable"})
@@ -248,11 +250,17 @@ def exit_code(report: dict[str, Any]) -> int:
 
 def configure(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("package", type=Path, help="generated package directory")
+    parser.add_argument("--live", action="store_true", help="run isolated golden cases after static audit")
+    parser.add_argument("--timeout", type=float, default=120)
+    parser.add_argument("--provider-key-env", default="OPENAI_API_KEY")
     parser.add_argument("--strict", action="store_true", help="treat warnings as failures (the shippable bar)")
     parser.add_argument("--write", action="store_true", help="record the verdict in builder-build-report.json")
 
 
 def command(args: argparse.Namespace) -> int:
+    if args.live:
+        from forge.live_test import command as live_command
+        return live_command(args)
     try:
         report = audit_package(args.package, strict=args.strict)
     except (OSError, ValueError, TypeError, subprocess.SubprocessError) as exc:

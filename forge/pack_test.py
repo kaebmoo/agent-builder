@@ -84,6 +84,33 @@ class RPC:
         self.reader.join(timeout=1)
 
 
+class FixtureUnavailable(ValueError):
+    pass
+
+
+def setup_fixture(folder: Path, pack: dict, work: Path, timeout: float) -> tuple[dict, dict]:
+    """Run the fixture without user secrets; return env separately from safe provenance evidence."""
+    env = {'PATH': os.environ.get('PATH', os.defpath)}
+    setup = subprocess.run([sys.executable, str(asset(folder, pack['fixture']['setup']).resolve()), str(work)],
+                           cwd=work, env=env, capture_output=True, text=True, timeout=timeout, check=False)
+    if setup.returncode == 2:
+        raise FixtureUnavailable('fixture runtime unavailable (setup exit 2)')
+    if setup.returncode:
+        raise ValueError('fixture setup failed (output omitted to avoid leaking env values)')
+    values = json.loads(setup.stdout)
+    if (not isinstance(values, dict) or set(values) != set(pack['env'])
+            or any(not isinstance(v, str) for v in values.values()) or 'PATH' in values):
+        raise ValueError('fixture must emit exactly the declared env names (PATH reserved)')
+    provenance = {}
+    if 'SQL_READONLY_AI_ROOT' in values:
+        result = subprocess.run(['git', '-C', values['SQL_READONLY_AI_ROOT'], 'rev-parse', 'HEAD'],
+                                env=env, capture_output=True, text=True, timeout=timeout, check=False)
+        revision = result.stdout.strip()
+        provenance = {'repo': pack['source']['repo'], 'expected_ref': pack['source']['ref'],
+                      'actual_ref': revision, 'matched': result.returncode == 0 and revision == pack['source']['ref']}
+    return values, provenance
+
+
 def test_pack(name: str, packs_dir: Path, *, timeout: float = 10) -> tuple[dict, int]:
     if not re.fullmatch(r'[a-z0-9][a-z0-9-]*', name):
         raise ValueError('invalid pack name')
@@ -105,18 +132,16 @@ def test_pack(name: str, packs_dir: Path, *, timeout: float = 10) -> tuple[dict,
                 target.parent.mkdir(parents=True, exist_ok=True)
                 target.write_bytes(asset(folder, 'scripts/' + script).read_bytes())
             env = {'PATH': os.environ.get('PATH', os.defpath)}
-            setup = subprocess.run([sys.executable, str(asset(folder, pack['fixture']['setup']).resolve()), str(work)],
-                                   cwd=work, env=env, capture_output=True, text=True, timeout=timeout, check=False)
-            if setup.returncode == 2:
-                report.update(status='skipped', detail='fixture runtime unavailable (setup exit 2)')
+            try:
+                values, provenance = setup_fixture(folder, pack, work, timeout)
+            except FixtureUnavailable as exc:
+                report.update(status='skipped', detail=str(exc))
                 code = 2
-            elif setup.returncode != 0:
-                raise ValueError('fixture setup failed (output omitted to avoid leaking env values)')
             else:
-                values = json.loads(setup.stdout)
-                if (not isinstance(values, dict) or set(values) != set(pack['env'])
-                        or any(not isinstance(v, str) for v in values.values()) or 'PATH' in values):
-                    raise ValueError('fixture must emit a JSON object with exactly the declared env names (PATH reserved)')
+                if provenance:
+                    report['provenance'] = provenance
+                    if not provenance['matched']:
+                        raise ValueError('SQL source revision differs from source.ref')
                 env.update(values)
                 configs = server_config(name, pack)
                 for server in pack['mcp_servers']:

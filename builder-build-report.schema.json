@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://thclaws.cloud/schemas/agent-builder/builder-build-report.schema.json",
   "title": "Agent Builder build report",
-  "description": "Generation evidence (M4) plus the static-audit verdict (M5). Live and security audits are later milestones.",
+  "description": "Generation, static audit and isolated live audit evidence.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -25,7 +25,8 @@
     "package_status": {
       "enum": [
         "unverified",
-        "draft"
+        "draft",
+        "candidate"
       ]
     },
     "target": {
@@ -117,7 +118,8 @@
               "Static check",
               "Not verified",
               "Not applicable",
-              "No evidence"
+              "No evidence",
+              "Evidence"
             ]
           },
           "basis": {
@@ -161,7 +163,12 @@
           ]
         },
         "live": {
-          "const": "not_run"
+          "enum": [
+            "not_run",
+            "passed",
+            "failed",
+            "skipped"
+          ]
         },
         "security": {
           "const": "not_run"
@@ -280,6 +287,30 @@
                     }
                   }
                 }
+              },
+              "provenance": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "repo",
+                  "expected_ref",
+                  "actual_ref",
+                  "matched"
+                ],
+                "properties": {
+                  "repo": {
+                    "type": "string"
+                  },
+                  "expected_ref": {
+                    "type": "string"
+                  },
+                  "actual_ref": {
+                    "type": "string"
+                  },
+                  "matched": {
+                    "type": "boolean"
+                  }
+                }
               }
             }
           },
@@ -301,7 +332,7 @@
             "type": "array",
             "items": {
               "type": "string",
-              "pattern": "^[A-Z_][A-Z0-9_]*$"
+              "pattern": "^[A-Z][A-Z0-9_]*$"
             },
             "uniqueItems": true
           }
@@ -424,6 +455,138 @@
           }
         }
       }
+    },
+    "live_audit": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "detail",
+        "cases",
+        "daemon_servers",
+        "called_tools",
+        "provenance"
+      ],
+      "properties": {
+        "status": {
+          "enum": [
+            "passed",
+            "failed",
+            "skipped"
+          ]
+        },
+        "detail": {
+          "type": "string"
+        },
+        "cases": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "expect",
+              "status",
+              "detail",
+              "events"
+            ],
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "expect": {
+                "enum": [
+                  "result",
+                  "refusal"
+                ]
+              },
+              "status": {
+                "enum": [
+                  "passed",
+                  "failed"
+                ]
+              },
+              "detail": {
+                "type": "string"
+              },
+              "events": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "event",
+                    "data"
+                  ],
+                  "properties": {
+                    "event": {
+                      "type": "string"
+                    },
+                    "data": {
+                      "type": "object"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "daemon_servers": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "name",
+              "tool_count"
+            ],
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "tool_count": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              }
+            }
+          }
+        },
+        "called_tools": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "provenance": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "repo",
+              "expected_ref",
+              "actual_ref",
+              "matched"
+            ],
+            "properties": {
+              "repo": {
+                "type": "string"
+              },
+              "expected_ref": {
+                "type": "string"
+              },
+              "actual_ref": {
+                "type": "string"
+              },
+              "matched": {
+                "type": "boolean"
+              }
+            }
+          }
+        }
+      }
     }
   },
   "allOf": [
@@ -456,7 +619,10 @@
       "if": {
         "properties": {
           "package_status": {
-            "const": "draft"
+            "enum": [
+              "draft",
+              "candidate"
+            ]
           }
         }
       },
@@ -634,6 +800,127 @@
             "properties": {
               "findings": {
                 "maxItems": 0
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "package_status": {
+            "const": "candidate"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "live_audit"
+        ],
+        "properties": {
+          "audit": {
+            "properties": {
+              "live": {
+                "const": "passed"
+              }
+            }
+          },
+          "live_audit": {
+            "properties": {
+              "status": {
+                "const": "passed"
+              },
+              "cases": {
+                "minItems": 4,
+                "items": {
+                  "properties": {
+                    "status": {
+                      "const": "passed"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "audit": {
+            "properties": {
+              "live": {
+                "const": "passed"
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "live_audit"
+        ],
+        "properties": {
+          "live_audit": {
+            "properties": {
+              "status": {
+                "const": "passed"
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "audit": {
+            "properties": {
+              "live": {
+                "const": "failed"
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "live_audit"
+        ],
+        "properties": {
+          "live_audit": {
+            "properties": {
+              "status": {
+                "const": "failed"
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "audit": {
+            "properties": {
+              "live": {
+                "const": "skipped"
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "live_audit"
+        ],
+        "properties": {
+          "live_audit": {
+            "properties": {
+              "status": {
+                "const": "skipped"
               }
             }
           }
