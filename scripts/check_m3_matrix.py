@@ -12,14 +12,13 @@ sys.path.insert(0, str(ROOT))
 
 try:
     import yaml
+    from check_m1_spec import all_errors, base_spec
     from jsonschema import Draft202012Validator
 
     from forge.compat import MATRIX_PATH, resolve_compatibility
 except ModuleNotFoundError:
     print("M3 FAIL: install project dependencies first (jsonschema>=4.20, pyyaml>=6.0)")
     raise SystemExit(1)
-
-from check_m1_spec import all_errors, base_spec
 
 # Independent expectations from DESIGN §3, so a changed YAML row cannot bless itself.
 EXPECTED = {

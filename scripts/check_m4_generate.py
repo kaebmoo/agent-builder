@@ -69,6 +69,13 @@ def check(temporary: Path) -> int:
                     assert json.loads(files[f".thclaws/schemas/{section}--{item['name']}.json"]) == item["schema"]
         assert json.loads(files[".thclaws/schemas/refusal.json"]) == spec["refusal"]["schema"]
         instructions = files["AGENTS.md"].decode()
+        assert "\n\n\n" not in instructions, "template control blocks added extra blank lines"
+        for item in spec["inputs"]:
+            assert any(line.startswith(f"- {item['name']}: ") for line in instructions.splitlines()), (
+                "input list items must remain on separate lines"
+            )
+        for condition in spec["refusal"]["conditions"]:
+            assert f"- {condition}" in instructions.splitlines(), "refusal list item lost or joined"
         assert all(f"## {heading}" in instructions for heading in ("Mission", "Must", "Refuse", "Output"))
         assert "ตอบ JSON ล้วน" in instructions
         assert not any(path.startswith((".thclaws/agents/", ".thclaws/agent_workflow/")) for path in files)

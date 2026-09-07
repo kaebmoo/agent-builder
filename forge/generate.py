@@ -54,6 +54,7 @@ def pack_assets(spec: dict[str, Any], packs_dir: Path) -> tuple[dict[str, bytes]
                 raise ValueError(f"pack {name}: duplicate {key}")
         if capability["params"]:
             raise ValueError(f"pack {name}: parameter expansion is not supported yet")
+        # Both values are validated as T0/T1/T2, whose lexical order matches tier order.
         if spec["permissions"]["tier"] < pack["min_tier"]:
             raise ValueError(f"pack {name} requires {pack['min_tier']}")
         for key, declared in (("tools", spec["permissions"]["tools"]), ("env", spec["env"])):
@@ -128,6 +129,7 @@ def generate(spec: dict[str, Any], destination: Path, *, packs_dir: Path | None 
         "version": identity["version"], "license": identity["license"], "author": identity["owner"],
         "categories": ["custom"], "tags": spec["routing"]["tags"],
         "requires": {
+            # v0.116.0 stores this string without parsing; retain the full spec range.
             "thclaws_min_version": identity["thclaws_min_version"],
             "mcp_servers": sorted({server for pack in dependencies for server in pack["mcp_servers"]}),
         },
@@ -144,7 +146,7 @@ def generate(spec: dict[str, Any], destination: Path, *, packs_dir: Path | None 
     add_json("evaluation/golden-cases.json", spec["evaluation"]["golden_cases"])
 
     templates = Environment(loader=FileSystemLoader(ROOT / "templates"), undefined=StrictUndefined,
-                            autoescape=False, keep_trailing_newline=True)
+                            autoescape=False, keep_trailing_newline=True, trim_blocks=True, lstrip_blocks=True)
     templates.filters["json"] = lambda value: json_text(value).rstrip("\n")
     for template, path in (
         ("AGENTS.md.j2", "AGENTS.md"),

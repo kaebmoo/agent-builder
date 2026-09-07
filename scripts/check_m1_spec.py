@@ -8,17 +8,17 @@ import sys
 from pathlib import Path
 from typing import Any
 
-try:
-    from jsonschema import Draft202012Validator, SchemaError
-except ModuleNotFoundError:
-    print("M1 FAIL: install project dependencies first (jsonschema>=4.20)")
-    raise SystemExit(1)
-
 ROOT = Path(__file__).resolve().parents[1]
 SCHEMA_PATH = ROOT / "agentspec.schema.json"
 sys.path.insert(0, str(ROOT))
 
-from forge.spec import NETWORK_BUILTIN_TOOLS, PathPart, all_errors
+try:
+    from jsonschema import Draft202012Validator, SchemaError
+
+    from forge.spec import NETWORK_BUILTIN_TOOLS, PathPart, all_errors
+except ModuleNotFoundError:
+    print("M1 FAIL: install project dependencies first (jsonschema>=4.20, pyyaml>=6.0)")
+    raise SystemExit(1)
 
 
 def base_spec(

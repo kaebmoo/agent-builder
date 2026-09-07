@@ -16,6 +16,7 @@
 
 ### Fixed
 
+- M4 review follow-up: arrange gate imports for Ruff 0.5 compatibility and remove template-generated blank lines while preserving separate input/refusal list items
 - M3 follow-up (2026-09-07): derive flow location per pattern; dynamic has no run.js, confirmed against thClaws v0.116.0 revision 75edc48
 - Milestone scripts and shared validation now pass Ruff, including the existing executable-bit and lint findings
 

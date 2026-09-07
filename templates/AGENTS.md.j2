@@ -31,7 +31,7 @@ State:
 ## Inputs
 
 {% for item in spec.inputs %}
-- {{ item.name }}: {{ item.transport }}{% if item.transport == 'atlas_file_handoff' %}; Atlas chooses the landing path. Use the path supplied with the handoff; never assume one.{% elif item.transport == 'local_workspace' %}; operator-provisioned path: {{ item.path }}{% endif %}
+- {{ item.name }}: {{ item.transport }}{% if item.transport == 'atlas_file_handoff' %}; Atlas chooses the landing path. Use the path supplied with the handoff; never assume one.{% elif item.transport == 'local_workspace' %}; operator-provisioned path: {{ item.path }}{% endif +%}
 {% endfor %}
 
 Full input definitions and schemas are in agentspec.json and .thclaws/schemas/.
