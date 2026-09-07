@@ -101,6 +101,7 @@ static audit: schema ของ spec, manifest ที่ generate, permission dec
 live audit: start daemon ชั่วคราวแบบ isolated, ยิง `/agent/run` จริงด้วย golden cases (normal / missing input / refusal / malformed); `expect: result` validate กับ schema ของ `assistant_json` output เดียว และ `expect: refusal` validate กับ `refusal.schema`, แล้วเก็บ SSE tool/skill events เป็น evidence. ถ้า response ผ่านทั้ง expected และ opposite branch schema ให้ fail เป็น ambiguous; result ที่มีหลาย output หรือ `collect_files` อย่างเดียวอยู่นอก live-audit scope ของ M6 จนกว่าจะมี output selector contract
 สถานะ: `draft` (static ผ่าน) → `candidate` (live ผ่าน) → `shippable` (compatibility + security ผ่าน) ไม่มี API key = อยู่ที่ draft ห้ามบอกว่า deploy-ready
 `audit.py` / `studio.py` ใน package เป็น runner บาง ๆ ที่เรียก builder logic ตัวเดียว
+กฎ static audit ที่อิง single-worker (ไม่มี `.thclaws/agents/`, ไม่มี `WorkflowRun`) ผูกกับ target Atlas เท่านั้น; standalone (M9) ทดสอบ live ผ่าน daemon `--serve` เดิมแต่รัน workflow ด้วย `WorkflowRun` ไม่ใช่ `/agent/run` ตรง และ golden case ใช้ output ของ workflow summary
 
 M1 ตรวจว่า embedded schema เป็น JSON Schema ที่ถูกต้อง แต่ตามมาตรฐาน JSON Schema unknown keyword เป็น annotation ที่ผ่านได้; M5 static audit จะ warn ตอน `draft` และ fail ก่อน `shippable` เมื่อ keyword ไม่อยู่ใน vocabulary ที่ builder รองรับ
 
@@ -114,6 +115,10 @@ M1 ตรวจว่า embedded schema เป็น JSON Schema ที่ถ�
 - archive จาก `thclaws agent pack`
 
 ขอบเขต generator M4: สร้าง `single-worker` สำหรับ `atlas-worker` และ `atlas-workflow` ตาม fixture ทั้งสอง; standalone pattern ยังเป็น compatibility intent และ generator ต้อง reject จนกว่าจะมี template orchestration ที่ตรวจแล้ว ห้ามสร้าง package ว่างแล้วอ้างว่ารองรับ pattern นั้น
+
+ขอบเขต standalone generator M9 (เพิ่ม 2026-09-07): เริ่มจาก `static-pipeline` ตามโครงสร้างที่ `thclaws agent new --pattern static-pipeline` v0.116.0 สร้าง คือ `.thclaws/agents/{planner,worker,verifier}.md` + `.thclaws/agent_workflow/run.js` และ AGENTS.md ที่สั่งให้ orchestrator เรียก `WorkflowRun`; ไม่มี `routing` และไม่มี `atlas-register.json`. บน surface นี้ agent defs, hooks และ `allowed_tools` ทำงานจริง guarantee matrix จึงอ้าง tool/write restriction ต่อ role ได้ ต่างจาก `/agent/run` ใน §4. `batch-fanout` และ `dynamic` ยัง reject จนกว่าจะมี fixture และ template ของตัวเอง
+
+Permission ต่อ role ใน standalone: spec ยังมี `permissions` ชุดเดียว (ห้ามให้ spec โต) และ generator map ลง role คงที่แบบ deterministic: `planner` และ `verifier` ได้เฉพาะ read-only tools (Read, Grep, Glob และ Bash เฉพาะเมื่อ `shell: sandboxed`) ไม่มี writePaths; `worker` ได้ `permissions.tools`, `shell`, `network` และ `writePaths` จาก `write_scope` ของ spec (`none` = ไม่มี writePaths, `output` = `output/**`, `workspace` = workspace). `tier` ของ spec คือ tier ของ worker; planner/verifier ถือเป็น T0 เสมอ. ถ้าใช้จริงแล้ว 3 role คงที่ไม่พอ ค่อยพิจารณาเพิ่ม `roles[]` ใน schema เป็น milestone แยก ไม่แก้ในระหว่าง M9
 
 ก่อน M5 ผล generate ใช้ `package_status: unverified` และ audit แต่ละชั้นเป็น `not_run` (ยกเว้น spec ที่ตรวจแล้ว). `thclaws agent validate` ใน check M4 เป็นหลักฐานของ gate ไม่แก้ report ย้อนหลังและไม่เลื่อนสถานะ package. ถ้า pack ยังไม่มี `pack.yaml` ให้ report เป็น dependency `missing`, ไม่เดาชื่อ MCP/secret และไม่ถือว่า capability ใช้งานได้; SQL pack จริงและ live fixture ยังอยู่ใน M7. `assets_bundled` หมายถึงคัดลอก asset ตาม descriptor แล้ว ไม่ได้พิสูจน์ว่า MCP ถูกติดตั้งหรือปลอดภัย
 
