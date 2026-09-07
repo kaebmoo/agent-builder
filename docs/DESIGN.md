@@ -40,7 +40,7 @@
 
 | target | execution surface | package pattern ที่อนุญาต | flow อยู่ที่ไหน |
 |---|---|---|---|
-| `thclaws-standalone` | thClaws GUI / CLI / catalog | `static-pipeline`, `batch-fanout`, `dynamic` (ผู้ใช้ต้องเลือก) | `.thclaws/agent_workflow/run.js` ใน package |
+| `thclaws-standalone` | thClaws GUI / CLI / catalog | `static-pipeline`, `batch-fanout`, `dynamic` (ผู้ใช้ต้องเลือก) | static/batch: `.thclaws/agent_workflow/run.js`; dynamic: ไม่มีไฟล์ flow ใช้ `Task` orchestration |
 | `atlas-worker` | `POST /agent/run` | `single-worker` เท่านั้น | ไม่มี flow ใน package |
 | `atlas-workflow` | Atlas workflow engine | `single-worker` หนึ่ง package ต่อ node | Atlas workflow JSON ที่ builder export |
 
@@ -49,6 +49,8 @@
 planner → worker → verifier สำหรับ Atlas จึงต้องเป็น node หลายตัวใน Atlas ไม่ใช่ subagent ใน package
 
 `human-approval` และ `manager-loop` เป็น **flow pattern ของ Atlas** (node `human_gate`, node `manager`) ไม่ใช่ package pattern
+
+ตรวจซ้ำ 2026-09-07 ด้วย `thclaws agent new` ทั้งสาม pattern บน v0.116.0 revision `75edc48`: `dynamic` ไม่สร้าง run.js (`agent_scaffold.rs::scaffold_agent`, `static_like = pattern != "dynamic"`). นี่คือการแก้ baseline ที่ระบุตำแหน่ง flow เหมารวม ไม่ใช่การเปลี่ยน runtime
 
 `routing.role` และ `routing.tags` เป็น package intent สำหรับ Atlas routing ส่วน `worker_id`, `workspace_id`, `workspace_dir` และ `base_url` เป็น deployment-time values ที่ exporter รับจาก operator
 
@@ -110,6 +112,12 @@ M1 ตรวจว่า embedded schema เป็น JSON Schema ที่ถ�
 - `builder-build-report.json` (schema: `builder-build-report.schema.json`, สร้างและตรวจใน M4): target, generated files, guarantee matrix, audit result, compatibility result, deployment hints
 - `atlas-register.json`: worker `role` / `tags` จาก `routing`, deployment-time `workspace_dir`, node template (`model`, `collect_files`, และ `output_format: json` เฉพาะ `assistant_json`; omit เมื่อเป็น `collect_files` ล้วน) และ edge template (`push_files` + `policy.file_handoff`), flow template เมื่อ target = `atlas-workflow`
 - archive จาก `thclaws agent pack`
+
+ขอบเขต generator M4: สร้าง `single-worker` สำหรับ `atlas-worker` และ `atlas-workflow` ตาม fixture ทั้งสอง; standalone pattern ยังเป็น compatibility intent และ generator ต้อง reject จนกว่าจะมี template orchestration ที่ตรวจแล้ว ห้ามสร้าง package ว่างแล้วอ้างว่ารองรับ pattern นั้น
+
+ก่อน M5 ผล generate ใช้ `package_status: unverified` และ audit แต่ละชั้นเป็น `not_run` (ยกเว้น spec ที่ตรวจแล้ว). `thclaws agent validate` ใน check M4 เป็นหลักฐานของ gate ไม่แก้ report ย้อนหลังและไม่เลื่อนสถานะ package. ถ้า pack ยังไม่มี `pack.yaml` ให้ report เป็น dependency `missing`, ไม่เดาชื่อ MCP/secret และไม่ถือว่า capability ใช้งานได้; SQL pack จริงและ live fixture ยังอยู่ใน M7. `assets_bundled` หมายถึงคัดลอก asset ตาม descriptor แล้ว ไม่ได้พิสูจน์ว่า MCP ถูกติดตั้งหรือปลอดภัย
+
+M4 เก็บ `execution_surface` เป็นข้อความใน report ไม่ใช้เป็นชื่อไฟล์. Manifest ใช้ `filesystem_scope: workspace` ตามรูปแบบ upstream ซึ่งไม่ใช่ `permissions.write_scope` enforcement; รายละเอียด tool/network/write declaration เก็บครบใน `agentspec.json` และ report. ไม่สร้าง host allowlist จากค่า network enum ที่ไม่มีรายชื่อ host
 
 สำหรับ `collect_files`, `files.globs` คือ output contract หลัก; thClaws snapshot ไฟล์ที่ match หลัง run จึงใช้ส่งต่อไฟล์ที่ agent สร้าง **หรือ** ไฟล์ที่มีอยู่ก่อน run ได้ และไม่เปลี่ยน `write_scope` ของ agent; `schema` ถ้ามีหมายถึง schema ของ artifact manifest ไม่ใช่ JSON body ของ assistant ส่วน `refusal.schema` เป็น contract แยกของ refusal branch และ `evaluation.golden_cases[].expect` เป็นตัวเลือก schema ที่ live audit ใช้ validate
 

@@ -37,4 +37,6 @@
 
 M3 เสร็จ 2026-09-06: `patterns/matrix.yaml`, `forge/compat.py` และ `scripts/check_m3_matrix.py` ผ่าน gate แล้ว; ตรวจ M1/M2 ผ่านก่อนเริ่มงาน
 
-M4: สร้าง generator และ build report แบบ deterministic โดยใช้ผลจาก `resolve_compatibility(spec)`; ตรวจ package ผ่าน `thclaws agent validate` (ถ้าไม่มี binary ต้องประกาศ skip)
+M4 เสร็จ 2026-09-07: Atlas single-worker generator, build report schema/guarantee matrix และ `check_m4_generate.py` ผ่าน native gate ด้วย thClaws v0.116.0 revision `75edc48`. ตรวจทั้งสอง fixture, asset ของ pack สังเคราะห์, byte determinism และ explicit skip. แก้ baseline ของ dynamic ให้ไม่มี run.js จากหลักฐาน `agent new` จริง
+
+M5: ทำ static audit และ wrappers; missing pack ต้องไม่ผ่าน static audit. M4 ยังไม่ติดตั้ง SQL MCP (M7), ไม่ export flow/human_gate (M8) และ reject standalone generation จนกว่าจะมี orchestration templates ที่ตรวจแล้ว ดู [generator.md](generator.md)

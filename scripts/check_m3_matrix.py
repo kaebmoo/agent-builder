@@ -26,17 +26,21 @@ EXPECTED = {
     "thclaws-standalone": {
         "execution_surface": "thclaws-gui-cli-catalog",
         "allowed_patterns": ["static-pipeline", "batch-fanout", "dynamic"],
-        "flow_location": ".thclaws/agent_workflow/run.js",
+        "flow_locations": {
+            "static-pipeline": ".thclaws/agent_workflow/run.js",
+            "batch-fanout": ".thclaws/agent_workflow/run.js",
+            "dynamic": None,
+        },
     },
     "atlas-worker": {
         "execution_surface": "POST /agent/run",
         "allowed_patterns": ["single-worker"],
-        "flow_location": None,
+        "flow_locations": {"single-worker": None},
     },
     "atlas-workflow": {
         "execution_surface": "atlas-workflow-engine",
         "allowed_patterns": ["single-worker"],
-        "flow_location": "atlas-workflow-json",
+        "flow_locations": {"single-worker": "atlas-workflow-json"},
     },
 }
 
@@ -80,7 +84,12 @@ def check() -> None:
                 rejected(spec, "package_pattern")
                 continue
             before = copy.deepcopy(spec)
-            expected = {"target": target, **entry, "package_pattern": pattern if present else "single-worker"}
+            selected = pattern if present else "single-worker"
+            expected = {
+                "target": target, "execution_surface": entry["execution_surface"],
+                "allowed_patterns": entry["allowed_patterns"], "package_pattern": selected,
+                "flow_location": entry["flow_locations"][selected],
+            }
             result = resolve_compatibility(spec)
             assert result == expected, f"wrong resolution: {target}/{pattern!r}"
             assert resolve_compatibility(spec) == result, "resolution is not deterministic"
@@ -110,7 +119,8 @@ def check() -> None:
         spec = yaml.safe_load((ROOT / "fixtures" / name / "spec.yaml").read_text(encoding="utf-8"))
         assert not all_errors(spec, validator), f"fixture fails M1: {name}"
         assert resolve_compatibility(spec) == {
-            "target": "atlas-worker", **EXPECTED["atlas-worker"], "package_pattern": "single-worker",
+            "target": "atlas-worker", "execution_surface": "POST /agent/run",
+            "allowed_patterns": ["single-worker"], "package_pattern": "single-worker", "flow_location": None,
         }, f"wrong fixture resolution: {name}"
 
 

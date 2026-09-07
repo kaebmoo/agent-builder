@@ -2,12 +2,17 @@
 thclaws-standalone:
   execution_surface: thclaws-gui-cli-catalog
   allowed_patterns: [static-pipeline, batch-fanout, dynamic]
-  flow_location: .thclaws/agent_workflow/run.js
+  flow_locations:
+    static-pipeline: .thclaws/agent_workflow/run.js
+    batch-fanout: .thclaws/agent_workflow/run.js
+    dynamic: null
 atlas-worker:
   execution_surface: POST /agent/run
   allowed_patterns: [single-worker]
-  flow_location: null
+  flow_locations:
+    single-worker: null
 atlas-workflow:
   execution_surface: atlas-workflow-engine
   allowed_patterns: [single-worker]
-  flow_location: atlas-workflow-json
+  flow_locations:
+    single-worker: atlas-workflow-json

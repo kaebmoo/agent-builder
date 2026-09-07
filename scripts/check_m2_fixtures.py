@@ -28,7 +28,7 @@ REQUIRED_FIXTURES = {
 def load_spec(path: Path) -> dict[str, Any]:
     loaded = yaml.safe_load(path.read_text(encoding="utf-8"))
     if not isinstance(loaded, dict):
-        raise ValueError("fixture must be a YAML object")
+        raise TypeError("fixture must be a YAML object")
     return loaded
 
 
@@ -148,7 +148,7 @@ def main() -> int:
         expectation = REQUIRED_FIXTURES.get(name)
         try:
             spec = load_spec(path)
-        except (OSError, UnicodeError, ValueError, yaml.YAMLError) as error:
+        except (OSError, UnicodeError, ValueError, TypeError, yaml.YAMLError) as error:
             findings.append(f"{path.relative_to(ROOT)}: {error}")
             continue
 

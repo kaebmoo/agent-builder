@@ -29,12 +29,13 @@ User goal → Discovery (7 questions) → AgentSpec (SSOT)
 - [docs/DESIGN.md](docs/DESIGN.md) — design baseline (AgentSpec, target/pattern matrix, guarantee matrix, audit 2 ชั้น)
 - [docs/PLAN.md](docs/PLAN.md) — milestones M0–M8 พร้อม definition of done และ check script ต่อ milestone
 - [AGENTS.md](AGENTS.md) — กติกาสำหรับ coding agent ที่ทำงานใน repo นี้
+- [docs/generator.md](docs/generator.md) — M4 generator, CLI, build report และข้อจำกัด
 
 ## สถานะ
 
-M3 (compatibility matrix) — เสร็จ 2026-09-06 หลังตรวจ M1/M2 ผ่านอีกครั้ง. ถัดไปคือ generator (M4); audit ยังไม่เริ่ม
+M4 (Atlas single-worker generator + build report) — เสร็จ 2026-09-07; fixture ทั้งสองผ่าน `thclaws agent validate` v0.116.0. Package ยังเป็น `unverified`; SQL pack และ standalone generator ยังไม่พร้อมใช้งาน. ถัดไปคือ static audit (M5)
 
-รัน gate ด้วย `python3 scripts/check_m3_matrix.py` — ตรวจ matrix ตาม DESIGN §3, combination ที่ต้อง reject, ความสอดคล้องกับ AgentSpec และ fixture ทั้งสองชุด
+รัน gate ด้วย `python3 scripts/check_m4_generate.py` — ตรวจ deterministic generation, report schema, pack assets และ native validation. ถ้าไม่มี `thclaws` ใน PATH จะประกาศ skip และคืน exit 2
 
 ## ข้อกำหนดขั้นต่ำ
 

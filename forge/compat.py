@@ -42,4 +42,10 @@ def resolve_compatibility(spec: Mapping[str, Any]) -> dict[str, Any]:
             raise ValueError(f"{target} requires routing")
         pattern = entry["allowed_patterns"][0]
 
-    return {"target": target, **entry, "package_pattern": pattern}
+    return {
+        "target": target,
+        "execution_surface": entry["execution_surface"],
+        "allowed_patterns": entry["allowed_patterns"],
+        "package_pattern": pattern,
+        "flow_location": entry["flow_locations"][pattern],
+    }

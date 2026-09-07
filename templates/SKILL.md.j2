@@ -1,0 +1,13 @@
+---
+name: {{ spec.identity.name | json }}
+description: {{ spec.mission.purpose | json }}
+---
+
+# {{ spec.identity.name }}
+
+{{ spec.mission.purpose }}
+
+1. Read the input contracts in agentspec.json and check that the supplied inputs are available.
+2. Apply the Mission, Must and Refuse sections of AGENTS.md.
+3. Use only capabilities declared in the spec. If a required tool is unavailable, return the refusal response.
+4. Return the declared output branch. Never treat a model assessment as a deterministic audit result.

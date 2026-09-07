@@ -1,0 +1,197 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://thclaws.cloud/schemas/agent-builder/builder-build-report.schema.json",
+  "title": "Agent Builder build report",
+  "description": "M4 generation evidence, before package status promotion by later audit milestones.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "format_version",
+    "package_status",
+    "target",
+    "thclaws_baseline",
+    "compatibility",
+    "generated_files",
+    "declared_permissions",
+    "guarantee_matrix",
+    "audit",
+    "dependencies",
+    "deployment_hints"
+  ],
+  "properties": {
+    "format_version": {
+      "const": 1
+    },
+    "package_status": {
+      "const": "unverified"
+    },
+    "target": {
+      "type": "string",
+      "minLength": 1
+    },
+    "thclaws_baseline": {
+      "type": "string",
+      "minLength": 1
+    },
+    "compatibility": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "target",
+        "execution_surface",
+        "allowed_patterns",
+        "package_pattern",
+        "flow_location"
+      ],
+      "properties": {
+        "status": {
+          "const": "matched"
+        },
+        "target": {
+          "type": "string",
+          "minLength": 1
+        },
+        "execution_surface": {
+          "type": "string",
+          "minLength": 1
+        },
+        "allowed_patterns": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true
+        },
+        "package_pattern": {
+          "type": "string",
+          "minLength": 1
+        },
+        "flow_location": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "generated_files": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "uniqueItems": true,
+      "minItems": 1
+    },
+    "declared_permissions": {
+      "type": "object",
+      "description": "Copied from AgentSpec; AgentSpec validation owns its contract."
+    },
+    "guarantee_matrix": {
+      "type": "array",
+      "minItems": 10,
+      "maxItems": 10,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "claim",
+          "status",
+          "basis"
+        ],
+        "properties": {
+          "claim": {
+            "type": "string",
+            "minLength": 1
+          },
+          "status": {
+            "enum": [
+              "Declared",
+              "Not guaranteed",
+              "Enforced",
+              "Static check",
+              "Not verified",
+              "Not applicable",
+              "No evidence"
+            ]
+          },
+          "basis": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "audit": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "spec",
+        "manifest",
+        "static",
+        "live",
+        "security"
+      ],
+      "properties": {
+        "spec": {
+          "const": "passed"
+        },
+        "manifest": {
+          "const": "not_run"
+        },
+        "static": {
+          "const": "not_run"
+        },
+        "live": {
+          "const": "not_run"
+        },
+        "security": {
+          "const": "not_run"
+        }
+      }
+    },
+    "dependencies": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "pack",
+          "status",
+          "mcp_servers"
+        ],
+        "properties": {
+          "pack": {
+            "type": "string",
+            "minLength": 1
+          },
+          "status": {
+            "enum": [
+              "missing",
+              "assets_bundled"
+            ]
+          },
+          "mcp_servers": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "uniqueItems": true
+          }
+        }
+      }
+    },
+    "deployment_hints": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "uniqueItems": true,
+      "minItems": 1
+    }
+  }
+}
