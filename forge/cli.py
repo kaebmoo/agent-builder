@@ -1,4 +1,4 @@
-"""Small command-line entry point for deterministic package generation."""
+"""Small command-line entry point for deterministic package generation and static audit."""
 from __future__ import annotations
 
 import argparse
@@ -8,6 +8,8 @@ import yaml
 from jinja2 import TemplateError
 from jsonschema import ValidationError
 
+from forge.audit import command as audit_command
+from forge.audit import configure as configure_audit
 from forge.generate import generate
 from forge.spec import load_spec
 
@@ -18,7 +20,10 @@ def main() -> int:
     build = commands.add_parser("generate", help="generate an unverified Atlas single-worker package")
     build.add_argument("spec", type=Path)
     build.add_argument("--out", required=True, type=Path, help="new package directory; existing paths are refused")
+    configure_audit(commands.add_parser("audit", help="static audit of a package; --write records the verdict"))
     args = parser.parse_args()
+    if args.command == "audit":
+        return audit_command(args)
     try:
         report = generate(load_spec(args.spec), args.out)
     except (OSError, ValueError, TypeError, yaml.YAMLError, TemplateError, ValidationError) as error:

@@ -24,6 +24,7 @@ forge generate fixtures/sql-reader/spec.yaml --out out/sql-reader
 - `.thclaws/schemas/inputs--<name>.json`, `outputs--<name>.json`, `refusal.json`: schema ตาม spec. collect_files ที่ไม่มี schema จะไม่สร้าง schema สมมติ
 - `evaluation/golden-cases.json`: cases และ expected branch ครบจาก spec
 - `builder-build-report.json` และ schema: inventory, compatibility, guarantee matrix, audit status และ deployment hints
+- `audit.py` และ `studio.py`: runner บาง ๆ ของ static audit (M5) คัดลอกจาก `templates/` ทุก byte; ดู [audit.md](audit.md)
 
 Atlas ไม่มี subagent definition หรือ run.js ใน package. `atlas-workflow` ได้ package ของ node เดียว; flow/export และ `human_gate` ที่ใช้งานจริงอยู่ใน M8. Standalone generator ยังไม่รองรับและคืน error ก่อนเขียนไฟล์ แม้ pattern จะผ่าน compatibility matrix
 
@@ -68,4 +69,4 @@ PATH="/path/to/thClaws/target/debug:$PATH" python3 scripts/check_m4_generate.py
 
 `agent new` ถูกเรียกทั้ง static-pipeline, batch-fanout และ dynamic เพื่อตรวจรูปแบบ scaffold โดย dynamic ต้องไม่มี run.js. `agent validate` ตรวจ package จริง รวมถึง synthetic pack script โดยให้ bytecode cache อยู่ภายนอก package
 
-Report ที่ generate มีสถานะ `unverified`; manifest/static/live/security เป็น `not_run`. ผล validator ใน gate เป็นหลักฐานแยกจาก report ที่สร้างและไม่แก้ไฟล์ package. การ validate package format ผ่านไม่ใช่หลักฐานว่า SQL MCP ทำงาน, permission ถูกบังคับ หรือ package ผ่าน audit. `draft` ต้องรอ static audit M5; live audit และ security ยังไม่รันใน M4
+Report ที่ generate มีสถานะ `unverified`; manifest/static/live/security เป็น `not_run`. ผล validator ใน gate เป็นหลักฐานแยกจาก report ที่สร้างและไม่แก้ไฟล์ package. การ validate package format ผ่านไม่ใช่หลักฐานว่า SQL MCP ทำงาน, permission ถูกบังคับ หรือ package ผ่าน audit. `draft` มาจาก static audit (M5, `studio.py` หรือ `forge audit --write`); live audit และ security ยังไม่รัน

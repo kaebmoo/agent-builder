@@ -41,7 +41,7 @@ M3 เสร็จ 2026-09-06: `patterns/matrix.yaml`, `forge/compat.py` แล�
 
 M4 เสร็จ 2026-09-07: Atlas single-worker generator, build report schema/guarantee matrix และ `check_m4_generate.py` ผ่าน native gate ด้วย thClaws v0.116.0 revision `75edc48`. ตรวจทั้งสอง fixture, asset ของ pack สังเคราะห์, byte determinism และ explicit skip. แก้ baseline ของ dynamic ให้ไม่มี run.js จากหลักฐาน `agent new` จริง
 
-M5: ทำ static audit และ wrappers; missing pack ต้องไม่ผ่าน static audit. M4 ยังไม่ติดตั้ง SQL MCP (M7), ไม่ export flow/human_gate (M8) และ reject standalone generation จนกว่าจะมี orchestration templates ที่ตรวจแล้ว (M9) ดู [generator.md](generator.md)
+M5 เสร็จ 2026-09-07: `forge/audit.py` + `forge audit` + wrappers `audit.py`/`studio.py` ในทุก package, report schema รองรับ `draft` และ `static_audit`, `check_m5_static_audit.py` ผ่าน native gate บน thClaws v0.116.0 revision `75edc48`. `invoice-reviewer` เป็น `draft`; `sql-reader` fail ที่ `packs` เพราะ `sql-readonly` ยัง missing (รอ M7a). M4 ยังไม่ติดตั้ง SQL MCP (M7), ไม่ export flow/human_gate (M8) และ reject standalone generation จนกว่าจะมี orchestration templates ที่ตรวจแล้ว (M9) ดู [generator.md](generator.md), [audit.md](audit.md)
 
 ลำดับที่ปรับ 2026-09-07 หลัง review: M7 แยกเป็น M7a (SQL pack ขั้นต่ำ) ที่ต้องเสร็จก่อน M6 เพราะ live audit ของ `sql-reader` ใช้ SQL MCP กับ SQLite fixture ซึ่ง M4 ยังรายงานเป็น `missing`; M7b (publisher) คงอยู่หลัง M6
 

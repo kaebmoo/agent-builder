@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://thclaws.cloud/schemas/agent-builder/builder-build-report.schema.json",
   "title": "Agent Builder build report",
-  "description": "M4 generation evidence, before package status promotion by later audit milestones.",
+  "description": "Generation evidence (M4) plus the static-audit verdict (M5). Live and security audits are later milestones.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -23,7 +23,10 @@
       "const": 1
     },
     "package_status": {
-      "const": "unverified"
+      "enum": [
+        "unverified",
+        "draft"
+      ]
     },
     "target": {
       "type": "string",
@@ -136,13 +139,26 @@
       ],
       "properties": {
         "spec": {
-          "const": "passed"
+          "enum": [
+            "passed",
+            "failed"
+          ]
         },
         "manifest": {
-          "const": "not_run"
+          "enum": [
+            "not_run",
+            "passed",
+            "failed",
+            "skipped"
+          ],
+          "description": "thclaws agent validate; must equal static_audit.thclaws_validate.status once the static audit ran."
         },
         "static": {
-          "const": "not_run"
+          "enum": [
+            "not_run",
+            "passed",
+            "failed"
+          ]
         },
         "live": {
           "const": "not_run"
@@ -192,6 +208,291 @@
       },
       "uniqueItems": true,
       "minItems": 1
+    },
+    "static_audit": {
+      "type": "object",
+      "description": "Written by forge.audit; present exactly when audit.static is not not_run.",
+      "additionalProperties": false,
+      "required": [
+        "strict",
+        "findings",
+        "thclaws_validate"
+      ],
+      "properties": {
+        "strict": {
+          "type": "boolean"
+        },
+        "findings": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "rule",
+              "severity",
+              "message"
+            ],
+            "properties": {
+              "rule": {
+                "type": "string",
+                "minLength": 1
+              },
+              "severity": {
+                "enum": [
+                  "error",
+                  "warning"
+                ]
+              },
+              "message": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
+        },
+        "thclaws_validate": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "status",
+            "version",
+            "detail"
+          ],
+          "properties": {
+            "status": {
+              "enum": [
+                "passed",
+                "failed",
+                "skipped"
+              ]
+            },
+            "version": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "detail": {
+              "type": "string"
+            }
+          }
+        }
+      }
     }
-  }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "audit": {
+            "properties": {
+              "static": {
+                "const": "not_run"
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "not": {
+          "required": [
+            "static_audit"
+          ]
+        }
+      },
+      "else": {
+        "required": [
+          "static_audit"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "package_status": {
+            "const": "draft"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "audit": {
+            "properties": {
+              "spec": {
+                "const": "passed"
+              },
+              "manifest": {
+                "const": "passed"
+              },
+              "static": {
+                "const": "passed"
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "required": [
+          "static_audit"
+        ],
+        "properties": {
+          "static_audit": {
+            "properties": {
+              "thclaws_validate": {
+                "properties": {
+                  "status": {
+                    "const": "passed"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "audit": {
+            "properties": {
+              "manifest": {
+                "const": "passed"
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "required": [
+          "static_audit"
+        ],
+        "properties": {
+          "static_audit": {
+            "properties": {
+              "thclaws_validate": {
+                "properties": {
+                  "status": {
+                    "const": "failed"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "audit": {
+            "properties": {
+              "manifest": {
+                "const": "failed"
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "required": [
+          "static_audit"
+        ],
+        "properties": {
+          "static_audit": {
+            "properties": {
+              "thclaws_validate": {
+                "properties": {
+                  "status": {
+                    "const": "skipped"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "audit": {
+            "properties": {
+              "manifest": {
+                "const": "skipped"
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "audit": {
+            "properties": {
+              "static": {
+                "const": "passed"
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "static_audit": {
+            "properties": {
+              "findings": {
+                "not": {
+                  "contains": {
+                    "required": [
+                      "severity"
+                    ],
+                    "properties": {
+                      "severity": {
+                        "const": "error"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "required": [
+          "static_audit"
+        ],
+        "properties": {
+          "audit": {
+            "properties": {
+              "static": {
+                "const": "passed"
+              }
+            }
+          },
+          "static_audit": {
+            "properties": {
+              "strict": {
+                "const": true
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "static_audit": {
+            "properties": {
+              "findings": {
+                "maxItems": 0
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
 }

@@ -30,12 +30,13 @@ User goal → Discovery (7 questions) → AgentSpec (SSOT)
 - [docs/PLAN.md](docs/PLAN.md) — milestones M0–M8 พร้อม definition of done และ check script ต่อ milestone
 - [AGENTS.md](AGENTS.md) — กติกาสำหรับ coding agent ที่ทำงานใน repo นี้
 - [docs/generator.md](docs/generator.md) — M4 generator, CLI, build report และข้อจำกัด
+- [docs/audit.md](docs/audit.md) — M5 static audit: กฎ, สถานะ, wrappers และ gate
 
 ## สถานะ
 
-M4 (Atlas single-worker generator + build report) — เสร็จ 2026-09-07; fixture ทั้งสองผ่าน `thclaws agent validate` v0.116.0. Package ยังเป็น `unverified`; SQL pack และ standalone generator ยังไม่พร้อมใช้งาน. ถัดไปคือ static audit (M5)
+M5 (static audit) — เสร็จ 2026-09-07; `forge audit` / `audit.py` / `studio.py` ตรวจ package ตามกฎ DESIGN §7 และ `thclaws agent validate` v0.116.0. `invoice-reviewer` ได้สถานะ `draft`; `sql-reader` ยัง `unverified` เพราะ pack `sql-readonly` ยังไม่มี (M7a). ถัดไปคือ M7a แล้ว live audit (M6)
 
-รัน gate ด้วย `python3 scripts/check_m4_generate.py` — ตรวจ deterministic generation, report schema, pack assets และ native validation. ถ้าไม่มี `thclaws` ใน PATH จะประกาศ skip และคืน exit 2
+รัน gate ด้วย `python3 scripts/check_m4_generate.py` และ `python3 scripts/check_m5_static_audit.py` — ถ้าไม่มี `thclaws` ใน PATH จะประกาศ skip ส่วน native และคืน exit 2
 
 ## ข้อกำหนดขั้นต่ำ
 

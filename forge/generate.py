@@ -17,67 +17,95 @@ from forge.spec import validate_spec
 ROOT = Path(__file__).resolve().parents[1]
 REPORT_SCHEMA_PATH = ROOT / "builder-build-report.schema.json"
 THCLAWS_BASELINE = "0.116.0"
+# Thin runners copied verbatim into every package; the audit rules live in forge.audit only.
+WRAPPERS = ("audit.py", "studio.py")
+PACK_FIELDS = {"min_tier", "tools", "env", "mcp_servers", "scripts", "skills"}
 
 
 def json_text(value: Any) -> str:
     return json.dumps(value, ensure_ascii=False, sort_keys=True, indent=2, allow_nan=False) + "\n"
 
 
-def pack_assets(spec: dict[str, Any], packs_dir: Path) -> tuple[dict[str, bytes], list[dict[str, Any]]]:
-    """Copy explicitly listed assets; declare MCP names without installing or running servers."""
+def editable_files(spec: dict[str, Any]) -> set[str]:
+    """Prose an operator or LLM may customize after generation; every other file must match the render."""
+    return {"AGENTS.md", f".thclaws/skills/{spec['identity']['name']}/SKILL.md"}
+
+
+def load_pack(name: str, capability: dict[str, Any], spec: dict[str, Any], folder: Path,
+              pack: Any) -> tuple[dict[str, bytes], list[str]]:
+    """Check one descriptor against the spec and read its assets. Raises ValueError/TypeError with the reason."""
+    if not isinstance(pack, dict):
+        raise TypeError(f"pack {name}: pack.yaml must be an object")
+    if set(pack) != PACK_FIELDS or pack["min_tier"] not in ("T0", "T1", "T2"):
+        raise ValueError(f"pack {name}: expected fields {sorted(PACK_FIELDS)} and min_tier T0/T1/T2")
+    for key in PACK_FIELDS - {"min_tier"}:
+        values = pack[key]
+        if not isinstance(values, list) or any(not isinstance(v, str) or not v for v in values):
+            raise ValueError(f"pack {name}: {key} must be a list of non-empty strings")
+        if len(values) != len(set(values)):
+            raise ValueError(f"pack {name}: duplicate {key}")
+    if capability["params"]:
+        raise ValueError(f"pack {name}: parameter expansion is not supported yet")
+    # Both values are validated as T0/T1/T2, whose lexical order matches tier order.
+    if spec["permissions"]["tier"] < pack["min_tier"]:
+        raise ValueError(f"pack {name} requires {pack['min_tier']}")
+    for key, declared in (("tools", spec["permissions"]["tools"]), ("env", spec["env"])):
+        if not set(pack[key]) <= set(declared):
+            raise ValueError(f"pack {name}: required {key} must be declared in AgentSpec")
+    bundled: dict[str, bytes] = {}
+    for kind in ("scripts", "skills"):
+        for asset in sorted(pack[kind]):
+            pattern = r"[a-z0-9][a-z0-9_-]*\.py" if kind == "scripts" else r"[a-z0-9][a-z0-9_-]*"
+            if not re.fullmatch(pattern, asset):
+                raise ValueError(f"pack {name}: invalid {kind} asset name: {asset!r}")
+            relative = Path(kind) / asset
+            destination = f".thclaws/{kind}/{name}--{asset}"
+            if kind == "skills":
+                relative /= "SKILL.md"
+                destination += "/SKILL.md"
+            source = folder / relative
+            if any(part.is_symlink() for part in [source, *source.parents]):
+                raise ValueError(f"pack {name}: asset must not use symlinks: {relative}")
+            bundled[destination] = source.read_bytes()
+    return bundled, sorted(pack["mcp_servers"])
+
+
+def pack_assets(spec: dict[str, Any], packs_dir: Path) -> tuple[dict[str, bytes], list[dict[str, Any]], list[str]]:
+    """Copy explicitly listed assets; declare MCP names without installing or running servers.
+
+    Returns bundled files, dependency records and readable problems instead of raising,
+    so the static audit can report every pack defect of an edited package at once.
+    """
     files: dict[str, bytes] = {}
     dependencies = []
+    problems: list[str] = []
     seen = set()
     for capability in spec["capabilities"]:
         name = capability["pack"]
         if name in seen:
-            raise ValueError(f"duplicate capability pack: {name}")
+            problems.append(f"duplicate capability pack: {name}")
+            continue
         seen.add(name)
         folder = packs_dir / name
         manifest = folder / "pack.yaml"
         if folder.is_symlink() or manifest.is_symlink():
-            raise ValueError(f"pack paths must not be symlinks: {name}")
+            problems.append(f"pack paths must not be symlinks: {name}")
+            continue
         if not manifest.exists():
             dependencies.append({"pack": name, "status": "missing", "mcp_servers": []})
             continue
-        pack = yaml.safe_load(manifest.read_text(encoding="utf-8"))
-        if not isinstance(pack, dict):
-            raise TypeError(f"pack {name}: pack.yaml must be an object")
-        required = {"min_tier", "tools", "env", "mcp_servers", "scripts", "skills"}
-        if set(pack) != required or pack["min_tier"] not in ("T0", "T1", "T2"):
-            raise ValueError(f"pack {name}: expected fields {sorted(required)} and min_tier T0/T1/T2")
-        for key in required - {"min_tier"}:
-            values = pack[key]
-            if not isinstance(values, list) or any(not isinstance(v, str) or not v for v in values):
-                raise ValueError(f"pack {name}: {key} must be a list of non-empty strings")
-            if len(values) != len(set(values)):
-                raise ValueError(f"pack {name}: duplicate {key}")
-        if capability["params"]:
-            raise ValueError(f"pack {name}: parameter expansion is not supported yet")
-        # Both values are validated as T0/T1/T2, whose lexical order matches tier order.
-        if spec["permissions"]["tier"] < pack["min_tier"]:
-            raise ValueError(f"pack {name} requires {pack['min_tier']}")
-        for key, declared in (("tools", spec["permissions"]["tools"]), ("env", spec["env"])):
-            if not set(pack[key]) <= set(declared):
-                raise ValueError(f"pack {name}: required {key} must be declared in AgentSpec")
-        for kind in ("scripts", "skills"):
-            for asset in sorted(pack[kind]):
-                pattern = r"[a-z0-9][a-z0-9_-]*\.py" if kind == "scripts" else r"[a-z0-9][a-z0-9_-]*"
-                if not re.fullmatch(pattern, asset):
-                    raise ValueError(f"pack {name}: invalid {kind} asset name: {asset!r}")
-                relative = Path(kind) / asset
-                destination = f".thclaws/{kind}/{name}--{asset}"
-                if kind == "skills":
-                    relative /= "SKILL.md"
-                    destination += "/SKILL.md"
-                source = folder / relative
-                if any(part.is_symlink() for part in [source, *source.parents]):
-                    raise ValueError(f"pack {name}: asset must not use symlinks: {relative}")
-                if destination in files:
-                    raise ValueError(f"pack asset collision: {destination}")
-                files[destination] = source.read_bytes()
-        dependencies.append({"pack": name, "status": "assets_bundled", "mcp_servers": sorted(pack["mcp_servers"])})
-    return files, dependencies
+        try:
+            bundled, servers = load_pack(name, capability, spec, folder,
+                                        yaml.safe_load(manifest.read_text(encoding="utf-8")))
+        except (ValueError, TypeError, OSError, yaml.YAMLError) as error:
+            problems.append(str(error))
+            continue
+        for destination in bundled:
+            if destination in files:
+                problems.append(f"pack asset collision: {destination}")
+        files.update(bundled)
+        dependencies.append({"pack": name, "status": "assets_bundled", "mcp_servers": servers})
+    return files, dependencies, problems
 
 
 def guarantee_matrix(spec: dict[str, Any]) -> list[dict[str, str]]:
@@ -102,9 +130,11 @@ def guarantee_matrix(spec: dict[str, Any]) -> list[dict[str, str]]:
     return [{"claim": claim, "status": status, "basis": basis} for claim, status, basis in rows]
 
 
-def generate(spec: dict[str, Any], destination: Path, *, packs_dir: Path | None = None) -> dict[str, Any]:
-    """Build into a new directory. Never overwrite an existing package or execute pack assets.
+def render(spec: dict[str, Any], packs_dir: Path | None = None) -> tuple[dict[str, bytes], dict[str, Any], list[str]]:
+    """Render every package file and the unverified build report in memory.
 
+    Returns (files, report, pack problems). The static audit re-renders a package from its
+    agentspec.json and diffs, so this must stay free of timestamps, absolute paths and environment values.
     M4 implements the single-worker surface used by both fixtures. Standalone
     orchestration needs a separate generator; matrix compatibility is not implementation support.
     """
@@ -112,10 +142,7 @@ def generate(spec: dict[str, Any], destination: Path, *, packs_dir: Path | None 
     compatibility = resolve_compatibility(spec)
     if compatibility["package_pattern"] != "single-worker":
         raise ValueError("M4 generates Atlas single-worker packages only; standalone generation is not implemented")
-    destination = Path(destination)
-    if destination.exists() or destination.is_symlink():
-        raise FileExistsError(f"destination already exists: {destination}")
-    files, dependencies = pack_assets(spec, (packs_dir or ROOT / "packs").resolve())
+    files, dependencies, problems = pack_assets(spec, (packs_dir or ROOT / "packs").resolve())
 
     def add_json(path: str, value: Any) -> None:
         if path in files:
@@ -144,6 +171,8 @@ def generate(spec: dict[str, Any], destination: Path, *, packs_dir: Path | None 
             if "schema" in item:
                 add_json(f".thclaws/schemas/{section}--{item['name']}.json", item["schema"])
     add_json("evaluation/golden-cases.json", spec["evaluation"]["golden_cases"])
+    for wrapper in WRAPPERS:
+        files[wrapper] = (ROOT / "templates" / wrapper).read_bytes()
 
     templates = Environment(loader=FileSystemLoader(ROOT / "templates"), undefined=StrictUndefined,
                             autoescape=False, keep_trailing_newline=True, trim_blocks=True, lstrip_blocks=True)
@@ -184,6 +213,17 @@ def generate(spec: dict[str, Any], destination: Path, *, packs_dir: Path | None 
     }
     Draft202012Validator(report_schema).validate(report)
     add_json("builder-build-report.json", report)
+    return files, report, problems
+
+
+def generate(spec: dict[str, Any], destination: Path, *, packs_dir: Path | None = None) -> dict[str, Any]:
+    """Build into a new directory. Never overwrite an existing package or execute pack assets."""
+    destination = Path(destination)
+    if destination.exists() or destination.is_symlink():
+        raise FileExistsError(f"destination already exists: {destination}")
+    files, report, problems = render(spec, packs_dir)
+    if problems:
+        raise ValueError("; ".join(problems))
     # Render and validate everything before touching the destination. Stage beside
     # it so the final rename stays on the same filesystem.
     destination.parent.mkdir(parents=True, exist_ok=True)
@@ -194,6 +234,8 @@ def generate(spec: dict[str, Any], destination: Path, *, packs_dir: Path | None 
             output = staged / path
             output.parent.mkdir(parents=True, exist_ok=True)
             output.write_bytes(content)
+            if path in WRAPPERS:
+                output.chmod(0o755)
         for directory in (".thclaws/agents", ".thclaws/scripts", ".thclaws/skills", ".thclaws/schemas"):
             (staged / directory).mkdir(exist_ok=True)
         if destination.exists() or destination.is_symlink():

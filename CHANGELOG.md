@@ -4,6 +4,7 @@
 
 ### Added
 
+- M5 (2026-09-07): deterministic static audit (`forge audit`, `forge/audit.py`) that re-renders a package from its `agentspec.json` and reports readable findings, warning/strict handling for unknown schema keywords, Atlas-only single-worker rules, `audit.py`/`studio.py` runners in every package, and `draft` promotion gated on `thclaws agent validate`
 - M4 (2026-09-07): deterministic Atlas single-worker generator and `forge generate` CLI, shared AgentSpec validation, schema-checked build reports with explicit unverified guarantees/dependencies, and native thClaws validation gate
 - M3 (2026-09-06): compatibility matrix and deterministic AgentSpec resolver for execution surface, package pattern and flow location, with a gate covering valid/rejected combinations and schema agreement
 
@@ -16,6 +17,7 @@
 
 ### Fixed
 
+- M5 review follow-up: report schema ties `audit.manifest`/`audit.static` to the recorded validate status and findings, and the inventory rule now covers the whole package tree (stray files and symlinks fail)
 - M4 review follow-up: arrange gate imports for Ruff 0.5 compatibility and remove template-generated blank lines while preserving separate input/refusal list items
 - M3 follow-up (2026-09-07): derive flow location per pattern; dynamic has no run.js, confirmed against thClaws v0.116.0 revision 75edc48
 - Milestone scripts and shared validation now pass Ruff, including the existing executable-bit and lint findings
