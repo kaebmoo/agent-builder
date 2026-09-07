@@ -4,6 +4,7 @@
 
 ### Added
 
+- M1/M2 follow-up (2026-09-07): tool names must be runtime names (provider regex; MCP tools as `<server>__<tool>`), and the `sql-reader` fixture now declares `sql-readonly__*`
 - M5 (2026-09-07): deterministic static audit (`forge audit`, `forge/audit.py`) that re-renders a package from its `agentspec.json` and reports readable findings, warning/strict handling for unknown schema keywords, Atlas-only single-worker rules, `audit.py`/`studio.py` runners in every package, and `draft` promotion gated on `thclaws agent validate`
 - M4 (2026-09-07): deterministic Atlas single-worker generator and `forge generate` CLI, shared AgentSpec validation, schema-checked build reports with explicit unverified guarantees/dependencies, and native thClaws validation gate
 - M3 (2026-09-06): compatibility matrix and deterministic AgentSpec resolver for execution surface, package pattern and flow location, with a gate covering valid/rejected combinations and schema agreement

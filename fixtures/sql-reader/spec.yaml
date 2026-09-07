@@ -40,7 +40,7 @@ capabilities:
     params: {}
 permissions:
   tier: T0
-  tools: [Read, sql.metadata, sql.query, sql.validate]
+  tools: [Read, sql-readonly__metadata, sql-readonly__query, sql-readonly__validate]
   shell: none
   network: none
   write_scope: none

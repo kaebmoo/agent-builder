@@ -225,7 +225,11 @@
         "tools": {
           "type": "array",
           "uniqueItems": true,
-          "items": {"type": "string", "minLength": 1}
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "description": "Runtime tool name: a thClaws built-in (Read, WebFetch) or an MCP tool as <server>__<tool>; provider tool-name regex, no dots."
+          }
         },
         "shell": {"type": "string", "enum": ["none", "sandboxed"]},
         "network": {"type": "string", "enum": ["none", "general-http", "allowlist"]},

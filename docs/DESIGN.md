@@ -27,7 +27,7 @@
 | inputs | array ของ `{name, transport, path?, mime_types?, schema?}` โดย `transport` ∈ `prompt_json` / `atlas_file_handoff` / `local_workspace`; Atlas file handoff ไม่รับ `path` ที่ผู้ใช้กำหนดเอง; `local_workspace` คือไฟล์ที่ provision ไว้ใน worker workspace ก่อน run |
 | outputs | array ของ `{name, transport, schema?, files?}` โดย `transport` ∈ `assistant_json` / `collect_files`; `assistant_json` ต้องมี `schema`, ส่วน `collect_files` ต้องมี `files.globs` และอาจมี schema ของ artifact manifest; การ snapshot ไม่ได้บอกว่า agent เป็นคนเขียนไฟล์ |
 | capabilities | รายชื่อ **pack** + พารามิเตอร์ (ดู §5) |
-| permissions | `tier` ∈ `T0` (read-only agent behavior) / `T1` (เขียนเฉพาะ `output/**`) / `T2` (side effect ภายนอก) + declared `tools`, `shell`, `network`, `write_scope` |
+| permissions | `tier` ∈ `T0` (read-only agent behavior) / `T1` (เขียนเฉพาะ `output/**`) / `T2` (side effect ภายนอก) + declared `tools`, `shell`, `network`, `write_scope`; ชื่อ tool คือชื่อที่ runtime เห็น: built-in ตาม catalog หรือ MCP เป็น `<server>__<tool>` (§4) |
 | refusal | เงื่อนไขที่ต้องปฏิเสธหรือ hand off พร้อมรูปแบบคำตอบเมื่อปฏิเสธ |
 | model | model id ที่ pin หรือ model policy |
 | env | **ชื่อ** env var ที่ต้องมี (ไม่มีค่า) |
@@ -68,6 +68,15 @@ planner → worker → verifier สำหรับ Atlas จึงต้อง�
 
 การตรวจชื่อ tool ใช้สามระดับ: built-in catalog ที่ pin ตาม thClaws version, MCP tools จาก pack/daemon จริง และ unknown tool เป็น warning ใน `draft` แต่ fail เมื่อจะเป็น `shippable` ห้ามสร้าง enum ปิดตายสำหรับ MCP tools
 
+MCP config, tool naming และ isolation (ตรวจ source 2026-09-07 v0.116.0 revision `75edc48`):
+- daemon โหลด `mcp_servers` ครั้งเดียวตอน start: user-level `~/.config/thclaws/mcp.json` แล้ว merge กับ project-level `<cwd>/.thclaws/mcp.json` (รองรับ `.mcp.json` และ `.claude/mcp.json` ด้วย; project override user ตามชื่อ) ใน `config.rs::AppConfig::load` / `ProjectConfig::load_mcp_servers`. `/agent/run` ใช้ `config.mcp_servers` ชุดนี้ ไม่อ่าน mcp.json ของ `workspace_dir` ต่อ request (`agent_runtime.rs`). ดังนั้น daemon ที่ start จาก directory ของ package (CWD = package) จะเห็น `.thclaws/mcp.json` ของ package นั้น นี่คือช่องทางที่ live audit และ deployment แบบ daemon-per-package ใช้
+- รูปแบบไฟล์ `{"mcpServers": {"<name>": {"command", "args", "env"}}}` (stdio) หรือ `{"transport": "http", "url", "headers"}`. stdio subprocess สืบทอด environment ของ daemon และได้ `env` จากไฟล์เพิ่มแบบ literal (`mcp.rs::McpClient::spawn`); `${VAR}` ถูก interpolate เฉพาะ `headers` ของ HTTP transport → ห้ามใส่ค่า secret ใน mcp.json: pack ประกาศ **ชื่อ** env แล้ว operator ตั้งค่าที่ process ของ daemon
+- model เห็น tool ของ MCP เป็น `<server>__<tool>` (`mcp.rs::MCP_NAME_SEPARATOR`, แต่ละส่วน sanitize เป็น `[A-Za-z0-9_-]`) ดังนั้น `permissions.tools` ใน spec และ `tools` ของ pack ต้องใช้ชื่อ qualified นี้ เช่น `sql-readonly__query` ไม่ใช่ `sql.query`
+- การ spawn stdio command ครั้งแรกต้องผ่าน allowlist `~/.config/thclaws/mcp_allowlist.json` (`XDG_CONFIG_HOME` เปลี่ยน base ได้) หรือ `THCLAWS_MCP_ALLOW_ALL=1`; `THCLAWS_CONFIG=<path>` ชี้ settings.json, `HOME` กำหนด user-level scope, `thclaws --serve --port <N>` + `THCLAWS_API_TOKEN` (ไม่ตั้ง = `/v1/*` และ `/agent/run` ตอบ 404) คือชุดที่ใช้สร้าง daemon isolated สำหรับ live audit
+- `GET /v1/agent/info` คืน `skills` และ `mcp_servers` (`name`, `command`, `tool_count` เป็น null จนกว่าจะมี run) ใช้เป็นหลักฐานว่า daemon เห็น MCP ของ pack หลัง deploy
+- built-in tools ของ `/agent/run` = `ToolRegistry::with_builtins()` + KMS / Memory / Task / WorkflowRun ที่ `agent_runtime.rs::build_runtime_with_provider` ลงทะเบียนเพิ่ม เป็นแหล่งของ catalog `patterns/tools-<version>.json` ที่ static audit ใช้
+- thClaws ลงทะเบียน **ทุก** tool ที่ server advertise โดยไม่กรอง และไม่อ่าน MCP tool annotations (`readOnlyHint` ฯลฯ; `McpToolInfo` มีเพียง name / description / input_schema / ui). ถ้า spawn หรือ `tools/list` ล้มเหลว `agent_runtime.rs::load_mcp_servers_silent` แค่ `eprintln!` แล้ว run ต่อโดยไม่มี tool ของ server นั้น → การมี/ไม่มี tool ต้องพิสูจน์ด้วยหลักฐานเชิงบวก (SSE tool event, `/v1/agent/info`) ไม่ใช่จากการที่ run ไม่ error
+
 ## 5. Capability pack
 
 pack คือความสามารถสำเร็จรูปที่ประกอบเข้า package ได้ อยู่ใน `packs/<name>/pack.yaml` ประกาศ: MCP servers / skills / scripts ที่เพิ่ม, env ที่ต้องการ (ชื่อ), tier ต่ำสุดที่ต้องใช้, fixture สำหรับ live audit ที่รันได้โดยไม่ต้องมีข้อมูลจริง
@@ -77,6 +86,54 @@ pack แรก ๆ: `sql-readonly` (ห่อ MCP ของ project AI: metadata
 T0 ต้องประกาศ `shell: none`, `network: none`, `write_scope: none`; ทุก tier ที่ประกาศ `shell: none` ห้ามประกาศ `Bash`, `write_scope: none` ห้ามประกาศ `Write`, `Edit`, `FetchImages` หรือ document writers, และ `network: none` ห้ามประกาศ `WebFetch`, `WebSearch`, `WebScrape`, `FetchImages` หรือ `YouTubeTranscript`
 T1 ต้องประกาศ `shell: none`, `network: none`, `write_scope: output`; นี่เป็น declared boundary ที่ builder ใช้ตรวจและแสดงใน guarantee matrix ยังไม่ใช่ runtime write-path enforcement
 T2 ต้องประกาศ `write_scope: workspace`; การเลือก tier อย่างเดียวไม่สร้าง approval ให้ target ที่ไม่มี `human_gate`
+
+### Pack contract (M7a ขึ้นไป) — รอยต่อระหว่าง builder กับงานที่สร้างข้างนอก
+
+MCP server, script และ skill ที่ agent ต้องใช้ **ไม่อยู่ใน builder** และไม่อยู่ใน AgentSpec; เขียนที่ไหนก็ได้ (repo แยก, session ของ thClaws ที่ทำหน้าที่ coding agent, มนุษย์) แล้วเข้ามาทาง pack เท่านั้น. `packs/<name>/pack.yaml` v2 คือ contract และแทนที่ descriptor v1 หกฟิลด์ของ M4 ทั้งชุดใน M7a (generator, audit, report schema และ gate ย้ายพร้อมกัน ไม่มี pack จริงที่ต้อง migrate):
+
+```yaml
+min_tier: T0
+network: none            # none | allowlist | general-http = ความต้องการต่ำสุดของ pack; spec ต้องประกาศไม่ต่ำกว่านี้
+hosts: []                # เมื่อ allowlist: host ที่ MCP ของ pack ต้องออก ใช้เป็น deployment hint ของ egress control
+env: [SQL_READONLY_DSN]  # ชื่อ env ที่ process ของ daemon ต้องมี ไม่มีค่า
+tools: []                # built-in tools ที่ pack ต้องการเพิ่ม (เช่น Read); MCP tools คำนวณจาก mcp_servers
+mcp_servers:
+  - name: sql-readonly   # ชื่อ server = prefix ของ tool ที่ model เห็น
+    command: python3
+    args: [-m, sql_readonly_mcp]
+    tools: [metadata, query, validate]   # bare tools ที่ server ต้อง advertise ตรงชุดนี้ ไม่ขาดไม่เกิน
+    mutating: []         # tool ที่มี side effect; ไม่ว่าง → min_tier ต้องเป็น T2
+scripts: []
+skills: [sql-readonly]
+fixture:
+  setup: fixture/setup.py   # สร้างข้อมูลตัวอย่างใน directory ชั่วคราวและพิมพ์ค่า env ของ fixture ไม่ใช้ข้อมูลจริง
+  cases:                    # smoke + negative case ที่ harness ยิงเข้า MCP โดยตรง ไม่ใช้ LLM
+    - {tool: sql-readonly__query, args: {statement: "SELECT vendor, SUM(total) FROM invoices GROUP BY vendor"}, expect: ok}
+    - {tool: sql-readonly__query, args: {statement: "DELETE FROM invoices"}, expect: error}
+source: {repo: https://github.com/kaebmoo/AI, ref: <commit>}   # optional provenance สำหรับ security audit
+```
+
+กฎของ contract
+- ชื่อ tool ที่ spec ประกาศคือ qualified name `<server>__<tool>` ตาม §4; builder ไม่ประดิษฐ์ alias
+- pack read-only ต้องปฏิเสธ mutation **ที่ server** (negative case ใน `fixture.cases`) ไม่ใช่ที่ prompt; `mutating` ที่ไม่ว่างบังคับ T2 และ pack ที่มี side effect ต้องมี `dry_run` + `idempotency_key` ตามกฎเดิม
+- config ของ server รับได้ทาง `args` และ env เท่านั้น; ค่า secret ไม่อยู่ในไฟล์ใดของ pack หรือ package
+- `fixture.setup` ต้องรันได้โดยไม่มี network และไม่มีข้อมูลจริง; pack ที่ต้องใช้ API ภายนอก (เช่น Google Weather) ใช้ recorded response หรือ mock endpoint ใน fixture และประกาศ `hosts` จริงสำหรับ deployment
+- `conformance` ของ pack ไม่ต้องใช้ provider key: harness `forge pack test <name>` (stdlib stdio JSON-RPC) start server ตาม `command`, ทำ `initialize` → `tools/list` ต้องเท่ากับ `tools` ที่ประกาศ, ยิงทุก case, บันทึก `pack-conformance.json`; ไม่มี runtime ของ server ในเครื่อง → exit 2
+- ชื่อ server ต้องตรง `^[a-z0-9][a-z0-9-]*$` (ห้าม `_`) และ bare tool ต้องตรง `^[a-z0-9][a-z0-9_]*$` (ห้าม `__`) เพื่อให้ qualified name แยกกลับเป็น server/tool ได้ทางเดียว; thClaws sanitize ชื่ออื่นแบบเงียบ ๆ แต่ builder reject
+- `tools` ของ pack ส่วน MCP = **ทุก** tool ที่ server advertise เพราะ thClaws ลงทะเบียนทั้งหมด (§4) และ spec ต้องประกาศ ⊇ ชุดนี้: declaration ของ spec คือ inventory ของสิ่งที่ model จะเห็นจริง ไม่ใช่รายการที่อยากใช้. server ที่มี tool แบบ admin ต้องถูก launch ในโหมดที่ไม่ expose (ผ่าน `args`) หรือ pack นั้นเป็น T2
+- harness รัน server ด้วย environment สะอาด (PATH + env ที่ประกาศพร้อมค่าจาก fixture เท่านั้น) เพื่อให้ dependency ต่อ env ที่ไม่ได้ประกาศโผล่เป็น start failure ตั้งแต่ตอน test ไม่ใช่ตอน deploy
+- `pack-conformance.json` เก็บ digest ของ `tools/list` (ชื่อ + input schema) ครั้งล่าสุด; server ภายนอกที่เปลี่ยน surface จะถูกจับได้ในการ test ครั้งถัดไป และ pack owner ต้องแก้ `pack.yaml` ก่อน spec ที่ใช้มันจะกลับมา `draft`
+- `forge pack discover --command <cmd> [--args ...]` (M10) ร่าง `pack.yaml` จากสิ่งที่ MCP บอกเองได้ (ชื่อ server จาก argument, tools + input schema + description จาก `tools/list`, annotations ถ้ามีเป็นข้อเสนอของ `mutating`) แต่ไม่ตัดสิน `min_tier`, `network`, `env`, `mutating` และ fixture; ผลของ discover ไม่ใช่ `conformant` จนกว่าผู้เขียนจะเติมส่วนที่เหลือแล้ว `forge pack test` ผ่าน
+
+Lifecycle ของความสามารถหนึ่งตัว (ตัวอย่าง: agent พยากรณ์อากาศจาก Google Weather)
+1. คนหรือ coding session เขียน MCP `google-weather` ในที่ของมันเองตาม contract: stdio JSON-RPC, tool `forecast`, อ่าน `GOOGLE_WEATHER_API_KEY` จาก env, fixture เป็น recorded response
+2. `forge pack new google-weather` (M10) สร้าง `pack.yaml` + fixture skeleton (หรือ `forge pack discover` ร่าง tools/schemas จาก server ที่มีอยู่แล้ว); ผู้เขียนกรอก `network: allowlist`, `hosts: [weather.googleapis.com]`, `env`, `mcp_servers`
+3. `forge pack test google-weather` ผ่าน = pack **conformant**: server มีจริง, tools ตรง, negative case ผ่าน. นี่คือจุดที่งานภายนอก "เข้ามาทดสอบ" ได้โดยไม่ต้องมี agent หรือ LLM
+4. spec ประกาศ `capabilities: [{pack: google-weather}]`, `permissions.tools: [google-weather__forecast]`, `network: allowlist`, `env: [GOOGLE_WEATHER_API_KEY]` → `forge generate` bundle asset, เขียน `.thclaws/mcp.json` (command/args เท่านั้น) และ `manifest.requires.mcp_servers`; static audit (M5 + catalog ของ M7a) ตรวจว่า tools/env/network/tier ของ spec รองรับ pack
+5. live audit (M6) start daemon isolated จาก package พร้อม env ของ fixture → golden cases ต้องผ่าน และ SSE ต้องมี tool event `google-weather__forecast` → `candidate`; ไม่มี key = คง `draft`
+6. deploy: operator ติดตั้ง runtime ของ MCP บน daemon ของ tier นั้น, ตั้ง env ตามชื่อใน report, ตั้ง egress ตาม `hosts`; `atlas-register.json` (M8) แนบรายการนี้ และ `/v1/agent/info` ใช้ยืนยันว่า daemon เห็น server หลัง deploy
+
+สถานะของ pack เป็นผลของ harness ไม่ใช่ field ที่เขียนเอง: ไม่มี descriptor = `missing`, มี descriptor และ asset ถูก bundle = `assets_bundled`, `forge pack test` ผ่านล่าสุด = `conformant` (บันทึกใน `pack-conformance.json` ของ pack และอ้างใน build report). guarantee ที่ pack ให้ได้จริงบน `/agent/run` มีสองอย่าง: daemon มี/ไม่มี server นี้ และ server ปฏิเสธ mutation เอง; การจำกัดว่า agent จะเรียก tool ไหนยังเป็น Declared ตาม §6
 
 ## 6. Guarantee matrix (บังคับต้องมีในทุก build report)
 
@@ -141,6 +198,8 @@ M4 เก็บ `execution_surface` เป็นข้อความใน repo
 
 ทำได้: interview 7 ข้อ, แปลงคำอธิบายเป็น mission, ร่าง AGENTS.md / SKILL.md / refusal / golden cases, แนะนำ pack, meta-audit หลัง generate (ผลเป็นข้อเสนอที่คนต้อง accept)
 ห้ามตัดสินใจ: เปิด network / shell, เขียนไฟล์ที่ไหน, ส่งอีเมล / เผยแพร่, ใช้ secret / MCP ใด, ผ่าน audit หรือไม่ — ส่วนนี้มาจาก spec + audit แบบ deterministic เท่านั้น
+
+builder-agent (M11) คือการให้ thClaws ทำหน้าที่นี้: workspace `builder/` ที่มี AGENTS.md + skills (`spec-author`, `pack-author`) และเรียก `forge generate` / `forge audit` / `forge pack test` ผ่าน Bash **ใน workspace ของ builder เท่านั้น** ไม่ใช่ใน package ที่กำลังสร้าง. ผู้ใช้พิมพ์ความต้องการ → model ถาม 7 ข้อที่ยังไม่รู้ → เขียน `spec.yaml` → รัน forge วนจนผ่าน → รายงานสถานะตาม `builder-build-report.json` เท่านั้น. block `permissions`, `env`, `network` และ `capabilities` ต้องถูกยืนยันโดยคนก่อน generate (marker `confirmed_by` ใน spec ที่ builder-agent ต้องเห็นก่อนรัน generate; forge ไม่รู้จัก marker นี้ ตัดออกก่อนส่ง); ถ้า pack ที่ต้องใช้ยังไม่มี model ต้องรายงาน `missing` ตรง ๆ ไม่ประดิษฐ์ MCP หรือชื่อ tool และงานเขียน MCP เป็นงานแยกตาม §5 ที่กลับเข้ามาทาง `forge pack test`
 
 ## 10. นอกขอบเขต MVP (future)
 

@@ -417,6 +417,18 @@ def main() -> int:
     state_scope["state"] = {"mode": "session", "scope": "turn"}
     assert_error_path(state_scope, validator, ("state", "scope"))
 
+    # Tool names are what the runtime presents: built-ins or <server>__<tool> for MCP.
+    qualified = copy.deepcopy(sql)
+    qualified["permissions"]["tools"] = ["Read", "sql-readonly__query"]
+    assert_valid(qualified, validator)
+    dotted = copy.deepcopy(sql)
+    dotted["permissions"]["tools"] = ["sql.query"]
+    assert_invalid(dotted, validator, ("permissions", "tools", 0), "does not match")
+    for bad_name in ["Sql__Query", "sql_readonly__query", "sql-readonly__a__b", "__query", "sql-readonly__"]:
+        malformed_mcp = copy.deepcopy(sql)
+        malformed_mcp["permissions"]["tools"] = [bad_name]
+        assert_invalid(malformed_mcp, validator, ("permissions", "tools", 0), "MCP tool must be <server>__<tool>")
+
     print("M1 OK: AgentSpec schema and semantic checks passed")
     return 0
 

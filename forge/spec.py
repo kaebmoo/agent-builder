@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path, PurePosixPath
 from typing import Any
 
@@ -38,6 +39,9 @@ NETWORK_BUILTIN_TOOLS = {
     "youtubetranscript",
 }
 VERSION_OPERATORS = (">=", "<=", "==", ">", "<")
+# thClaws presents MCP tools as <server>__<tool> (mcp.rs::MCP_NAME_SEPARATOR). Keep both segments
+# reversible: server without "_", tool without "__". Built-ins never contain "__".
+MCP_TOOL_PATTERN = re.compile(r"[a-z0-9][a-z0-9-]*__[a-z0-9](?:_?[a-z0-9])*")
 
 PathPart = str | int
 Finding = tuple[tuple[PathPart, ...], str]
@@ -60,6 +64,13 @@ def semantic_errors(spec: dict[str, Any]) -> list[Finding]:
         if not isinstance(tool, str):
             continue
         normalized_tool = tool.casefold()
+        if "__" in tool and not MCP_TOOL_PATTERN.fullmatch(tool):
+            errors.append(
+                (
+                    ("permissions", "tools", index),
+                    f"MCP tool must be <server>__<tool> with server [a-z0-9-] and tool [a-z0-9_]: {tool}",
+                )
+            )
         if permissions.get("shell") == "none" and normalized_tool in SHELL_BUILTIN_TOOLS:
             errors.append(
                 (("permissions", "tools", index), f"shell=none cannot declare shell tool: {tool}")

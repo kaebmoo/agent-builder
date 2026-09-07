@@ -43,6 +43,8 @@ resolver ตรวจ target/pattern และการมี/ไม่มี ro
 
 ## Permission และ guarantee
 
+`permissions.tools` ใช้ชื่อที่ thClaws เสนอให้ model จริง: built-in เช่น `Read`, `WebFetch` หรือ MCP tool ในรูป `<server>__<tool>` เช่น `sql-readonly__query` (server ใช้ `[a-z0-9-]`, tool ใช้ `[a-z0-9_]`, ไม่มีจุด) เพราะ thClaws ตั้งชื่อ MCP tool แบบนี้เสมอและลงทะเบียนทุก tool ของ server; รายการนี้จึงเป็น inventory ของสิ่งที่ model จะเห็น ไม่ใช่รายการที่อยากใช้ (DESIGN §4-5)
+
 `permissions` เป็น declared capability ไม่ใช่หลักฐานว่า runtime enforce ได้แล้ว ทุก build ต้องสร้าง guarantee matrix แยกต่างหากว่า claim แต่ละข้ออยู่ในสถานะ `Declared`, `Enforced`, `Evidence` หรือ `Not guaranteed` และบอก enforcement mechanism
 
 ตัวอย่างเช่น `/agent/run` ของ thClaws ปัจจุบัน register built-in tools รวมถึง Bash ดังนั้น `shell: none` ยังห้ามประกาศเป็น enforced หากไม่มี daemon boundary หรือ runtime policy อื่นมาบังคับ
