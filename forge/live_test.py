@@ -153,6 +153,16 @@ def redact(value, values):
     return value
 
 
+def check_servers(info, expected, evidence):
+    servers = info.get('mcp_servers', [])
+    evidence['daemon_servers'] = [{'name': s.get('name'), 'tool_count': s.get('tool_count')}
+                                  for s in servers if isinstance(s, dict)]
+    observed = {s['name'] for s in evidence['daemon_servers']}
+    if observed != expected:
+        raise ValueError('/v1/agent/info MCP inventory mismatch: '
+                         f'missing={sorted(expected - observed)}, unexpected={sorted(observed - expected)}')
+
+
 def run_daemon(package, spec, packs_dir, evidence, timeout, key_env):
     binary = shutil.which(os.environ.get('THCLAWS_BIN', 'thclaws'))
     with tempfile.TemporaryDirectory(prefix='forge-live-') as temporary:
@@ -162,7 +172,7 @@ def run_daemon(package, spec, packs_dir, evidence, timeout, key_env):
         home = base / 'home'
         home.mkdir()
         settings = base / 'settings.json'
-        settings.write_text('{}')
+        settings.write_text(json.dumps({'browserEnabled': False}))
         token = secrets.token_urlsafe(32)
         env = {'PATH': os.environ.get('PATH', os.defpath), 'HOME': str(home),
                'XDG_CONFIG_HOME': str(home / '.config'), 'THCLAWS_CONFIG': str(settings),
@@ -213,12 +223,13 @@ def run_daemon(package, spec, packs_dir, evidence, timeout, key_env):
                 if process.poll() is not None:
                     raise ValueError('temporary daemon exited before readiness')
                 try:
-                    request(port, token, '/v1/agent/info', 1)
+                    info = request(port, token, '/v1/agent/info', 1)
                     break
                 except (OSError, ValueError, http.client.HTTPException):
                     if time.monotonic() >= deadline:
                         raise ValueError('temporary daemon readiness timed out') from None
                     time.sleep(0.1)
+            check_servers(info, expected_servers, evidence)
             called = set()
             for case in spec['evaluation']['golden_cases']:
                 result = {'id': case['id'], 'expect': case['expect'], 'status': 'failed', 'events': [], 'detail': ''}
@@ -238,13 +249,8 @@ def run_daemon(package, spec, packs_dir, evidence, timeout, key_env):
                 except (ValueError, OSError, http.client.HTTPException) as exc:
                     result['detail'] = str(exc) if isinstance(exc, ValueError) else type(exc).__name__
             info = request(port, token, '/v1/agent/info', min(timeout, 10))
-            servers = info.get('mcp_servers', [])
-            evidence['daemon_servers'] = [{'name': s.get('name'), 'tool_count': s.get('tool_count')}
-                                          for s in servers if isinstance(s, dict)]
-            observed = {s['name'] for s in evidence['daemon_servers']}
             evidence['called_tools'] = sorted(called)
-            if not expected_servers <= observed:
-                raise ValueError('/v1/agent/info is missing a declared MCP server')
+            check_servers(info, expected_servers, evidence)
             for name, tools in required_tools.items():
                 if not tools & called:
                     raise ValueError(f'no successful paired SSE tool event for pack {name}')

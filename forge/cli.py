@@ -11,8 +11,9 @@ from jsonschema import ValidationError
 from forge.audit import command as audit_command
 from forge.audit import configure as configure_audit
 from forge.generate import ROOT, generate
+from forge.live_test import command as live_command
+from forge.live_test import configure as configure_live
 from forge.pack_test import test_pack
-from forge.live_test import command as live_command, configure as configure_live
 from forge.spec import load_spec
 
 

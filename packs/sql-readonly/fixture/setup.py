@@ -1,8 +1,8 @@
 """Emit synthetic fixture env as JSON; argv[1] is owned and removed by the harness."""
-import shutil
-import subprocess
 import json
+import shutil
 import sqlite3
+import subprocess
 import sys
 from pathlib import Path
 

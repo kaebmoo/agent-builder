@@ -5,21 +5,21 @@ import copy
 import io
 import json
 import os
-from pathlib import Path
 import shutil
 import subprocess
 import sys
 import tempfile
+from pathlib import Path
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
-from forge.audit import audit_package, write_report  # noqa: E402
-from forge.generate import generate, render  # noqa: E402
-from forge.live_test import live_audit, parse_sse, validate_case  # noqa: E402
-from forge.pack_test import setup_fixture, test_pack  # noqa: E402
-from forge.packs import read_pack, validate_pack  # noqa: E402
-from forge.spec import load_spec  # noqa: E402
+from forge.audit import audit_package, write_report
+from forge.generate import generate, render
+from forge.live_test import live_audit, parse_sse, validate_case
+from forge.pack_test import setup_fixture, test_pack
+from forge.packs import read_pack, validate_pack
+from forge.spec import load_spec
 
 
 def fails(call, phrase):
@@ -45,7 +45,7 @@ if 'validate' in sys.argv:
     raise SystemExit()
 assert 'FORGE_TEST_SECRET' not in os.environ
 assert os.environ['THCLAWS_MCP_ALLOW_ALL'] == '1'
-assert Path(os.environ['THCLAWS_CONFIG']).read_text() == '{}'
+assert json.loads(Path(os.environ['THCLAWS_CONFIG']).read_text()) == {'browserEnabled': False}
 assert Path(os.environ['HOME']).is_dir()
 assert Path('.thclaws/mcp.json').is_file()
 spec = json.loads(Path('agentspec.json').read_text())
@@ -89,9 +89,11 @@ def offline(base):
     wrong['refusal']['schema'] = {}
     fails(lambda: validate_case(wrong, wrong['evaluation']['golden_cases'][0], events), 'ambiguous')
     fails(lambda: validate_case(spec, spec['evaluation']['golden_cases'][1], events), 'expected refusal')
-    for text in ['```json\n{}\n```', '{"x":NaN}', '{"x":1,"x":2}']:
+    for text, reason in [('```json\n{}\n```', 'Expecting value'),
+                         ('{"x":NaN}', 'non-finite JSON number'),
+                         ('{"x":1,"x":2}', 'duplicate JSON key')]:
         bad = [{'event':'text','data':{'delta':text}}]
-        fails(lambda: validate_case(spec, spec['evaluation']['golden_cases'][0], bad), '')
+        fails(lambda bad=bad: validate_case(spec, spec['evaluation']['golden_cases'][0], bad), reason)
     packs = base / 'packs'
     folder = packs / 'sql-readonly'
     shutil.copytree(ROOT / 'packs/sql-readonly', folder, ignore=shutil.ignore_patterns('pack-conformance.json','__pycache__'))
@@ -102,9 +104,10 @@ def offline(base):
     package = base / 'package'
     generate(spec, package, packs_dir=packs)
     binary = base / 'thclaws'
-    def fake(tools=True, servers=True, hang=False):
+    def fake(tools=True, servers=True, hang=False, extra=False):
         binary.write_text('#!' + sys.executable + '\n' + f'TOOLS={tools!r}\nHANG={hang!r}\nSERVERS=' +
-                          repr([{'name':'sql-readonly','tool_count':3}] if servers else []) + '\n' + FAKE)
+                          repr(([{'name':'sql-readonly','tool_count':3}] if servers else [])
+                               + ([{'name':'browser','tool_count':20}] if extra else [])) + '\n' + FAKE)
         binary.chmod(0o700)
     fake()
     with patch.dict(os.environ, {'THCLAWS_BIN':str(binary), 'OPENAI_API_KEY':'synthetic-provider-key',
@@ -133,6 +136,10 @@ def offline(base):
             fake(servers=False)
             report, code = live_audit(package, packs_dir=packs, timeout=3)
             assert code == 1 and 'missing' in report['live_audit']['detail'], report
+            fake(extra=True)
+            report, code = live_audit(package, packs_dir=packs, timeout=3)
+            assert code == 1 and "unexpected=['browser']" in report['live_audit']['detail'], report
+            assert report['live_audit']['cases'] == [], 'inventory mismatch must block model calls'
             fake(hang=True)
             report, code = live_audit(package, packs_dir=packs, timeout=0.4)
             assert code == 1 and report['package_status'] == 'draft', report
@@ -162,7 +169,7 @@ def offline(base):
     # Provenance mismatch records the actual revision before a caller fails it.
     work = base / 'fixture'
     work.mkdir()
-    actual = subprocess.run(['git','-C',str(ROOT.parent / 'AI'),'rev-parse','HEAD'], capture_output=True,text=True)
+    actual = subprocess.run(['git','-C',str(ROOT.parent / 'AI'),'rev-parse','HEAD'], capture_output=True,text=True,check=False)
     if actual.returncode == 0:
         with patch('forge.pack_test.subprocess.run') as run:
             run.side_effect = [subprocess.CompletedProcess([],0,json.dumps({k:'x' for k in descriptor['env']}),''),
@@ -170,7 +177,7 @@ def offline(base):
             _, proof = setup_fixture(folder, descriptor, work, 1)
             assert not proof['matched'] and proof['actual_ref'] == '0'*40
     probe = subprocess.run([sys.executable, str(ROOT / 'packs/sql-readonly/fixture/setup.py'), str(work)],
-                           env={'PATH':str(work)}, capture_output=True, text=True)
+                           env={'PATH':str(work)}, capture_output=True, text=True, check=False)
     assert probe.returncode == 2, 'setup must probe python3 on PATH, not the harness interpreter'
     print('M6 offline PASS: SSE, branches, isolated daemon, MCP evidence, redaction, demotion, skip and M7a fixes')
 
