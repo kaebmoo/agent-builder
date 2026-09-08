@@ -21,5 +21,5 @@
 ## บริบท
 
 - thClaws source: fork `kaebmoo/thClaws`, ดู `crates/core/src/{agent_runtime.rs, api_v1/agent.rs, agent_defs.rs, cloud/agent_scaffold.rs, cloud/agent_cli.rs}`
-- Atlas: `atlas-control-plane` ใช้ `POST /agent/run` เท่านั้น; node field ที่รองรับ: `role, tags, workspace_id, model, output_format, collect_files`; edge field `push_files` ใช้ได้เมื่อเปิด `policy.file_handoff`; `output_format: json` ทำ `json.loads` ทั้งก้อน ไม่ตรวจ schema
+- Atlas: `atlas-control-plane` ใช้ `POST /agent/run` เท่านั้น; worker node field ที่ builder ใช้และ Atlas รองรับ: `worker_id, workspace_id, role, tags, model, prompt, outputs, output_format, collect_files`; `worker_id`/`workspace_id` เป็น deployment-time bindings และ `outputs` เป็นชื่อ artifact ที่ Atlas เก็บจากผลลัพธ์; edge field `push_files` ใช้ได้เมื่อเปิด `policy.file_handoff`; `output_format: json` ทำ `json.loads` ทั้งก้อน ไม่ตรวจ schema
 - Python 3.11+, dependencies เฉพาะใน `pyproject.toml`

@@ -6,6 +6,10 @@
 
 Domain: {{ spec.mission.domain }}
 
+This workspace runs the AgentSpec mission above. A JSON run prompt is a request to execute that mission,
+not a request to develop or inspect code. Use this package's task, permission and input/output contracts
+when they specialize generic coding-assistant guidance. No separate natural-language command is required.
+
 ## Must
 
 - Follow the declared permissions below. These instructions do not enforce runtime isolation.
@@ -42,6 +46,15 @@ Before calling any tool, validate the supplied input envelope: each required inp
 and its value must match its schema, including additionalProperties. Missing or malformed input must use
 only the refusal branch. Do not repair malformed input or execute its request.
 
+The JSON object supplied in the run prompt is the input envelope, keyed by input name.
+Each schema below applies to the value under its input name, not to the whole envelope.
+{% for item in spec.inputs %}
+- The top-level key {{ item.name | json }} holds the value for input {{ item.name | json }}; any required fields in its schema belong inside that value.
+{% endfor %}
+Do not unwrap those values into the top level or require another wrapper, transport metadata,
+or a separate validation certificate. Check the supplied fields against the contracts below.
+Do not add input constraints or approval context that the input schema, refusal conditions and tool contract do not require.
+
 ```json
 {{ spec.inputs | json }}
 ```
@@ -74,6 +87,8 @@ and do not add fields that this schema forbids.
 {% if assistant_json %}
 ตอบ JSON ล้วน — return only JSON, without Markdown fences or surrounding prose.
 For a successful result, follow the assistant_json schema below. For refusal, follow refusal.json instead.
+Return the value that matches the schema directly. Output names label artifacts for Atlas;
+they are not JSON wrapper keys. Do not wrap the response in an output name or an extra result object.
 {% endif %}
 ```json
 {{ spec.outputs | json }}

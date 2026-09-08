@@ -5,7 +5,7 @@ identity:
   license: Apache-2.0
   thclaws_min_version: ">=0.116.0"
 mission:
-  purpose: Preview or publish an approved email to the operator-configured recipient using the supplied idempotency key.
+  purpose: Preview an email for the operator-configured recipient, or publish it when the run has been approved, using the supplied idempotency key.
   domain: publishing
 target: atlas-workflow
 routing:

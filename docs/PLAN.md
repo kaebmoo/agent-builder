@@ -70,3 +70,95 @@ byte determinism และ native draft audit. Template ผ่าน native sche
 `daa0f4966899327fb563501435f5d6180eeef9c3`. ไม่ได้ส่ง email/SFTP จริงหรือ provision daemon;
 human_approval ยัง `Not verified`, publisher เป็น `draft` ไม่ใช่ candidate/shippable. ถัดไป M8.
 Regression M0–M5/M7a และ Ruff 0.16.6 ผ่าน; M6 offline ผ่าน ส่วน live ใช้ key ว่างโดยตั้งใจและรายงาน skip exit 2.
+
+M7b live follow-up 2026-09-08: reviewer พบ publisher normal case ถูกปฏิเสธทั้งที่ input ตรง schema.
+รันซ้ำผ่าน MATCHA ด้วย `oai/gpt-5.4-mini` แล้วยืนยัน failure; local provider probe ยืนยันว่า native thClaws
+ส่ง input และ publisher tool schemas ครบ. แก้ instructions ให้ JSON run prompt เป็นคำขอทำ AgentSpec mission
+แทน workflow ทั่วไปสำหรับงาน coding, แยก input envelope กับ schema ของ value, ระบุ preview ที่ไม่ต้องมี approval
+และให้คืน output schema value โดยไม่ครอบชื่อ artifact. ไม่เปลี่ยน golden cases หรือเกณฑ์ audit.
+เพิ่ม `check_m7b_packs.py --live --model ... --provider-key-env ...` สำหรับ opt-in live regression;
+default gate ยังตรวจถึง draft ตาม DoD เดิม. เคยมีรอบที่ package ซึ่ง pin `oai/gpt-5.4-mini` ผ่านทั้ง 4 cases
+และมี SSE `publisher-email-sftp__send_email` จาก preview จริง ได้ `candidate`; fixture ต้นฉบับยัง pin `gpt-5.4`.
+แต่ review รอบถัดไปรายงานว่าผ่านเพียง 2 จาก 5 ครั้ง โดย normal case ตีความว่า preview ต้องใช้ approved email
+จึงยังไม่ถือว่าปิดปัญหา: candidate report เดิมเป็นหลักฐานเฉพาะรอบ ไม่ใช่หลักฐานว่าผลทำซ้ำได้.
+ผลนี้ไม่ยืนยัน actual delivery, SFTP live, daemon isolation ของ deployment หรือ human approval;
+`human_approval` ยัง `Not verified`. ข้อจำกัด network enum/hosts ว่างยังรับไว้ตาม README ไม่ได้แก้ contract.
+ตรวจซ้ำด้วย M7b opt-in live gate ผ่าน exit 0; SQL M6 offline/live regression ผ่าน exit 0 ด้วย model/endpoint เดียวกัน.
+M2/M4/M5 native gates, Ruff 0.16.6 และ `git diff --check` ผ่าน; M7b `--live` ไม่มี key ยัง skip exit 2 ตามเดิม.
+
+M7b stability follow-up 2026-09-08 — **ผลก่อนแก้ช่องทาง MCP instructions**: แก้ `mission.purpose` ของ fixture ให้ preview
+ไม่ติดเงื่อนไข approved และลบ block เฉพาะ publisher ออกจาก template กลาง. Source สุดท้ายไม่เปลี่ยน
+permissions, golden cases, schema, `forge/`, server implementation หรือ tool descriptions.
+ทดลองแต่ละ variant บน package เดียวกัน 3 รอบ ตรวจ hash ว่า package ไม่เปลี่ยนระหว่างรอบ และเก็บทุกผล
+โดยไม่เลือกเฉพาะรอบที่ผ่าน. ทุก trial ยกเว้น `gpt-4.1` ใช้ `oai/gpt-5.4-mini` ผ่าน MATCHA เดิม.
+
+| Trial | สิ่งที่ทดสอบ | ผ่านครบทั้ง 4 cases + MCP evidence |
+|---|---|---|
+| `mission-v2` | mission ที่แยก preview/approved delivery; ลบ block เฉพาะ pack | 0/3 |
+| `t2-scope` | ปรับ T2 Must ให้ approval ผูกกับ external side effect | 1/3 |
+| `inline-skills` | แนบ skill body ใน AGENTS ของ package ทดสอบ | 0/3 |
+| `tool-contract` | อธิบาย preview/approval/digest ใน MCP tool description | 2/3 |
+| `explicit-mission` | ระบุ subject/body และ dry_run ใน mission ของ package ทดสอบ | 2/3 |
+| `refusal-first` | ระบุให้ใช้ refusal conditions ก่อน preview ใน mission ทดสอบ | 1/3 |
+| `gpt-4.1` | เปลี่ยนเฉพาะ model ทดสอบเป็น oai/gpt-4.1 | 1/3 |
+| `skill-loader` | เพิ่ม Skill ใน declared tools ของ package ทดสอบเท่านั้น | 2/3 |
+
+`normal` บางรอบปฏิเสธ input ที่ตรง schema หรือสร้าง digest โดยไม่เรียก MCP; บาง variant ยังผิด refusal
+หรือเติม arguments เองใน missing-input. Audit เดิมจับ failures เหล่านี้ จึงไม่มี trial ที่ผ่านเงื่อนไขครบ 3 รอบ.
+Diagnostic หนึ่ง provider turn (ไม่ execute tool calls) บางแบบเลือก MCP ถูกต้อง แต่ผลนั้นไม่ยืนยัน full audit.
+Native events ยืนยันว่า skill body ไม่ได้อยู่ใน initial catalog และบางรอบเรียก Skill แม้ source ไม่ได้ประกาศ;
+การทดลองเพิ่ม Skill อย่างเดียวก็ยังไม่แก้ความไม่นิ่ง จึงไม่เปลี่ยน permissions ของ source.
+
+ถอน T2/tool-description variants และไม่ย้าย mission/model/permission variants จาก package ทดสอบเข้า source.
+Source สุดท้าย render ตรงกับ `mission-v2/package` ทุก byte ก่อนบันทึก failed round-3 report เป็น `draft`;
+ทั้ง 3 รอบของ variant นี้ normal fail และอีก 3 cases ผ่าน. หลักฐานอยู่ใน local ignored
+`out/publisher-stability/<trial>/summary.json` และ `round-1.json` ถึง `round-3.json`; ไม่มี credential ใน report.
+`candidate` ของรอบอื่นยังเป็นหลักฐานเฉพาะรอบ ไม่ใช่หลักฐานว่าปิดปัญหา. ต้องผ่านครบอย่างน้อย 3 รอบบน
+package เดียวกันก่อนปิดข้อ 4; `human_approval` ยัง `Not verified` และไม่ได้ส่ง email/SFTP จริง.
+
+M0–M5/M7a/M7b native gates และ Ruff 0.16.6 ผ่าน; M6 offline ผ่านและไม่มี key skip exit 2;
+M7b --live ไม่มี key skip exit 2 คง draft. SQL M6 live regression ผ่าน exit 0 ด้วย `oai/gpt-5.4-mini`
+หลังแก้ template กลาง (การทดลอง T2 ไม่มีผลต่อ SQL ซึ่งเป็น T0). MATCHA inventory ไม่มี gpt-5.4 ตัวเต็ม;
+ไม่ได้เปลี่ยน source model ที่ยัง pin gpt-5.4. ไม่มี commit/push ใน follow-up นี้.
+
+M7b MCP guidance follow-up: trace source thClaws `75edc48` พบช่องทาง
+`InitializeResult.instructions` ที่ถูกส่งเข้า system prompt ตั้งแต่ request แรก แต่ publisher ยังไม่ส่ง field นี้.
+Diagnostic ใช้ skill body เดิมผ่านช่องทางนี้โดยไม่เปลี่ยน permissions/golden cases/audit criteria และผ่าน
+3/3 full audits (`mcp-instructions`). Native localhost provider capture (`mcp-wire/provider-probe.json`)
+ยืนยันว่าได้ skill body เดิมครบหนึ่งชุดใน `# MCP server instructions` และ input/tool schemas ครบ.
+
+นำลง source โดย server อ่าน body จาก skill ไฟล์เดิมเพื่อไม่คัดลอกคำแนะนำไว้ใน template กลาง. พบ conformance
+harness stage เฉพาะ scripts จึงเพิ่มการ stage skills ที่ pack ประกาศด้วย path ของ generated package;
+เพิ่ม M7b gate ที่แก้ skill ใน temporary copy แล้วตรวจ initialize ทั้ง source/generated layouts.
+Source trial `mcp-source` ได้ 2/3: ทุก case ถูก branch แต่ normal รอบหนึ่งสร้าง digest เองโดยไม่มี MCP.
+จึงระบุข้อเท็จจริงใน skill ว่า digest รวม operator-configured destination ซึ่งไม่มีใน prompt และต้องได้จาก tool.
+ผลก่อนหน้านี้ยังเป็นหลักฐานประจำ variant ไม่ใช้แทนผลของ source ล่าสุด.
+
+M7b stability result 2026-09-08 (ปิดข้อ 4 ในขอบเขต gpt-5.4-mini): ประโยค digest ใน skill ทำให้ `mcp-digest` เหลือ 1/3
+(normal refuse หนึ่งรอบ และ missing-input เรียก tool ด้วย placeholder หนึ่งรอบ) จึงถอนออก. Trace `prompts.rs::load` ของ
+`75edc48` พบว่า daemon ใช้ `.thclaws/prompt/system.md` ใน CWD แทน base prompt ของ coding assistant (บันทึกใน DESIGN §4)
+จึง generate mission-runner profile จาก `templates/system.md.j2` ให้ทุก target โดยไม่มีข้อความเฉพาะ pack และไม่แตะ
+golden cases, permissions, schema หรือเกณฑ์ audit. Source ปัจจุบันผ่าน full live audit 6/6 รอบใน 2 ชุด
+(`system-profile`, `system-profile-2`; package hash เท่ากันทุกไฟล์) ทุกรอบ `candidate` มี SSE `send_email` จาก normal
+และไม่มี tool call ใน 3 refusal cases. Native provider capture (`system-profile/provider-probe.json`) ยืนยันว่า system
+message เริ่มด้วย profile, ไม่มี coding base prompt, และยังมี `# MCP server instructions` พร้อม skill body ครั้งเดียว.
+
+ยังเปิดอยู่: (1) fixture pin `gpt-5.4` ซึ่ง MATCHA ไม่ advertise ผลทั้งหมดรับรองเฉพาะ `oai/gpt-5.4-mini`; ก่อนเลื่อน model
+ใน source ต้องรัน 3 รอบด้วย model นั้น. (2) `human_approval` ยัง `Not verified`, ไม่ได้ส่ง email/SFTP จริง, และไม่ได้
+provision daemon แยกของ deployment; `candidate` ไม่ใช่ shippable. (3) profile ถูกโหลดเฉพาะเมื่อ daemon start จาก package
+CWD; harness ทำเช่นนั้น แต่ deployment จริงต้องตรวจเอง (deployment hint ระบุแล้ว). (4) ความนิ่งวัดจากรอบที่รันบน package byte เดียวกันเท่านั้น (source ปัจจุบันมี 3/3; skill รุ่นก่อน 6/6);
+ถ้าเปลี่ยน template กลาง, skill หรือ thClaws version ให้รัน `out/publisher_stability.py` ใหม่ก่อนอ้างผลเดิม.
+Ruff และ `git diff --check` ผ่าน; ไม่มี commit/push.
+
+M7b review fixes 2026-09-08: (1) skill ของ pack ไม่ผูก input shape ของ fixture อีกต่อไป (derive `subject`/`body`/`dry_run`/
+`idempotency_key` ตาม input contract และ mission ของ spec นั้น) และ description เป็น "Preview or publish"; (2) server ระบุ
+ceiling ของ hardcoded skill layout ด้วย `ponytail:` comment; (3) M7b gate assert ว่า profile ไม่มีวงเล็บปีกกาที่
+`apply_template` จะแทน; (4) `docs/audit.md` เพิ่ม `--live` และ profile, DESIGN §8 เพิ่ม `.thclaws/prompt/system.md`,
+CHANGELOG ย้าย profile ไป Added. การแก้ skill ทำให้ `pack-conformance.json` stale จริงตามที่ review คาด (static audit block
+live จน `forge pack test` ใหม่). Source หลังแก้ผ่าน live 3/3 (`skill-generic`) ในเงื่อนไขเดิม; M7b gate exit 0,
+Ruff และ `git diff --check` ผ่าน. ข้อเปิด 4 ข้อในย่อหน้าก่อนไม่เปลี่ยน.
+
+M7b review round 3 (2026-09-08): แก้ README ของ pack และข้อเปิด (4) ให้ตรงข้อเท็จจริงว่า source ปัจจุบันมีหลักฐาน 3/3
+ส่วน 6/6 เป็นของ skill รุ่นก่อน; skill ระบุว่า `idempotency_key`/`dry_run` ต้องมาจาก input เสมอ ห้าม compose (compose ได้
+เฉพาะ subject/body เมื่อ mission สั่ง) เพื่อรักษา stable key ตอน retry; `docs/audit.md` เลิกชี้ไฟล์ ignored และอธิบายกติกา
+3 รอบแทน. หลังแก้ skill รัน `forge pack test` ใหม่และ live 3/3 (`skill-key`) บน package byte เดียวกับ source ปัจจุบัน.

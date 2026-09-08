@@ -75,6 +75,8 @@ MCP config, tool naming และ isolation (ตรวจ source 2026-09-07 v0.1
 - การ spawn stdio command ครั้งแรกต้องผ่าน allowlist `~/.config/thclaws/mcp_allowlist.json` (`XDG_CONFIG_HOME` เปลี่ยน base ได้) หรือ `THCLAWS_MCP_ALLOW_ALL=1`; `THCLAWS_CONFIG=<path>` ชี้ settings.json, `HOME` กำหนด user-level scope, `thclaws --serve --port <N>` + `THCLAWS_API_TOKEN` (ไม่ตั้ง = `/v1/*` และ `/agent/run` ตอบ 404) คือชุดที่ใช้สร้าง daemon isolated สำหรับ live audit
 - `browserEnabled` default เป็น true ตั้งแต่ 0.49.2: `AppConfig::load` ใน `config.rs` ของ v0.116.0 revision `75edc48` ฉีด Playwright MCP ชื่อ `browser` เมื่อหา `npx` บน PATH ได้ (ยกเว้นมี server ชื่อนี้แล้วหรือ policy ห้าม). HOME/config isolation อย่างเดียวจึงไม่จำกัด MCP ให้เหลือเฉพาะ package. Live audit ต้องตั้ง `{"browserEnabled": false}` ใน settings ชั่วคราว และตรวจ `/v1/agent/info` ว่าชุด server เท่ากับที่ pack ประกาศ ทั้งก่อนส่ง golden cases และหลัง run; server ขาดหรือเกินเป็น fail. การตรวจนี้ไม่บังคับ built-in tool allowlist/shell/write-path.
 - `GET /v1/agent/info` คืน `skills` และ `mcp_servers` (`name`, `command`, `tool_count` เป็น null จนกว่าจะมี run) ใช้เป็นหลักฐานว่า daemon เห็น MCP ของ pack หลัง deploy
+- ตรวจเพิ่ม 2026-09-08 บน v0.116.0 revision `75edc48`: `agent_runtime.rs` โหลด MCP ก่อนสร้าง system prompt และส่ง `InitializeResult.instructions` ผ่าน `mcp.rs::collect_mcp_instructions` ไปที่ `prompts.rs::mcp_instructions_section` ตั้งแต่ request แรก. Skill catalog แสดงเพียง metadata; body ต้องโหลดผ่าน Skill ภายหลัง. Pack ที่ต้องให้คำแนะนำการใช้ MCP พร้อมตั้งแต่เริ่มจึงส่งคำแนะนำผ่าน initialize ได้ โดยไม่เพิ่มสิทธิ์ Skill หรือพึ่งข้อความเฉพาะ pack ใน template กลาง.
+- `prompts.rs::load("system", …)` ของ ref เดียวกันรองรับ `.thclaws/prompt/system.md` ที่ **CWD ของ daemon** เพื่อแทน base prompt สำหรับงาน coding; ProjectContext/AGENTS.md, MCP instructions และ skill catalog ยังถูกต่อท้ายตามเดิม. Builder generate mission-runner profile ผ่านช่องทาง native นี้และ static audit ตรวจ drift เช่น generated files อื่น. ต้อง start daemon จาก package CWD เช่นเดียวกับ MCP config; การมีไฟล์ใน workspace_dir เพียงอย่างเดียวไม่ยืนยันว่า profile ถูกโหลด.
 - built-in tools ของ `/agent/run` = `ToolRegistry::with_builtins()` + KMS / Memory / Task / WorkflowRun ที่ `agent_runtime.rs::build_runtime_with_provider` ลงทะเบียนเพิ่ม เป็นแหล่งของ catalog `patterns/tools-<version>.json` ที่ static audit ใช้
 - thClaws ลงทะเบียน **ทุก** tool ที่ server advertise โดยไม่กรอง และไม่อ่าน MCP tool annotations (`readOnlyHint` ฯลฯ; `McpToolInfo` มีเพียง name / description / input_schema / ui). ถ้า spawn หรือ `tools/list` ล้มเหลว `agent_runtime.rs::load_mcp_servers_silent` แค่ `eprintln!` แล้ว run ต่อโดยไม่มี tool ของ server นั้น → การมี/ไม่มี tool ต้องพิสูจน์ด้วยหลักฐานเชิงบวก (SSE tool event, `/v1/agent/info`) ไม่ใช่จากการที่ run ไม่ error
 
@@ -121,7 +123,7 @@ source: {repo: https://github.com/kaebmoo/AI, ref: <commit>}   # optional proven
 - pack read-only ต้องปฏิเสธ mutation **ที่ server** (negative case ใน `fixture.cases`) ไม่ใช่ที่ prompt; `mutating` ที่ไม่ว่างบังคับ T2 และ pack ที่มี side effect ต้องมี `dry_run` + `idempotency_key` ตามกฎเดิม
 - config ของ server รับได้ทาง `args` และ env เท่านั้น; ค่า secret ไม่อยู่ในไฟล์ใดของ pack หรือ package
 - `fixture.setup` ต้องรันได้โดยไม่มี network และไม่มีข้อมูลจริง; pack ที่ต้องใช้ API ภายนอก (เช่น Google Weather) ใช้ recorded response หรือ mock endpoint ใน fixture และประกาศ `hosts` จริงสำหรับ deployment
-- `conformance` ของ pack ไม่ต้องใช้ provider key: harness `forge pack test <name>` (stdlib stdio JSON-RPC) start server ตาม `command`, ทำ `initialize` → `tools/list` ต้องเท่ากับ `tools` ที่ประกาศ, ยิงทุก case, บันทึก `pack-conformance.json`; ไม่มี runtime ของ server ในเครื่อง → exit 2
+- `conformance` ของ pack ไม่ต้องใช้ provider key: harness `forge pack test <name>` (stdlib stdio JSON-RPC) จัดวาง scripts และ skills ที่ประกาศไว้ด้วย path แบบเดียวกับ generated package แล้ว start server ตาม `command`, ทำ `initialize` → `tools/list` ต้องเท่ากับ `tools` ที่ประกาศ, ยิงทุก case, บันทึก `pack-conformance.json`; ไม่มี runtime ของ server ในเครื่อง → exit 2
 - ชื่อ server ต้องตรง `^[a-z0-9][a-z0-9-]*$` (ห้าม `_`) และ bare tool ต้องตรง `^[a-z0-9][a-z0-9_]*$` (ห้าม `__`) เพื่อให้ qualified name แยกกลับเป็น server/tool ได้ทางเดียว; thClaws sanitize ชื่ออื่นแบบเงียบ ๆ แต่ builder reject
 - `tools` ของ pack ส่วน MCP = **ทุก** tool ที่ server advertise เพราะ thClaws ลงทะเบียนทั้งหมด (§4) และ spec ต้องประกาศ ⊇ ชุดนี้: declaration ของ spec คือ inventory ของสิ่งที่ model จะเห็นจริง ไม่ใช่รายการที่อยากใช้. server ที่มี tool แบบ admin ต้องถูก launch ในโหมดที่ไม่ expose (ผ่าน `args`) หรือ pack นั้นเป็น T2
 - harness รัน server ด้วย environment สะอาด (PATH + env ที่ประกาศพร้อมค่าจาก fixture เท่านั้น) เพื่อให้ dependency ต่อ env ที่ไม่ได้ประกาศโผล่เป็น start failure ตั้งแต่ตอน test ไม่ใช่ตอน deploy
@@ -145,6 +147,8 @@ MCP มี `send_email` และ `upload_file` โดยทุก call ต้�
 ปลายทาง SMTP/SFTP, ผู้รับ และ credential มาจาก env ของ operator เท่านั้น ไม่รับจาก model.
 SMTP ใช้ TLS พร้อม certificate verification; SFTP ใช้ OpenSSH แบบ batch พร้อม known_hosts ที่ operator provision.
 Dry run ตรวจ input/config และอ่าน artifact ได้ แต่ไม่เชื่อมต่อ network หรือเขียน ledger.
+คำขอ preview ที่ระบุ `dry_run: true` และตรง contract เรียก publisher MCP ได้โดยไม่ต้องมี human approval;
+การส่งจริง `dry_run: false` ยังต้องผ่าน T2 deployment/Atlas gate และห้าม model เปลี่ยน preview เป็นการส่งจริง.
 SQLite ledger อยู่นอก package ใน directory ที่ operator provision และ persist ข้าม restart:
 reserve key ก่อนส่ง, payload/ปลายทาง/เนื้อหาไฟล์ต่างกันต้อง reject, สำเร็จแล้ว replay ผลเดิม;
 pending/unknown outcome ต้องให้ operator reconcile ห้าม retry ส่งซ้ำอัตโนมัติ (ไม่อ้าง exactly-once delivery).
@@ -168,7 +172,7 @@ Worker และ policy pin worker/workspace เป็น placeholder ที่ 
 | ห้าม shell | Not guaranteed | runtime register Bash เสมอ |
 | `network: none` ไม่มี web built-in ใน declaration | Static check | reject `WebFetch`, `WebSearch`, `WebScrape`, `FetchImages`, `YouTubeTranscript`; runtime egress ยังไม่ถูกบังคับ |
 | network เฉพาะ host | Not guaranteed | policy allowlist ครอบเฉพาะ URL ตอนติดตั้ง plugin/skill/MCP config; `net_guard` กันแค่ private IP ของ WebFetch/WebScrape/FetchImages → ต้องใช้ egress control ของเครื่อง |
-| ต้องมีคนอนุมัติก่อน side effect | Enforced | Atlas `human_gate` + T2 daemon แยก |
+| ต้องมีคนอนุมัติก่อน side effect | Not verified สำหรับ package ที่ generate; Enforced เฉพาะ deployment ที่ตรวจแล้ว | ต้องผ่าน Atlas `human_gate` ก่อน worker และ operator bind worker/workspace กับ T2 daemon แยกที่ยืนยันแล้ว; การเรียก `/agent/run` โดยตรงสามารถข้าม gate นี้ได้ |
 | output เป็น JSON ตาม schema | Enforced ตอน audit | schema validation ใน live audit (Atlas เองทำแค่ `json.loads`) |
 | skill/MCP ถูกเรียก | Evidence | SSE tool events ใน live audit; M1 ยังไม่รองรับการประกาศ `must_call` |
 
@@ -196,6 +200,7 @@ M1 ตรวจว่า embedded schema เป็น JSON Schema ที่ถ�
 
 - package โฟลเดอร์ตาม format `thclaws agent new` (manifest.json, AGENTS.md, `.thclaws/{settings.json,skills/,schemas/,scripts/,agents/}`) — script ของ pack วางใน `.thclaws/scripts/` เพราะเป็นที่เดียวที่ `thclaws agent validate` syntax-check python
 - `.thclaws/mcp.json` เมื่อ pack ประกาศ MCP servers (M7a): generate `mcpServers` จาก command/args ของ pack เท่านั้น ไม่มีค่า secret; operator ตั้ง env และ start daemon โดยใช้ CWD=package ตาม §4
+- `.thclaws/prompt/system.md` (M7b, จาก `templates/system.md.j2`): mission-runner profile ที่แทน base prompt ของ coding assistant ตาม §4; ข้อความกลาง ไม่มีส่วนเฉพาะ pack และไม่มีวงเล็บปีกกา; โหลดเฉพาะเมื่อ daemon start จาก CWD=package เช่นเดียวกับ mcp.json
 - `builder-build-report.json` (schema: `builder-build-report.schema.json`, สร้างและตรวจใน M4): target, generated files, guarantee matrix, audit result, compatibility result, deployment hints
 - `atlas-register.json`: worker `role` / `tags` จาก `routing`, deployment-time `workspace_dir`, node template (`model`, `collect_files`, และ `output_format: json` เฉพาะ `assistant_json`; omit เมื่อเป็น `collect_files` ล้วน) และ edge template (`push_files` + `policy.file_handoff`), flow template เมื่อ target = `atlas-workflow`
 - archive จาก `thclaws agent pack`

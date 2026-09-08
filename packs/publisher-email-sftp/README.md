@@ -19,6 +19,33 @@ generation and template tampering. It sends no email or SFTP traffic. Native
 `thclaws agent validate` uses v0.116.0 revision `75edc48`; absent binary means an
 explicit skip (exit 2), failed checks exit 1, all checks passed exit 0.
 
+Opt in to the publisher's four real agent golden cases after provisioning the
+provider environment (see [live audit configuration](../../docs/audit.md)):
+
+```bash
+python3 scripts/check_m7b_packs.py --live --model oai/gpt-5.4-mini --provider-key-env OPENAI_COMPAT_API_KEY
+```
+
+The model override applies only to the generated test package. Without a key,
+`--live` explicitly skips with exit 2 and keeps `draft`; the default gate remains
+the M7b draft gate. Live success also requires paired successful MCP SSE events
+and all four output/refusal branches, using the existing M6 harness. The golden
+cases preview a synthetic email; they do not test actual email/SFTP delivery or
+deployment approval. `human_approval` remains `Not verified` even for `candidate`.
+
+The current source passed three consecutive full live audits on `oai/gpt-5.4-mini`
+on one byte-identical package; the previous skill wording passed six in two batches.
+The fixture still pins `gpt-5.4`, which was not tested. Stability depends on the generated `.thclaws/prompt/system.md`
+profile and on this server sending its skill guidance as MCP initialize instructions;
+re-run the stability trials after changing either. See [PLAN](../../docs/PLAN.md).
+
+Generated instructions treat a JSON run prompt as a mission request: each input
+name wraps its value, while an output name is an Atlas artifact label and must
+not wrap the assistant JSON response. A valid explicitly requested publisher
+preview may call the MCP without human approval; actual delivery still requires
+the T2 deployment and approval described below. No validation certificate or
+undocumented input fields are required, and malformed inputs still use refusal.
+
 ## Operator configuration
 
 Set these environment variables on the dedicated publisher daemon; never store

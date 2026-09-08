@@ -172,6 +172,15 @@ def tool_call(params):
 
 
 def main():
+    source = Path(__file__).resolve()
+    # Generation namespaces the skill directory as well as the server filename.
+    # ponytail: only the source and generated layouts are known; a moved skill file makes initialize fail at start,
+    # thClaws merely eprintln!s and runs without the tool, and live audit sees that only as a missing SSE tool event.
+    skill = 'publisher-email-sftp' if source.name == 'server.py' else 'publisher-email-sftp--publisher-email-sftp'
+    guidance = (source.parent.parent / 'skills' / skill / 'SKILL.md').read_text(encoding='utf-8')
+    instructions = guidance.partition('\n---\n')[2].strip()
+    if not instructions:
+        raise ValueError('publisher skill guidance is missing')
     for line in sys.stdin:
         try:
             request = json.loads(line)
@@ -182,6 +191,7 @@ def main():
             method = request.get('method')
             if method == 'initialize':
                 result = {'protocolVersion': '2024-11-05', 'capabilities': {'tools': {}},
+                          'instructions': instructions,
                           'serverInfo': {'name': 'publisher-email-sftp', 'version': '0.1.0'}}
             elif method == 'ping':
                 result = {}

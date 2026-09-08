@@ -229,6 +229,7 @@ def render(spec: dict[str, Any], packs_dir: Path | None = None) -> tuple[dict[st
     for template, path in (
         ("AGENTS.md.j2", "AGENTS.md"),
         ("SKILL.md.j2", f".thclaws/skills/{identity['name']}/SKILL.md"),
+        ("system.md.j2", ".thclaws/prompt/system.md"),
     ):
         if path in files:
             raise ValueError(f"generated file collision: {path}")
@@ -249,7 +250,8 @@ def render(spec: dict[str, Any], packs_dir: Path | None = None) -> tuple[dict[st
         "dependencies": dependencies,
         "deployment_hints": [
             "Run thclaws agent validate, then static/live/security audits before promoting package status.",
-            "Start the daemon with CWD=package to load .thclaws/mcp.json; install external MCP runtimes separately.",
+            ("Start the daemon with CWD=package to load .thclaws/mcp.json and .thclaws/prompt/system.md; "
+             "install external MCP runtimes separately."),
             "Provision model and environment variable names from agentspec.json at deployment time; no secret values are bundled.",
             "Manifest filesystem_scope=workspace is the packaging scope, not enforcement of the AgentSpec write_scope.",
             "Provision host egress controls outside the package according to pack network/hosts requirements.",

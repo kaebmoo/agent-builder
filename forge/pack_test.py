@@ -131,6 +131,10 @@ def test_pack(name: str, packs_dir: Path, *, timeout: float = 10) -> tuple[dict,
                 target = work / '.thclaws/scripts' / f'{name}--{script}'
                 target.parent.mkdir(parents=True, exist_ok=True)
                 target.write_bytes(asset(folder, 'scripts/' + script).read_bytes())
+            for skill in pack['skills']:
+                target = work / '.thclaws/skills' / f'{name}--{skill}' / 'SKILL.md'
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_bytes(asset(folder, 'skills/' + skill + '/SKILL.md').read_bytes())
             env = {'PATH': os.environ.get('PATH', os.defpath)}
             try:
                 values, provenance = setup_fixture(folder, pack, work, timeout)

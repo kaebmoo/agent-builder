@@ -2,6 +2,7 @@
 """M7b: publisher protocol, safe delivery attempts, T2 template and native draft audit."""
 from __future__ import annotations
 
+import argparse
 import copy
 import importlib.util
 import json
@@ -144,7 +145,7 @@ def server_checks(work, pack):
     print('M7b PASS: dry run, argument/path rejection, persistent/concurrent deduplication and transport adapters')
 
 
-def check(work):
+def check(work, *, live=False, model=None, key_env='OPENAI_API_KEY'):
     # Conformance evidence belongs in a temporary copy so this gate never dirties the source pack.
     packs = work / 'packs'
     folder = packs / NAME
@@ -157,6 +158,8 @@ def check(work):
     assert code == 0 and repeat == evidence, 'conformance is not deterministic'
 
     spec = load_spec(ROOT / 'fixtures/publisher/spec.yaml')
+    if model:
+        spec['model']['id'] = model
     before = copy.deepcopy(spec)
     first, report, problems = render(spec, packs)
     second, repeated, repeated_problems = render(spec, packs)
@@ -224,6 +227,26 @@ def check(work):
 
     package = work / 'package'
     generate(spec, package, packs_dir=packs)
+    # Both layouts must send the current skill body during initialization, without a Skill call.
+    for server_path, skill_path in (
+        (folder / 'scripts/server.py', folder / 'skills' / NAME / 'SKILL.md'),
+        (package / f'.thclaws/scripts/{NAME}--server.py',
+         package / f'.thclaws/skills/{NAME}--{NAME}/SKILL.md'),
+    ):
+        original = skill_path.read_bytes()
+        marker = 'M7b instruction propagation probe.'
+        skill_path.write_bytes(original + ('\n' + marker + '\n').encode())
+        rpc = RPC([sys.executable, str(server_path)], work, {}, 10)
+        try:
+            initialized = rpc.call('initialize', {'protocolVersion': '2024-11-05', 'capabilities': {}})
+            assert initialized['instructions'].endswith(marker)
+            assert original.decode().partition('\n---\n')[2].strip() in initialized['instructions']
+        finally:
+            rpc.close()
+            skill_path.write_bytes(original)
+    print('M7b PASS: source and generated MCP initialization carry current pack skill guidance')
+    profile = (package / '.thclaws/prompt/system.md').read_text()
+    assert '{' not in profile and '}' not in profile, 'thClaws apply_template would substitute braces in the profile'
     assert not static_findings(package, packs)[0]
     target = package / 'atlas-node-template.json'
     for mutation in ('gate', 'edge', 'isolation', 'binding'):
@@ -255,13 +278,30 @@ def check(work):
         print('M7b PASS: native draft audit (' + audited['static_audit']['thclaws_validate']['version'] + ')')
     else:
         raise AssertionError(audited['static_audit'])
+    if result == 0 and live:
+        from forge.live_test import live_audit
+
+        print('M7b live model:', spec['model']['id'], flush=True)
+        audited, result = live_audit(package, packs_dir=packs, key_env=key_env)
+        evidence = audited['live_audit']
+        for case in evidence['cases']:
+            print(f"M7b live {case['id']}: {case['status']} {case['detail']}", flush=True)
+        print(f"M7b {['PASS', 'FAIL', 'SKIP'][result]}: live audit; "
+              f"package_status={audited['package_status']}; {evidence['detail']}", flush=True)
+        assert next(row['status'] for row in audited['guarantee_matrix']
+                    if row['claim'] == 'human_approval') == 'Not verified'
     return result
 
 
 if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--live', action='store_true', help='also run publisher golden cases with a real provider')
+    parser.add_argument('--model', help='explicit model override for the gate package only')
+    parser.add_argument('--provider-key-env', default='OPENAI_API_KEY')
+    args = parser.parse_args()
     try:
         with tempfile.TemporaryDirectory(prefix='forge-m7b-') as temporary:
-            status = check(Path(temporary).resolve())
+            status = check(Path(temporary).resolve(), live=args.live, model=args.model, key_env=args.provider_key_env)
     except (AssertionError, ValueError, OSError) as exc:
         print(f'M7b FAIL: {exc}')
         status = 1

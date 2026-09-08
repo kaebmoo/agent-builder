@@ -108,3 +108,13 @@ python3 scripts/check_m6_live.py --model oai/gpt-5.4-mini --provider-key-env OPE
 ```
 
 Generated instructions แสดง input และ refusal schema จาก AgentSpec โดยตรง และสั่งให้ตรวจ input ก่อนเรียก tool; ผลผ่าน/ไม่ผ่านยังตัดสินด้วย deterministic audit เท่านั้น.
+
+ทุก package มี `.thclaws/prompt/system.md` (จาก `templates/system.md.j2`) ซึ่ง thClaws ใช้แทน base prompt ของ coding assistant เมื่อ daemon start จาก CWD=package (DESIGN §4); static audit ตรวจ drift/inventory ของไฟล์นี้เหมือน generated file อื่น และ M7b gate ตรวจว่าไม่มีวงเล็บปีกกาที่ `apply_template` ของ thClaws จะแทนค่า. Pack ส่งคำแนะนำการใช้ MCP ผ่าน `InitializeResult.instructions`; harness ยืนยันด้วย provider capture ไม่ใช่จากการมีไฟล์.
+
+Publisher (M7b) มี live regression แบบ opt-in ที่ใช้ harness M6 เดียวกันกับ golden cases ของ fixture `publisher`:
+
+```bash
+python3 scripts/check_m7b_packs.py --live --model oai/gpt-5.4-mini --provider-key-env OPENAI_COMPAT_API_KEY
+```
+
+ไม่มี key → skip exit 2 และคง `draft`; ผ่านครบ 4 cases พร้อม SSE `publisher-email-sftp__send_email` → `candidate` โดย `human_approval` ยัง `Not verified` และไม่มีการส่งจริง. ผลรอบเดียวไม่ใช่หลักฐานความนิ่ง; กติกาคือผ่านครบอย่างน้อย 3 รอบติดบน package ที่ hash เท่ากันทุกไฟล์ (ดู PLAN; หลักฐานรอบต่อรอบเก็บใน `out/` ซึ่ง ignored ไม่อยู่ใน clone).
