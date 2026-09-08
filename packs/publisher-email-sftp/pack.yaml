@@ -1,0 +1,41 @@
+min_tier: T2
+# Contract v2's broad network tier; SMTP/SFTP destinations still come only from operator env.
+network: general-http
+hosts: []
+env: [PUBLISHER_CONFIG, PUBLISHER_INPUT_ROOT, PUBLISHER_STATE_DIR]
+tools: []
+mcp_servers:
+  - name: publisher-email-sftp
+    command: python3
+    args: [scripts/server.py]
+    tools: [send_email, upload_file]
+    mutating: [send_email, upload_file]
+scripts: [server.py]
+skills: [publisher-email-sftp]
+fixture:
+  setup: fixture/setup.py
+  cases:
+    - tool: publisher-email-sftp__send_email
+      args: {subject: Synthetic report, body: Synthetic body, dry_run: true, idempotency_key: email-preview}
+      expect: ok
+    - tool: publisher-email-sftp__upload_file
+      args: {filename: report.txt, dry_run: true, idempotency_key: file-preview}
+      expect: ok
+    - tool: publisher-email-sftp__send_email
+      args: {subject: Synthetic report, body: Synthetic body, idempotency_key: missing-dry-run}
+      expect: error
+    - tool: publisher-email-sftp__send_email
+      args: {subject: Synthetic report, body: Synthetic body, dry_run: "false", idempotency_key: wrong-type}
+      expect: error
+    - tool: publisher-email-sftp__send_email
+      args: {subject: Synthetic report, body: Synthetic body, dry_run: true, idempotency_key: ""}
+      expect: error
+    - tool: publisher-email-sftp__send_email
+      args: {subject: Synthetic report, body: Synthetic body, dry_run: true, idempotency_key: recipient-override, recipient: other@example.invalid}
+      expect: error
+    - tool: publisher-email-sftp__upload_file
+      args: {filename: ../outside.txt, dry_run: true, idempotency_key: traversal}
+      expect: error
+    - tool: publisher-email-sftp__upload_file
+      args: {filename: missing.txt, dry_run: true, idempotency_key: missing}
+      expect: error

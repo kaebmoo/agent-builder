@@ -25,8 +25,9 @@ forge generate fixtures/sql-reader/spec.yaml --out out/sql-reader
 - `evaluation/golden-cases.json`: cases และ expected branch ครบจาก spec
 - `builder-build-report.json` และ schema: inventory, compatibility, guarantee matrix, audit status และ deployment hints
 - `audit.py` และ `studio.py`: runner บาง ๆ ของ static audit (M5) คัดลอกจาก `templates/` ทุก byte; ดู [audit.md](audit.md)
+- `atlas-node-template.json` เฉพาะ T2 (M7b): requirement ของ daemon แยก และ fragment `human_gate` → worker ผ่าน choice `approve` เท่านั้น; worker/workspace เป็น placeholder ที่ operator ต้อง bind ใน deployment copy และ static audit ห้ามแก้ template ต้นฉบับ
 
-Atlas ไม่มี subagent definition หรือ run.js ใน package. `atlas-workflow` ได้ package ของ node เดียว; flow/export และ `human_gate` ที่ใช้งานจริงอยู่ใน M8. Standalone generator ยังไม่รองรับและคืน error ก่อนเขียนไฟล์ แม้ pattern จะผ่าน compatibility matrix
+Atlas ไม่มี subagent definition หรือ run.js ใน package. `atlas-workflow` ได้ package ของ node เดียว; M7b เพิ่ม approval fragment สำหรับ T2 แต่การ register/export flow เต็มและ provision deployment อยู่ใน M8. Standalone generator ยังไม่รองรับและคืน error ก่อนเขียนไฟล์ แม้ pattern จะผ่าน compatibility matrix
 
 ## Capability assets
 
@@ -48,7 +49,7 @@ tier ไม่น้อยกว่า min_tier และ network ไม่น�
 
 ไม่มี descriptor = `missing`; มี descriptor/assets = `assets_bundled`; มีหลักฐานจาก
 `forge pack test` ที่ผ่านและ digest ตรง descriptor/assets = `conformant` พร้อมอ้าง evidence ใน report.
-ผล test ที่ fail/skip หรือ stale จะกัน generation/static audit จนกว่าจะ test ใหม่ผ่าน.
+ผล test ที่ fail/skip หรือ stale ไม่กัน generation แต่กัน static audit จนกว่าจะ test ใหม่ผ่าน (M6).
 Generator ไม่รัน MCP และไม่เลื่อนสถานะ package จาก `unverified` เอง.
 
 ## Gate และสถานะ

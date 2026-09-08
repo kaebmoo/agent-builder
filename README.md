@@ -34,15 +34,17 @@ User goal → Discovery (7 questions) → AgentSpec (SSOT)
 
 ## สถานะ
 
-M7a (pack contract + SQL pack) — เสร็จ 2026-09-07. `forge pack test sql-readonly` ตรวจ MCP โดยตรงโดยไม่ใช้ provider key;
-`forge generate` สร้าง config v2 และ `forge audit` ให้ `sql-reader` เป็น `draft` เมื่อ native validate ผ่าน.
-ถัดไปคือ live audit M6; ยังไม่มีหลักฐาน runtime ของ agent หรือสถานะ candidate/shippable.
+M7b (publisher email/SFTP pack) — เสร็จ 2026-09-08. MCP รองรับ dry run, persistent idempotency key
+และ fixed destination จาก env ของ operator. Package T2 มี approval fragment ที่บังคับ `human_gate`
+กับ requirement ของ daemon แยก; static/native audit ผ่านเป็น `draft` แต่ยังไม่ยืนยัน deployment หรือส่งจริง.
+M6 SQL live audit เสร็จแล้วตาม [PLAN](docs/PLAN.md); ถัดไป M8 export/registration.
 
 ```bash
-python3 scripts/check_m7a_sql_pack.py
+python3 scripts/check_m7b_packs.py
 ```
 
-ดู [SQL pack](packs/sql-readonly/README.md) สำหรับ runtime, fixture และ exit code 0/1/2.
+ดู [Publisher pack](packs/publisher-email-sftp/README.md) และ [SQL pack](packs/sql-readonly/README.md)
+สำหรับ runtime, fixture และ exit code 0/1/2.
 
 ## ข้อกำหนดขั้นต่ำ
 

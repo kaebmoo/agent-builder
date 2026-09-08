@@ -4,6 +4,8 @@
 
 ### Added
 
+- M7b (2026-09-08): publisher email/SFTP pack with explicit dry runs, fixed operator destinations, persistent idempotency keys and fail-closed handling of unknown delivery outcomes; T2 packages include a statically audited Atlas approval fragment requiring a dedicated daemon and explicit worker/workspace bindings. Generation does not verify deployment or approve delivery
+
 - M7a (2026-09-07): SQL capability pack wrapping project AI, direct MCP conformance testing with `forge pack test`, generated `.thclaws/mcp.json`, pinned thClaws tool catalog, and static audit of pack tool/env/network requirements; SQL conformance uses synthetic SQLite data without a provider key
 
 - M1/M2 follow-up (2026-09-07): tool names must be runtime names (provider regex; MCP tools as `<server>__<tool>`), and the `sql-reader` fixture now declares `sql-readonly__*`

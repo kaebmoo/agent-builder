@@ -59,3 +59,14 @@ M7a เสร็จ 2026-09-07: contract v2, `forge pack test`, MCP config gener
 M6 เสร็จ 2026-09-07: `forge/live_test.py`, `forge live-test`, `forge audit --live`, report evidence/status `candidate` และ follow-up M7a ทั้ง 4 จุดครบ. `check_m6_live.py --model oai/gpt-5.4-mini --provider-key-env OPENAI_COMPAT_API_KEY` ผ่าน exit 0 บน thClaws v0.116.0 revision `75edc48` โดยใช้ MATCHA OpenAI-compatible endpoint กับ TLS verification ปกติ. ผ่านทั้ง 4 golden cases, SSE ของ SQL MCP และ daemon inventory; SQL source provenance ตรง ref ที่ pin. Offline negative checks และ M4/M5 native ผ่านด้วย. รอบเดิมตรวจ Ruff 0.15.20 ผ่าน แต่ review ด้วย Ruff 0.16.6 พบ 13 errors จึงยังใช้ผล lint เดิมยืนยัน CI ไม่ได้ (แก้ใน follow-up ด้านล่าง). Fixture ต้นฉบับยัง pin `gpt-5.4` ซึ่ง MATCHA ไม่ advertise; ผล live นี้รับรอง package ที่ pin `oai/gpt-5.4-mini` เท่านั้น. ครั้งแรกพบ refusal/malformed ไม่ตรง schema จึงปรับ generated instructions ให้แสดง input/refusal contract จาก SSOT โดยตรงและตรวจ input ก่อน tool call; ไม่เปลี่ยน golden cases หรือเกณฑ์ audit. ไม่มี key ยัง exit 2 และไม่มีการเลื่อนสถานะ. Security audit ยังไม่รัน; candidate ไม่ใช่ shippable.
 
 M6 review follow-up 2026-09-07: แก้ lint ทั้ง 13 จุดและตรวจ `ruff 0.16.6 check .` ผ่าน; gate executable, subprocess ระบุ check=False และ negative JSON cases ตรวจเหตุผลแยกชัดเจน. ตรวจ source thClaws `75edc48` แล้วเพิ่ม baseline `browserEnabled` ใน DESIGN §4 ก่อนแก้ harness ให้ปิด browser และตรวจ MCP inventory เท่ากับ declared ทั้งก่อนและหลัง golden cases. เพิ่ม regression ที่ server `browser` เกินต้อง fail ก่อนมี model call. Gate เต็มผ่าน exit 0 อีกครั้งด้วย `oai/gpt-5.4-mini` ผ่าน MATCHA หลังแก้ isolation; ขอบเขต candidate/model และข้อจำกัด tool allowlist/shell/write-path ตามย่อหน้าก่อนยังเหมือนเดิม.
+
+M7b เสร็จ 2026-09-08: `publisher-email-sftp` MCP (Python stdlib + native OpenSSH sftp), dry run,
+persistent idempotency ledger, fixed operator destinations และ fixture `publisher` target `atlas-workflow`.
+T2 generate มี `atlas-node-template.json` ที่เริ่ม `human_gate` และไป worker เฉพาะ human approve;
+require daemon แยกพร้อม worker/workspace binding และ static audit reject การถอด gate/edge/isolation.
+`check_m7b_packs.py` ผ่าน exit 0 บน thClaws v0.116.0 revision `75edc48`: MCP conformance, negative
+arguments/path cases, retry/restart/concurrency/unknown outcome, transport adapters ด้วย test doubles,
+byte determinism และ native draft audit. Template ผ่าน native schema/graph/prompt ของ Atlas ref
+`daa0f4966899327fb563501435f5d6180eeef9c3`. ไม่ได้ส่ง email/SFTP จริงหรือ provision daemon;
+human_approval ยัง `Not verified`, publisher เป็น `draft` ไม่ใช่ candidate/shippable. ถัดไป M8.
+Regression M0–M5/M7a และ Ruff 0.16.6 ผ่าน; M6 offline ผ่าน ส่วน live ใช้ key ว่างโดยตั้งใจและรายงาน skip exit 2.

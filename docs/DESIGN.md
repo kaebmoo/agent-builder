@@ -140,6 +140,25 @@ Lifecycle ของความสามารถหนึ่งตัว (ต�
 
 ## 6. Guarantee matrix (บังคับต้องมีในทุก build report)
 
+M7b publisher boundary (2026-09-08): `publisher-email-sftp` เป็น T2 เสมอ แม้เรียกแบบ dry run;
+MCP มี `send_email` และ `upload_file` โดยทุก call ต้องระบุ boolean `dry_run` และ `idempotency_key`.
+ปลายทาง SMTP/SFTP, ผู้รับ และ credential มาจาก env ของ operator เท่านั้น ไม่รับจาก model.
+SMTP ใช้ TLS พร้อม certificate verification; SFTP ใช้ OpenSSH แบบ batch พร้อม known_hosts ที่ operator provision.
+Dry run ตรวจ input/config และอ่าน artifact ได้ แต่ไม่เชื่อมต่อ network หรือเขียน ledger.
+SQLite ledger อยู่นอก package ใน directory ที่ operator provision และ persist ข้าม restart:
+reserve key ก่อนส่ง, payload/ปลายทาง/เนื้อหาไฟล์ต่างกันต้อง reject, สำเร็จแล้ว replay ผลเดิม;
+pending/unknown outcome ต้องให้ operator reconcile ห้าม retry ส่งซ้ำอัตโนมัติ (ไม่อ้าง exactly-once delivery).
+Fixture/conformance ใช้ dry run และ negative cases; gate ทดสอบ transport adapters ด้วย test doubles ไม่มีการส่งจริง.
+
+T2 generation เพิ่ม `atlas-node-template.json`: deployment requirements บังคับ dedicated T2 daemon
+และ workflow fragment เริ่มที่ `human_gate`, ต่อ worker ได้เฉพาะ `human_selected: approve`.
+Worker และ policy pin worker/workspace เป็น placeholder ที่ operator ต้อง bind กับ daemon แยก;
+ไม่ route T2 ด้วย role อย่างเดียว. Static audit ตรวจไฟล์นี้กับ render จาก spec จึง reject การลบ gate,
+เปลี่ยน edge หรือถอด isolation requirement. Template ยังไม่ใช่ registration/export ของ M8
+และไม่พิสูจน์การ provision daemon หรือการผูก approval กับ tool arguments ใน runtime;
+`human_approval` จึงยังเป็น `Not verified` สำหรับ T2 และ `Not applicable` สำหรับ T0/T1.
+การ start publisher daemon หรือเรียก `/agent/run` ตรง ๆ ไม่ได้ผ่าน Atlas gate โดยอัตโนมัติ.
+
 | Claim | สถานะบน `/agent/run` วันนี้ | บังคับด้วย |
 |---|---|---|
 | ใช้ tool ตาม allowlist | Declared | prompt / package เท่านั้น |

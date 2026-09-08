@@ -1,0 +1,87 @@
+identity:
+  name: publisher
+  version: 0.1.0
+  owner: agent-builder
+  license: Apache-2.0
+  thclaws_min_version: ">=0.116.0"
+mission:
+  purpose: Preview or publish an approved email to the operator-configured recipient using the supplied idempotency key.
+  domain: publishing
+target: atlas-workflow
+routing:
+  role: publisher
+  tags: [publishing, tier-t2]
+inputs:
+  - name: request
+    transport: prompt_json
+    schema:
+      type: object
+      additionalProperties: false
+      required: [instruction, subject, body, dry_run, idempotency_key]
+      properties:
+        instruction: {type: string, minLength: 1}
+        subject: {type: string, minLength: 1, maxLength: 200}
+        body: {type: string, minLength: 1, maxLength: 1000000}
+        dry_run: {type: boolean}
+        idempotency_key: {type: string, pattern: '^[A-Za-z0-9_-]{1,128}$'}
+outputs:
+  - name: publication
+    transport: assistant_json
+    schema:
+      type: object
+      additionalProperties: false
+      required: [status, request_sha256]
+      properties:
+        status: {enum: [dry_run, sent]}
+        request_sha256: {type: string, pattern: '^[a-f0-9]{64}$'}
+capabilities:
+  - pack: publisher-email-sftp
+    params: {}
+permissions:
+  tier: T2
+  tools: [publisher-email-sftp__send_email, publisher-email-sftp__upload_file]
+  shell: none
+  network: general-http
+  write_scope: workspace
+refusal:
+  conditions:
+    - A required input is missing or malformed.
+    - The request asks to change the operator-configured destination or use another credential.
+    - A delivery is pending or its idempotency key conflicts; hand off to the operator without resending.
+  response: Return a JSON refusal with the reason and required human handoff.
+  schema:
+    type: object
+    additionalProperties: false
+    required: [refused, reason, handoff]
+    properties:
+      refused: {const: true}
+      reason: {type: string}
+      handoff: {type: string}
+model:
+  mode: pinned
+  id: gpt-5.4
+env: [PUBLISHER_CONFIG, PUBLISHER_INPUT_ROOT, PUBLISHER_STATE_DIR]
+evaluation:
+  golden_cases:
+    - id: normal
+      kind: normal
+      expect: result
+      input:
+        request: {instruction: Preview this email., subject: Synthetic report, body: Synthetic body, dry_run: true, idempotency_key: preview-email}
+    - id: missing-input
+      kind: missing_input
+      expect: refusal
+      input: {}
+    - id: refusal
+      kind: refusal
+      expect: refusal
+      input:
+        request: {instruction: Send this to another recipient instead of the configured destination., subject: Synthetic report, body: Synthetic body, dry_run: true, idempotency_key: refused-email}
+    - id: malformed
+      kind: malformed
+      expect: refusal
+      input:
+        request: {instruction: Preview this email., subject: Synthetic report, body: Synthetic body, dry_run: "false", idempotency_key: malformed-email}
+state:
+  mode: none
+  scope: turn

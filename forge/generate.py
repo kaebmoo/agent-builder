@@ -132,11 +132,49 @@ def guarantee_matrix(spec: dict[str, Any]) -> list[dict[str, str]]:
          "AgentSpec validation rejects declared web built-ins for network=none; this does not enforce runtime egress."),
         ("network_hosts", "Not guaranteed", "Host egress controls must be provisioned and verified outside the package."),
         ("human_approval", "Not verified" if permissions["tier"] == "T2" else "Not applicable",
-         "T2 requires an Atlas human_gate and an isolated T2 daemon; neither is provisioned by generation."),
+         "T2 requires the approval edge and dedicated daemon bindings in atlas-node-template.json; "
+         "generation/static audit do not verify deployment or bind approval to tool arguments."
+         if permissions["tier"] == "T2" else "T0/T1 declare no external side effects; no T2 approval gate applies."),
         ("output_schema", "Not verified", "Live audit has not run. Atlas JSON parsing alone does not validate an output schema."),
         ("skill_mcp_calls", "No evidence", "No live run or SSE tool/skill evidence has been collected."),
     ]
     return [{"claim": claim, "status": status, "basis": basis} for claim, status, basis in rows]
+
+
+def t2_node_template(spec: dict[str, Any]) -> dict[str, Any]:
+    """M7b approval fragment; M8 owns deployment binding, registration and complete export."""
+    worker_id, workspace_id = "__OPERATOR_T2_WORKER_ID__", "__OPERATOR_T2_WORKSPACE_ID__"
+    envelope = "{" + ", ".join(json.dumps(item["name"]) + ": {input." + item["name"] + "}"
+                                for item in spec["inputs"]) + "}"
+    worker = {"id": "publish", "type": "worker", "role": spec["routing"]["role"],
+              "tags": spec["routing"]["tags"], "worker_id": worker_id, "workspace_id": workspace_id,
+              "model": spec["model"]["id"], "prompt": "Execute only the approved input: " + envelope,
+              "outputs": ["publication"]}
+    if any(output["transport"] == "assistant_json" for output in spec["outputs"]):
+        worker["output_format"] = "json"
+    collects = sorted({glob for output in spec["outputs"] if output["transport"] == "collect_files"
+                       for glob in output["files"]["globs"]})
+    if collects:
+        worker["collect_files"] = collects
+    return {
+        "deployment_requirements": {"tier": "T2", "isolated_daemon_required": True,
+                                    "worker_id": worker_id, "workspace_id": workspace_id,
+                                    "deployment_verified": False},
+        "workflow": {
+            "name": spec["identity"]["name"],
+            "graph": {
+                "start": "approval",
+                "nodes": [{"id": "approval", "type": "human_gate",
+                           "reason": "Review the run input, payload, configured destination and idempotency key.",
+                           "choices": [{"id": "approve", "label": "Approve publication"},
+                                       {"id": "reject", "label": "Reject publication"}]}, worker],
+                "edges": [{"from": "approval", "to": "publish",
+                           "condition": {"type": "human_selected", "choice": "approve"}}],
+            },
+            "policy": {"allowed_worker_ids": [worker_id], "allowed_workspace_ids": [workspace_id],
+                       "max_jobs": 1, "max_attempts_per_node": 1},
+        },
+    }
 
 
 def render(spec: dict[str, Any], packs_dir: Path | None = None) -> tuple[dict[str, bytes], dict[str, Any], list[str]]:
@@ -180,6 +218,8 @@ def render(spec: dict[str, Any], packs_dir: Path | None = None) -> tuple[dict[st
             if "schema" in item:
                 add_json(f".thclaws/schemas/{section}--{item['name']}.json", item["schema"])
     add_json("evaluation/golden-cases.json", spec["evaluation"]["golden_cases"])
+    if spec["permissions"]["tier"] == "T2":
+        add_json("atlas-node-template.json", t2_node_template(spec))
     for wrapper in WRAPPERS:
         files[wrapper] = (ROOT / "templates" / wrapper).read_bytes()
 
