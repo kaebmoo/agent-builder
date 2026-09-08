@@ -42,6 +42,9 @@ VERSION_OPERATORS = (">=", "<=", "==", ">", "<")
 # thClaws presents MCP tools as <server>__<tool> (mcp.rs::MCP_NAME_SEPARATOR). Keep both segments
 # reversible: server without "_", tool without "__". Built-ins never contain "__".
 MCP_TOOL_PATTERN = re.compile(r"[a-z0-9][a-z0-9-]*__[a-z0-9](?:_?[a-z0-9])*")
+# Atlas substitutes {input.<name>} only for this segment shape (workflows.py::_FIELD_RE) and its artifactKey
+# pattern is the same; it JSON-encodes only object/array values (_prompt_value). Checked at ref daa0f49.
+ATLAS_PROMPT_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
 
 PathPart = str | int
 Finding = tuple[tuple[PathPart, ...], str]
@@ -106,6 +109,25 @@ def semantic_errors(spec: dict[str, Any]) -> list[Finding]:
         errors.append((("model", "mode"), "Atlas targets require a pinned model in M1"))
     if target in ATLAS_TARGETS and len(spec.get("outputs", [])) > 1:
         errors.append((("outputs",), "Atlas nodes support at most one output artifact"))
+
+    if target in ATLAS_TARGETS:
+        for index, entry in enumerate(spec.get("inputs", [])):
+            name = entry.get("name")
+            if isinstance(name, str) and not ATLAS_PROMPT_NAME.fullmatch(name):
+                errors.append((("inputs", index, "name"),
+                               f"Atlas prompt variable {{input.{name}}} must match [A-Za-z_][A-Za-z0-9_]*"))
+            schema = entry.get("schema")
+            if not isinstance(schema, dict):
+                errors.append((("inputs", index, "schema"),
+                               "Atlas inputs must declare a schema; every input is rendered into the node prompt"))
+            elif schema.get("type") not in ("object", "array"):
+                errors.append((("inputs", index, "schema"),
+                               "Atlas renders {input.<name>} as JSON only for schema type object/array"))
+        for index, entry in enumerate(spec.get("outputs", [])):
+            name = entry.get("name")
+            if (entry.get("transport") == "assistant_json" and isinstance(name, str)
+                    and not ATLAS_PROMPT_NAME.fullmatch(name)):
+                errors.append((("outputs", index, "name"), "Atlas artifact key must match [A-Za-z_][A-Za-z0-9_]*"))
 
     for section in ("inputs", "outputs"):
         entries = spec.get(section, [])

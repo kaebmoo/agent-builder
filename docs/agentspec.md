@@ -73,6 +73,8 @@ M1 ตรวจ tier boundary แบบ deterministic: T0 ต้องเป็�
 
 AgentSpec หนึ่งตัวประกาศ input หลาย transport ร่วมกันได้ เช่น `prompt_json` สำหรับคำสั่งและ `atlas_file_handoff` สำหรับไฟล์. Generator จะ map แต่ละ input ตาม transport ของมัน; Atlas ยังคงเป็นผู้กำหนด landing path ของ file handoff.
 
+สำหรับ target Atlas ทุก input ถูก render เป็น `{input.<name>}` ใน prompt ของ node และ `assistant_json` output เป็น artifact key ของ Atlas ซึ่ง Atlas (ref `daa0f49`) แทนค่าเฉพาะชื่อที่ตรง `[A-Za-z_][A-Za-z0-9_]*` และ JSON-encode เฉพาะค่า object/array (ชื่ออื่นถูกปล่อยไว้ตามตัวอักษรโดยไม่ error; string/boolean/null ถูก `str()`); semantic check จึง reject Atlas spec ที่ชื่อ input หรือ `assistant_json` output มี `-` หรือขึ้นต้นด้วยตัวเลข และ input ที่ schema ไม่ใช่ `type: object`/`array`. ชื่อ output แบบ `collect_files` ไม่ถูกส่งให้ Atlas จึงใช้ slug เต็มได้
+
 `push_files` เป็น field ของ **workflow edge** ที่เลือก artifact key จาก upstream node ไม่ใช่ field ของ worker node โดยตรง ส่วน `collect_files` เป็น field ของ node
 
 `collect_files` ขอให้ thClaws snapshot ไฟล์ที่ match หลัง run จึงเก็บได้ทั้งไฟล์ที่ agent สร้างและไฟล์ที่มีอยู่ก่อน run; ไม่ใช่หลักฐานว่า agent ได้เขียนไฟล์ และไม่เปลี่ยน `write_scope`. `collect_files.schema` ถ้ามีหมายถึง schema ของ artifact manifest ไม่ใช่ JSON body ของ assistant ส่วน `refusal.schema` เป็น output contract แยกสำหรับ refusal branch; live audit เลือก schema จาก `golden_cases[].expect`

@@ -4,6 +4,7 @@
 
 ### Added
 
+- M8 (2026-09-08): `forge export` writes Atlas registration payloads, node/edge/policy templates, a schema-valid workflow definition (the T2 approval flow bound to operator worker/workspace ids) and a `thclaws agent pack` archive with a sha256 sidecar; the Atlas workflow-definition schema is pinned from atlas-control-plane `daa0f49`, and the M8 gate registers the export in an in-process Atlas and polls a packaged daemon. Export copies `package_status` and never verifies a deployment
 - M7b follow-up (2026-09-08): every package carries a `.thclaws/prompt/system.md` mission-runner profile that replaces the thClaws coding base prompt when the daemon starts from the package, and the publisher MCP sends its skill guidance as `InitializeResult.instructions`; static audit covers the profile and the M7b gate checks initialize propagation and brace-free profile text
 - M7b (2026-09-08): publisher email/SFTP pack with explicit dry runs, fixed operator destinations, persistent idempotency keys and fail-closed handling of unknown delivery outcomes; T2 packages include a statically audited Atlas approval fragment requiring a dedicated daemon and explicit worker/workspace bindings. Generation does not verify deployment or approve delivery
 
@@ -27,6 +28,8 @@
 
 ### Fixed
 
+- T2 approval fragment derives its Atlas `outputs`/`collect_files` from the AgentSpec instead of a hardcoded artifact key (publisher package bytes unchanged)
+- M8 review follow-up (2026-09-09): export refuses packages without a recorded passed static audit (and re-runs `thclaws agent validate` before packing when the report was written without the binary), refuses an export directory inside the package, normalises and rejects malformed base URLs, binds T2 placeholders structurally, and AgentSpec validation rejects Atlas input/`assistant_json` output names or non-object input schemas that Atlas `render_prompt`/artifact keys cannot render; the M8 gate compares the archive byte-for-byte except the two files thClaws rewrites, starts the daemon from the unpacked archive and fails on an unpinned Atlas ref; export now opens the packed archive and refuses it when `thclaws agent pack` silently stripped or altered any generated file (for example a `*_secret*` pack script or input name)
 - Clarify generated mission, input-envelope and output instructions, separate publisher preview from approved delivery in the fixture mission, and add opt-in publisher live regression; publisher passed 6/6 live audit rounds on `oai/gpt-5.4-mini` (pinned `gpt-5.4` untested). Golden cases and schema/SSE audit criteria are unchanged
 
 - M5 review follow-up: report schema ties `audit.manifest`/`audit.static` to the recorded validate status and findings, and the inventory rule now covers the whole package tree (stray files and symlinks fail)

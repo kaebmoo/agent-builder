@@ -162,3 +162,40 @@ M7b review round 3 (2026-09-08): แก้ README ของ pack และข้
 ส่วน 6/6 เป็นของ skill รุ่นก่อน; skill ระบุว่า `idempotency_key`/`dry_run` ต้องมาจาก input เสมอ ห้าม compose (compose ได้
 เฉพาะ subject/body เมื่อ mission สั่ง) เพื่อรักษา stable key ตอน retry; `docs/audit.md` เลิกชี้ไฟล์ ignored และอธิบายกติกา
 3 รอบแทน. หลังแก้ skill รัน `forge pack test` ใหม่และ live 3/3 (`skill-key`) บน package byte เดียวกับ source ปัจจุบัน.
+
+M8 เสร็จ 2026-09-08: `forge/atlas_export.py` + `forge export <package> --out <dir> --base-url <url> --workspace-dir <path>`
+(optional `--worker-id` / `--workspace-id` / `--workspace-key`) เขียน `atlas-register.json` (worker/workspace payload ไม่มี token,
+`node_template` ที่ prompt render เป็น JSON เทียบเท่า input envelope ของ live audit, `collect_files` จาก `files.globs`, `outputs` + `output_format: json`
+เฉพาะ `assistant_json`, `edge_template` `push_files` + `policy_template.file_handoff` เฉพาะ input `atlas_file_handoff`, deployment list
+และ `package_status` ที่คัดลอกจาก build report), `atlas-workflow.json` เฉพาะ target `atlas-workflow` (T2 = fragment ของ M7b ที่ bind
+worker/workspace id แล้ว; T0/T1 = node เดียว) และ archive จาก `thclaws agent pack` พร้อม sidecar `.sha256`. Schema ของ Atlas pin ไว้ที่
+`patterns/atlas-workflow-definition.schema.json` จาก ref `daa0f4966899327fb563501435f5d6180eeef9c3` และบันทึก contract ใน DESIGN §8.
+`check_m8_export.py` ผ่าน exit 0 บน thClaws v0.116.0 revision `75edc48` กับ Atlas checkout ref เดียวกัน: export ซ้ำได้ byte เดียวกัน
+(รวม archive) และไฟล์ JSON เท่ากันหลัง generate ใหม่, template ผ่าน `$defs` ของ schema ที่ pin, T2 ไม่เหลือ placeholder, refusal ครบ
+(ปลายทางมีอยู่แล้ว, base_url/workspace_dir/id ผิด, package drift, report stale หรืออ้าง candidate โดยไม่มี live evidence,
+`atlas-workflow` ที่มี file handoff), archive มี inventory ครบและ sha ตรง, Atlas in-process ยอมรับ worker → workspace → workflow
+ทั้งสามรูป (templates ที่ประกอบต่อ upstream node, T0 node เดียว, T2 gate flow), `render_prompt` ของ Atlas คืน envelope ตรง golden
+case และ fail closed เมื่อ input ขาด, และ `POST /api/workers/<id>/poll` เห็น daemon ของ package publisher `online` พร้อม
+`mcp_servers` ตรงที่ประกาศ. ไม่มี `thclaws` → exit 2 (ไม่มี archive/daemon probe); ไม่มี checkout Atlas → exit 2.
+ข้อจำกัด: ไม่ export `interface` v1 ของ Atlas (profile ไม่มี `pattern`), `atlas-workflow` node เดียวรับ push_files ไม่ได้จึง reject,
+`deployment_verified` เป็น `false` เสมอและ export ไม่เลื่อนสถานะ; ไม่ได้ deploy จริง, ไม่ตรวจ egress/isolation/approval,
+`human_approval` ยัง `Not verified`. Refactor `forge/generate.py` (`input_envelope`, `worker_outputs`) ทำให้ T2 fragment ใช้
+output name จาก spec แทนค่าคงที่ `publication`; package publisher ยังเหมือนเดิมทุก byte. Regression M0–M5/M7a/M7b native, M6 offline
+(ไม่มี key → exit 2) และ Ruff ผ่าน; ไม่มี commit/push. ถัดไป M9.
+
+M8 review follow-up 2026-09-09: review พบว่า export รับ package ที่ยังไม่ audit หรือ report บันทึก manifest fail แล้ว pack ด้วย exit 0,
+`{input.<name>}` ที่ชื่อมี `-`/ขึ้นต้นด้วยตัวเลขหรือ schema เป็น scalar ทำให้ Atlas render prompt ผิดโดยไม่ error, `--out` ใน package
+ทำให้ archive มี staging directory, base_url ตัวพิมพ์ใหญ่/port ผิด/`#` ผ่าน, T2 binding แทนค่าแบบ text สองรอบ, และเอกสารไม่บันทึกว่า
+`thclaws agent pack` เปลี่ยน `manifest.json`/`.thclaws/settings.json`. แก้: export ต้องมี `audit.static = passed` และ `manifest != failed`
+(มี binary แต่ report ยัง skipped → validate ใหม่ก่อน pack), semantic check ของ AgentSpec (M1) reject Atlas spec ที่ชื่อ input/`assistant_json` output หรือ schema ของ input ที่ Atlas render ไม่ได้ (reviewer ยืนยันกับ Atlas จริงว่า render เป็น literal และ `str()` โดยไม่ fail closed),
+reject `--out` ใน package, normalize/ตรวจ base_url เข้มขึ้น, bind T2 แบบ structural, `deployment.verify` เป็น `reachability_checks`
+พร้อมประโยคว่า builder ไม่เคยตั้ง `deployment_verified`, gate ตรวจ archive byte ต่อ byte ยกเว้นสองไฟล์ที่ pack เขียนใหม่, start daemon
+จาก tree ที่แตกจาก archive, fail เมื่อ checkout ของ Atlas ไม่ใช่ ref ที่ pin, และสแกนคำต้องห้าม (`read-only` ด้วย) เฉพาะข้อความที่ builder
+เขียน. DESIGN §8 บันทึกพฤติกรรม pack ที่ revision `75edc48`, กฎ `_FIELD_RE`/`_prompt_value`, การ upsert worker ด้วย `base_url` และ
+ขอบเขตของ `missing_input`. `check_m8_export.py` ผ่าน exit 0 (native) / exit 2 (offline), M0–M5/M7a/M7b native exit 0, M6 offline exit 2,
+Ruff และ `git diff --check` ผ่าน; ไม่มี commit/push. ข้อจำกัดเดิม (ไม่ deploy จริง, `deployment_verified` false, `human_approval`
+`Not verified`) ไม่เปลี่ยน. รอบ 2 (2026-09-09): reviewer ยืนยันว่า `thclaws agent pack` ตัดไฟล์ที่ path มี `_secret` หรือลงท้าย
+`.log`/`.key`/`.env` เงียบ ๆ (`client_secret.py` หายจาก archive โดย export ไม่ error) → `pack_archive` เปิด archive ตรวจ inventory
+เทียบ `generated_files` และ byte เทียบ package (ยกเว้นสองไฟล์ที่ pack เขียนใหม่) แล้ว fail; gate M8 เพิ่ม negative case input
+`api_secret` (มี binary) และ input ไม่มี schema; base_url reject port 0; ข้อความ reject input ที่ไม่มี schema แยกจากกรณี type ผิด.
+Gate ทุกตัวผ่านเหมือนเดิม; ไม่มี commit/push.

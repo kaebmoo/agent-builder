@@ -31,16 +31,20 @@ User goal → Discovery (7 questions) → AgentSpec (SSOT)
 - [AGENTS.md](AGENTS.md) — กติกาสำหรับ coding agent ที่ทำงานใน repo นี้
 - [docs/generator.md](docs/generator.md) — M4 generator, CLI, build report และข้อจำกัด
 - [docs/audit.md](docs/audit.md) — M5 static audit: กฎ, สถานะ, wrappers และ gate
+- [docs/export.md](docs/export.md) — M8 `forge export`: atlas-register.json, workflow, archive และลำดับลงทะเบียน
 
 ## สถานะ
 
 M7b (publisher email/SFTP pack) — เสร็จ 2026-09-08. MCP รองรับ dry run, persistent idempotency key
 และ fixed destination จาก env ของ operator. Package T2 มี approval fragment ที่บังคับ `human_gate`
 กับ requirement ของ daemon แยก; static/native audit ผ่านเป็น `draft` แต่ยังไม่ยืนยัน deployment หรือส่งจริง.
-M6 SQL live audit เสร็จแล้วตาม [PLAN](docs/PLAN.md); ถัดไป M8 export/registration.
+M8 export/registration เสร็จ 2026-09-08: `forge export` ออก `atlas-register.json`, `atlas-workflow.json` และ archive จาก
+`thclaws agent pack` ตาม [docs/export.md](docs/export.md); gate ลงทะเบียนกับ Atlas in-process และ poll daemon ของ package ได้จริง
+แต่ `deployment_verified` ยัง `false`. ลำดับตาม [PLAN](docs/PLAN.md); ถัดไป M9 standalone generator.
 
 ```bash
 python3 scripts/check_m7b_packs.py
+python3 scripts/check_m8_export.py
 ```
 
 ดู [Publisher pack](packs/publisher-email-sftp/README.md) และ [SQL pack](packs/sql-readonly/README.md)
@@ -49,8 +53,9 @@ python3 scripts/check_m7b_packs.py
 ## ข้อกำหนดขั้นต่ำ
 
 - Python 3.11+
-- thClaws >= 0.116.0 (`thclaws agent validate` / `thclaws agent pack` ต้องอยู่ใน PATH สำหรับ M4 ขึ้นไป)
-- Atlas control plane สำหรับ M8 (export registration data ทำงานได้โดยไม่ต้องมี Atlas)
+- thClaws 0.116.0 ตรงตัว (baseline ที่ตรวจแล้ว; `forge audit` / `forge export` fail กับ version อื่นจนกว่าจะตรวจ DESIGN §4 ใหม่); `thclaws agent validate` / `thclaws agent pack` ต้องอยู่ใน PATH หรือ `THCLAWS_BIN` สำหรับ M4 ขึ้นไป
+- Atlas control plane สำหรับ M8: `forge export` ทำงานได้โดยไม่ต้องมี Atlas; ส่วน native ของ `check_m8_export.py` ใช้ checkout ที่
+  `../atlas-control-plane` หรือ `ATLAS_ROOT` (ไม่พบ → skip exit 2)
 
 ## License
 

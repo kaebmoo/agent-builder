@@ -141,21 +141,36 @@ def guarantee_matrix(spec: dict[str, Any]) -> list[dict[str, str]]:
     return [{"claim": claim, "status": status, "basis": basis} for claim, status, basis in rows]
 
 
-def t2_node_template(spec: dict[str, Any]) -> dict[str, Any]:
-    """M7b approval fragment; M8 owns deployment binding, registration and complete export."""
-    worker_id, workspace_id = "__OPERATOR_T2_WORKER_ID__", "__OPERATOR_T2_WORKSPACE_ID__"
-    envelope = "{" + ", ".join(json.dumps(item["name"]) + ": {input." + item["name"] + "}"
-                                for item in spec["inputs"]) + "}"
-    worker = {"id": "publish", "type": "worker", "role": spec["routing"]["role"],
-              "tags": spec["routing"]["tags"], "worker_id": worker_id, "workspace_id": workspace_id,
-              "model": spec["model"]["id"], "prompt": "Execute only the approved input: " + envelope,
-              "outputs": ["publication"]}
-    if any(output["transport"] == "assistant_json" for output in spec["outputs"]):
-        worker["output_format"] = "json"
+def input_envelope(spec: dict[str, Any]) -> str:
+    """Atlas prompt template rendering the JSON envelope the live audit sends: {"<input>": {input.<input>}}.
+
+    Renderable only because AgentSpec validation (forge.spec, Atlas targets) already requires placeholder-safe
+    input names and object/array input schemas; Atlas leaves other names literal and str()s scalars.
+    """
+    return "{" + ", ".join(json.dumps(item["name"]) + ": {input." + item["name"] + "}"
+                           for item in spec["inputs"]) + "}"
+
+
+def worker_outputs(spec: dict[str, Any]) -> dict[str, Any]:
+    """Atlas node output fields: outputs + output_format json only for assistant_json; collect_files globs otherwise."""
+    fields: dict[str, Any] = {}
+    names = [output["name"] for output in spec["outputs"] if output["transport"] == "assistant_json"]
+    if names:
+        fields["outputs"], fields["output_format"] = names[:1], "json"
     collects = sorted({glob for output in spec["outputs"] if output["transport"] == "collect_files"
                        for glob in output["files"]["globs"]})
     if collects:
-        worker["collect_files"] = collects
+        fields["collect_files"] = collects
+    return fields
+
+
+def t2_node_template(spec: dict[str, Any]) -> dict[str, Any]:
+    """M7b approval fragment; forge.atlas_export binds the placeholders and exports the complete flow (M8)."""
+    worker_id, workspace_id = "__OPERATOR_T2_WORKER_ID__", "__OPERATOR_T2_WORKSPACE_ID__"
+    worker = {"id": "publish", "type": "worker", "role": spec["routing"]["role"],
+              "tags": spec["routing"]["tags"], "worker_id": worker_id, "workspace_id": workspace_id,
+              "model": spec["model"]["id"], "prompt": "Execute only the approved input: " + input_envelope(spec),
+              **worker_outputs(spec)}
     return {
         "deployment_requirements": {"tier": "T2", "isolated_daemon_required": True,
                                     "worker_id": worker_id, "workspace_id": workspace_id,

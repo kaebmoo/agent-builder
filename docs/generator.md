@@ -27,7 +27,7 @@ forge generate fixtures/sql-reader/spec.yaml --out out/sql-reader
 - `audit.py` และ `studio.py`: runner บาง ๆ ของ static audit (M5) คัดลอกจาก `templates/` ทุก byte; ดู [audit.md](audit.md)
 - `atlas-node-template.json` เฉพาะ T2 (M7b): requirement ของ daemon แยก และ fragment `human_gate` → worker ผ่าน choice `approve` เท่านั้น; worker/workspace เป็น placeholder ที่ operator ต้อง bind ใน deployment copy และ static audit ห้ามแก้ template ต้นฉบับ
 
-Atlas ไม่มี subagent definition หรือ run.js ใน package. `atlas-workflow` ได้ package ของ node เดียว; M7b เพิ่ม approval fragment สำหรับ T2 แต่การ register/export flow เต็มและ provision deployment อยู่ใน M8. Standalone generator ยังไม่รองรับและคืน error ก่อนเขียนไฟล์ แม้ pattern จะผ่าน compatibility matrix
+Atlas ไม่มี subagent definition หรือ run.js ใน package. `atlas-workflow` ได้ package ของ node เดียว; M7b เพิ่ม approval fragment สำหรับ T2 และ M8 export ไฟล์ลงทะเบียนกับ flow ที่ bind แล้วผ่าน `forge export` ([export.md](export.md)); การ provision deployment ยังเป็นงานของ operator. Standalone generator ยังไม่รองรับและคืน error ก่อนเขียนไฟล์ แม้ pattern จะผ่าน compatibility matrix
 
 ## Capability assets
 

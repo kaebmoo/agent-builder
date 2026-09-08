@@ -8,6 +8,8 @@ import yaml
 from jinja2 import TemplateError
 from jsonschema import ValidationError
 
+from forge.atlas_export import command as export_command
+from forge.atlas_export import configure as configure_export
 from forge.audit import command as audit_command
 from forge.audit import configure as configure_audit
 from forge.generate import ROOT, generate
@@ -25,6 +27,7 @@ def main() -> int:
     build.add_argument("--out", required=True, type=Path, help="new package directory; existing paths are refused")
     configure_audit(commands.add_parser("audit", help="static audit of a package; --write records the verdict"))
     configure_live(commands.add_parser("live-test", help="isolated golden-case live audit"))
+    configure_export(commands.add_parser("export", help="Atlas registration export: register file, workflow, archive"))
     pack = commands.add_parser("pack", help="capability pack conformance")
     pack_commands = pack.add_subparsers(dest="pack_command", required=True)
     test = pack_commands.add_parser("test", help="test an external MCP directly without an LLM")
@@ -32,6 +35,8 @@ def main() -> int:
     args = parser.parse_args()
     if args.command == "live-test":
         return live_command(args)
+    if args.command == "export":
+        return export_command(args)
     if args.command == "pack":
         try:
             report, code = test_pack(args.name, ROOT / "packs")
