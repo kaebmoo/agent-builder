@@ -1,4 +1,4 @@
-"""Deterministic Atlas single-worker packages. thClaws owns manifest validation/packing."""
+"""Deterministic Atlas and standalone packages. thClaws owns manifest validation/packing."""
 from __future__ import annotations
 
 import json
@@ -18,6 +18,13 @@ from forge.spec import validate_spec
 ROOT = Path(__file__).resolve().parents[1]
 REPORT_SCHEMA_PATH = ROOT / "builder-build-report.schema.json"
 THCLAWS_BASELINE = "0.116.0"
+# Standalone compatibility is evidence-bound: a version without the reviewed
+# source revision is not enough to reopen a runtime-sensitive guarantee.
+STANDALONE_THCLAWS_COMPATIBILITY = {
+    THCLAWS_BASELINE: frozenset({"75edc48"}),
+    "0.121.0": frozenset({"35ccf16"}),
+    "0.129.0": frozenset({"7a27129"}),
+}
 # Thin runners copied verbatim into every package; the audit rules live in forge.audit only.
 WRAPPERS = ("audit.py", "studio.py")
 
@@ -28,7 +35,10 @@ def json_text(value: Any) -> str:
 
 def editable_files(spec: dict[str, Any]) -> set[str]:
     """Prose an operator or LLM may customize after generation; every other file must match the render."""
-    return {"AGENTS.md", f".thclaws/skills/{spec['identity']['name']}/SKILL.md"}
+    paths = {f".thclaws/skills/{spec['identity']['name']}/SKILL.md"}
+    if spec["target"] != "thclaws-standalone":
+        paths.add("AGENTS.md")
+    return paths
 
 
 def load_pack(name: str, capability: dict[str, Any], spec: dict[str, Any], folder: Path,
@@ -117,6 +127,32 @@ def pack_assets(spec: dict[str, Any], packs_dir: Path) -> tuple[dict[str, bytes]
     return files, dependencies, problems
 
 
+def standalone_roles(spec: dict[str, Any], packs_dir: Path) -> dict[str, list[str]]:
+    """Nonempty native allowlists; only pack-declared nonmutating MCP tools reach read roles."""
+    from forge.packs import read_pack
+
+    if spec["permissions"]["tier"] != "T0":
+        raise ValueError("M9 standalone currently supports T0 only; T1 is disabled until upstream "
+                         "writePaths rejects traversal and every symlink escape")
+    readonly = {"Read", "Grep", "Glob"}
+    for capability in spec["capabilities"]:
+        folder = packs_dir / capability["pack"]
+        if (folder / "pack.yaml").exists():
+            pack = read_pack(folder)
+            for server in pack["mcp_servers"]:
+                readonly.update(f"{server['name']}__{tool}" for tool in server["tools"]
+                                if tool not in server["mutating"])
+    declared = set(spec["permissions"]["tools"])
+    unsupported = declared - readonly
+    if unsupported:
+        raise ValueError("M9 T0 tools must be Read/Grep/Glob or pack-declared nonmutating MCP tools; "
+                         "unsupported: " + ", ".join(sorted(unsupported)))
+    roles = {role: sorted(declared) for role in ("planner", "worker", "verifier")}
+    if any(not tools for tools in roles.values()):
+        raise ValueError("standalone roles require nonempty tool subsets; empty tools would inherit all tools")
+    return roles
+
+
 def guarantee_matrix(spec: dict[str, Any]) -> list[dict[str, str]]:
     permissions = spec["permissions"]
     collects = any(item["transport"] == "collect_files" for item in spec["outputs"])
@@ -138,6 +174,20 @@ def guarantee_matrix(spec: dict[str, Any]) -> list[dict[str, str]]:
         ("output_schema", "Not verified", "Live audit has not run. Atlas JSON parsing alone does not validate an output schema."),
         ("skill_mcp_calls", "No evidence", "No live run or SSE tool/skill evidence has been collected."),
     ]
+    if spec["target"] == "thclaws-standalone":
+        replacements = {
+            "tool_allowlist": ("Enforced", "Native named subagents intersect their tool registry with nonempty role tools; orchestration itself is outside this claim."),
+            "no_file_writes": ("Not guaranteed", "All three T0 roles exclude built-in write tools and Bash. Pack declarations and runtime state are not filesystem isolation."),
+            "output_write_scope": ("Declared" if permissions["write_scope"] == "output" else "Not applicable",
+                                   "Native writePaths scopes supported file-write tools, but T1 remains disabled until traversal and every symlink escape are blocked; Bash/MCP are outside this boundary."),
+            "no_shell": ("Enforced" if permissions["shell"] == "none" else "Not applicable",
+                         "Bash is absent from every role when shell=none; planner/verifier always exclude Bash."),
+            "collect_files": ("Not applicable", "agent run does not provide the /agent/run collect_files snapshot contract."),
+            "output_schema": ("Not verified", "Live audit must validate the workflow result against the expected and opposite JSON branches."),
+            "skill_mcp_calls": ("No evidence", "CLI stdout is a workflow result, not paired SSE tool evidence."),
+        }
+        rows = [(claim, *replacements[claim]) if claim in replacements else (claim, status, basis)
+                for claim, status, basis in rows]
     return [{"claim": claim, "status": status, "basis": basis} for claim, status, basis in rows]
 
 
@@ -197,13 +247,16 @@ def render(spec: dict[str, Any], packs_dir: Path | None = None) -> tuple[dict[st
 
     Returns (files, report, pack problems). The static audit re-renders a package from its
     agentspec.json and diffs, so this must stay free of timestamps, absolute paths and environment values.
-    M4 implements the single-worker surface used by both fixtures. Standalone
-    orchestration needs a separate generator; matrix compatibility is not implementation support.
+    Standalone supports only the fixture-backed static-pipeline pattern.
     """
     validate_spec(spec)
     compatibility = resolve_compatibility(spec)
-    if compatibility["package_pattern"] != "single-worker":
-        raise ValueError("M4 generates Atlas single-worker packages only; standalone generation is not implemented")
+    standalone = spec["target"] == "thclaws-standalone"
+    if compatibility["package_pattern"] not in {"single-worker", "static-pipeline"}:
+        raise ValueError("standalone generation is not implemented for this pattern; use static-pipeline")
+    roles = standalone_roles(spec, packs_dir or ROOT / "packs") if standalone else {}
+    if standalone and (len(spec["outputs"]) != 1 or spec["outputs"][0]["transport"] != "assistant_json"):
+        raise ValueError("M9 requires one sole assistant_json output")
     files, dependencies, problems = pack_assets(spec, (packs_dir or ROOT / "packs").resolve())
 
     def add_json(path: str, value: Any) -> None:
@@ -216,7 +269,7 @@ def render(spec: dict[str, Any], packs_dir: Path | None = None) -> tuple[dict[st
     # Map AgentSpec to the upstream manifest shape; validation belongs to thClaws.
     add_json("manifest.json", {
         "version": identity["version"], "license": identity["license"], "author": identity["owner"],
-        "categories": ["custom"], "tags": spec["routing"]["tags"],
+        "categories": ["custom"], "tags": spec.get("routing", {}).get("tags", []),
         "requires": {
             # v0.116.0 stores this string without parsing; retain the full spec range.
             "thclaws_min_version": identity["thclaws_min_version"],
@@ -224,9 +277,12 @@ def render(spec: dict[str, Any], packs_dir: Path | None = None) -> tuple[dict[st
         },
         "permissions": {"shell_execution": spec["permissions"]["shell"], "filesystem_scope": "workspace"},
     })
-    add_json(".thclaws/settings.json", {"agent": {
+    settings = {"agent": {
         "id": identity["name"], "name": identity["name"], "description": spec["mission"]["purpose"],
-    }})
+    }}
+    if standalone and spec["model"]["mode"] == "pinned":
+        settings["model"] = spec["model"]["id"]
+    add_json(".thclaws/settings.json", settings)
     add_json(".thclaws/schemas/refusal.json", spec["refusal"]["schema"])
     for section in ("inputs", "outputs"):
         for item in spec[section]:
@@ -251,6 +307,15 @@ def render(spec: dict[str, Any], packs_dir: Path | None = None) -> tuple[dict[st
         files[path] = templates.get_template(template).render(
             spec=spec, assistant_json=any(item["transport"] == "assistant_json" for item in spec["outputs"]),
         ).encode("utf-8")
+
+    if standalone:
+        add_json(".thclaws/schemas/branch.json", {"oneOf": [spec["outputs"][0]["schema"], spec["refusal"]["schema"]]})
+        for role, tools in roles.items():
+            files[f".thclaws/agents/{role}.md"] = templates.get_template("role.md.j2").render(
+                spec=spec, role=role, tools=tools,
+                contract=files["AGENTS.md"].decode(),
+            ).encode()
+        files[".thclaws/agent_workflow/run.js"] = templates.get_template("run.js.j2").render().encode()
 
     report_schema = json.loads(REPORT_SCHEMA_PATH.read_text(encoding="utf-8"))
     add_json("builder-build-report.schema.json", report_schema)
@@ -280,6 +345,12 @@ def render(spec: dict[str, Any], packs_dir: Path | None = None) -> tuple[dict[st
               if spec["permissions"]["tier"] == "T2" else []),
         ],
     }
+    if standalone:
+        report["deployment_hints"][1] = (
+            "Run thclaws agent run <package> --workflow .thclaws/agent_workflow/run.js --args '<input envelope>'; "
+            "provision the pinned provider and external MCP runtimes. GUI orchestrators must call this same workflow.")
+        report["deployment_hints"] = [hint for hint in report["deployment_hints"]
+                                      if not hint.startswith("Atlas chooses")]
     Draft202012Validator(report_schema).validate(report)
     add_json("builder-build-report.json", report)
     return files, report, problems

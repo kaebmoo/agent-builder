@@ -1,6 +1,6 @@
-# Generator (M4)
+# Generator (M4 / M9)
 
-สร้าง package สำหรับ Atlas `single-worker` จาก AgentSpec ที่ผ่าน schema และ semantic checks ของ M1 ใช้ compatibility resolver ของ M3 แล้ว render แบบ deterministic โดยไม่เรียก LLM และไม่รัน script/MCP ของ pack
+สร้าง package สำหรับ Atlas `single-worker` และ standalone `static-pipeline` จาก AgentSpec ที่ผ่าน schema และ semantic checks ของ M1 ใช้ compatibility resolver ของ M3 แล้ว render แบบ deterministic โดยไม่เรียก LLM และไม่รัน script/MCP ของ pack
 
 ## ใช้งานจาก source checkout
 
@@ -27,7 +27,7 @@ forge generate fixtures/sql-reader/spec.yaml --out out/sql-reader
 - `audit.py` และ `studio.py`: runner บาง ๆ ของ static audit (M5) คัดลอกจาก `templates/` ทุก byte; ดู [audit.md](audit.md)
 - `atlas-node-template.json` เฉพาะ T2 (M7b): requirement ของ daemon แยก และ fragment `human_gate` → worker ผ่าน choice `approve` เท่านั้น; worker/workspace เป็น placeholder ที่ operator ต้อง bind ใน deployment copy และ static audit ห้ามแก้ template ต้นฉบับ
 
-Atlas ไม่มี subagent definition หรือ run.js ใน package. `atlas-workflow` ได้ package ของ node เดียว; M7b เพิ่ม approval fragment สำหรับ T2 และ M8 export ไฟล์ลงทะเบียนกับ flow ที่ bind แล้วผ่าน `forge export` ([export.md](export.md)); การ provision deployment ยังเป็นงานของ operator. Standalone generator ยังไม่รองรับและคืน error ก่อนเขียนไฟล์ แม้ pattern จะผ่าน compatibility matrix
+Atlas ไม่มี subagent definition หรือ run.js ใน package. `atlas-workflow` ได้ package ของ node เดียว; M7b เพิ่ม approval fragment สำหรับ T2 และ M8 export ไฟล์ลงทะเบียนกับ flow ที่ bind แล้วผ่าน `forge export` ([export.md](export.md)); การ provision deployment ยังเป็นงานของ operator. Standalone รองรับ `static-pipeline` เท่านั้น; `batch-fanout` และ `dynamic` ยังคืน error ก่อนเขียนไฟล์
 
 ## Capability assets
 
@@ -73,3 +73,38 @@ PATH="/path/to/thClaws/target/debug:$PATH" python3 scripts/check_m4_generate.py
 `agent new` ถูกเรียกทั้ง static-pipeline, batch-fanout และ dynamic เพื่อตรวจรูปแบบ scaffold โดย dynamic ต้องไม่มี run.js. `agent validate` ตรวจ package จริง รวมถึง synthetic pack script โดยให้ bytecode cache อยู่ภายนอก package
 
 Report ที่ generate มีสถานะ `unverified`; manifest/static/live/security เป็น `not_run`. ผล validator ใน gate เป็นหลักฐานแยกจาก report ที่สร้างและไม่แก้ไฟล์ package. การ validate package format ผ่านไม่ใช่หลักฐานว่า SQL MCP ทำงาน, permission ถูกบังคับ หรือ package ผ่าน audit. `draft` มาจาก static audit (M5, `studio.py` หรือ `forge audit --write`); live audit และ security ยังไม่รัน
+
+
+## Standalone T0 (M9)
+
+```bash
+forge generate fixtures/text-reviewer-standalone/spec.yaml --out out/text-reviewer-standalone
+forge audit out/text-reviewer-standalone --write
+thclaws agent run out/text-reviewer-standalone --workflow .thclaws/agent_workflow/run.js --args '{"request":{"text":"Hello world"}}'
+forge live-test out/text-reviewer-standalone --write
+```
+
+ต้อง provision provider key ของ model ที่ pin ไว้ก่อนรัน. Package เพิ่ม `.thclaws/agents/{planner,worker,verifier}.md`,
+`.thclaws/agent_workflow/run.js` และ schema `branch.json` (`oneOf` result/refusal จาก spec).
+Pinned model ถูกเขียนทั้ง settings และ role definitions; model policy สืบทอด model ของ operator และยังทำ live audit ไม่ได้.
+ไม่มี routing หรือ Atlas export. M9 เปิดเฉพาะ T0 และรับ output เดียวแบบ `assistant_json` เท่านั้น.
+Standalone T1 ถูก generator ปฏิเสธก่อนเขียนไฟล์; static/live audit ปฏิเสธ package T1 ที่สร้างไว้ก่อนหน้านี้ด้วย.
+
+ทุก role ได้เฉพาะ Read/Grep/Glob และ qualified MCP tools ที่ pack ประกาศว่าไม่ mutating ตาม spec.
+Tools อื่น (รวม KMS/Memory writers, Task/WorkflowRun และ unknown tools) ถูก reject โดยไม่ตัดสิทธิ์เงียบ ๆ.
+ทุก role ต้องมี tools ไม่ว่าง; generator reject แทน inherit-all และไม่สร้าง writePaths สำหรับ T0.
+Role definitions และ workflow เป็นไฟล์ deterministic ที่แก้เองแล้ว static audit fail ด้วย drift.
+
+Tool subset ถูก runtime บังคับ แต่ writePaths ของ thClaws 0.116.0 `75edc48` ตรวจ raw glob:
+`outside.txt` ถูกปฏิเสธ ขณะที่ `output/../traversal.txt` เขียนนอก output ได้.
+T0 ที่ส่งมอบมี `output_write_scope: Not applicable` และ `no_file_writes: Not guaranteed`: ไม่มี write tools ใน role
+แต่ runtime state/MCP ไม่ใช่ filesystem isolation. T1 ปิดการใช้งานจนตรวจ upstream fix ผ่านและ review ก่อนปลดล็อก.
+บน thClaws 0.129.0 `7a27129` การ traversal และ symlink ที่มี target ถูกปฏิเสธแล้ว แต่ final dangling symlink
+ยัง bypass `output/**` ได้; `check_m9_standalone.py --write-boundary` จึงยังต้อง fail และ T1 ยังไม่เปิด.
+ดูหลักฐานและขอบเขตใน [DESIGN](DESIGN.md).
+
+
+รองรับ native validation ของ standalone T0 บน thClaws 0.116.0 (`75edc48`), 0.121.0 (`35ccf16`) และ
+0.129.0 (`7a27129`) เท่านั้นในรอบนี้; ต้องตรงทั้ง version และ revision. Atlas/export ยัง pin 0.116.0.
+`thclaws_baseline` ใน report คือ template/catalog baseline;
+ดู runtime ที่ใช้จริงใน `static_audit.thclaws_validate.version`.

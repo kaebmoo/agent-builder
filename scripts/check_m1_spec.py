@@ -15,7 +15,7 @@ sys.path.insert(0, str(ROOT))
 try:
     from jsonschema import Draft202012Validator, SchemaError
 
-    from forge.spec import NETWORK_BUILTIN_TOOLS, PathPart, all_errors
+    from forge.spec import NETWORK_BUILTIN_TOOLS, WORKSPACE_STATE_TOOLS, PathPart, all_errors
 except ModuleNotFoundError:
     print("M1 FAIL: install project dependencies first (jsonschema>=4.20, pyyaml>=6.0)")
     raise SystemExit(1)
@@ -322,6 +322,19 @@ def main() -> int:
         ("permissions", "tools", 0),
         "shell=none cannot declare shell tool",
     )
+
+    # These write under .thclaws/, never output/, so a package declaring one would leave files the
+    # static audit rejects as undeclared. Both non-workspace scopes must refuse them.
+    for state_tool in sorted(WORKSPACE_STATE_TOOLS):
+        for base, scope in ((invoice, "none"), (t1, "output")):
+            state_none = copy.deepcopy(base)
+            state_none["permissions"]["tools"] = [state_tool]
+            assert_invalid(
+                state_none,
+                validator,
+                ("permissions", "tools", 0),
+                f"write_scope={scope} cannot declare workspace state tool",
+            )
 
     for network_tool in sorted(NETWORK_BUILTIN_TOOLS):
         network_none = copy.deepcopy(invoice)

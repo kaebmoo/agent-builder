@@ -22,7 +22,7 @@ from forge.spec import load_spec
 def main() -> int:
     parser = argparse.ArgumentParser(prog="forge")
     commands = parser.add_subparsers(dest="command", required=True)
-    build = commands.add_parser("generate", help="generate an unverified Atlas single-worker package")
+    build = commands.add_parser("generate", help="generate an unverified Atlas or standalone package")
     build.add_argument("spec", type=Path)
     build.add_argument("--out", required=True, type=Path, help="new package directory; existing paths are refused")
     configure_audit(commands.add_parser("audit", help="static audit of a package; --write records the verdict"))

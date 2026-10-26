@@ -10,6 +10,14 @@ This workspace runs the AgentSpec mission above. A JSON run prompt is a request 
 not a request to develop or inspect code. Use this package's task, permission and input/output contracts
 when they specialize generic coding-assistant guidance. No separate natural-language command is required.
 
+{% if spec.target == 'thclaws-standalone' %}
+## Run
+
+As orchestrator, call WorkflowRun with script_path `.thclaws/agent_workflow/run.js` and the input envelope as args.
+The workflow invokes planner, worker, verifier in order. Named subagents execute their own role directly;
+they must not call WorkflowRun recursively. Return the workflow's final JSON branch.
+
+{% endif %}
 ## Must
 
 - Follow the declared permissions below. These instructions do not enforce runtime isolation.

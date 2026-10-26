@@ -16,7 +16,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 from forge.audit import audit_package, write_report
 from forge.generate import generate, render
-from forge.live_test import live_audit, parse_sse, validate_case
+from forge.live_test import COPY_IGNORE, live_audit, parse_sse, validate_case
 from forge.pack_test import setup_fixture, test_pack
 from forge.packs import read_pack, validate_pack
 from forge.spec import load_spec
@@ -179,6 +179,17 @@ def offline(base):
     probe = subprocess.run([sys.executable, str(ROOT / 'packs/sql-readonly/fixture/setup.py'), str(work)],
                            env={'PATH':str(work)}, capture_output=True, text=True, check=False)
     assert probe.returncode == 2, 'setup must probe python3 on PATH, not the harness interpreter'
+    # Both runners share one ignore set so source state can never ride into a candidate run.
+    stray = base / 'ignore-probe'
+    (stray / '.thclaws/state').mkdir(parents=True)
+    (stray / '.thclaws/state/todos.md').write_text('- [ ] planted\n')
+    (stray / '.thclaws/skills/state').mkdir(parents=True)
+    (stray / '.thclaws/skills/state/SKILL.md').write_text('# keep this skill\n')
+    (stray / 'keep.txt').write_text('kept')
+    shutil.copytree(stray, base / 'ignore-copy', ignore=COPY_IGNORE)
+    assert (base / 'ignore-copy/keep.txt').exists()
+    assert (base / 'ignore-copy/.thclaws/skills/state/SKILL.md').exists(), 'state name matching was not anchored'
+    assert not (base / 'ignore-copy/.thclaws/state').exists(), 'source state reached the run directory'
     print('M6 offline PASS: SSE, branches, isolated daemon, MCP evidence, redaction, demotion, skip and M7a fixes')
 
 

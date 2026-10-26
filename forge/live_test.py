@@ -1,4 +1,4 @@
-"""Isolated /agent/run golden-case audit. Only deterministic evidence promotes candidate."""
+"""Isolated Atlas/standalone golden-case audit. Only deterministic evidence promotes candidate."""
 from __future__ import annotations
 
 import argparse
@@ -76,6 +76,18 @@ def parse_sse(lines):
     return events
 
 
+# Source `.thclaws/state/` never rides into a run directory: thClaws reads its todos.md back into
+# the system prompt (DESIGN §4). Keep other directories named `state` so an agent named `state`
+# does not lose its generated skill during the copy.
+def copy_ignore(path, names):
+    source = Path(path)
+    return {name for name in names if name in {'.git', '__pycache__'}
+            or (source.name == '.thclaws' and name == 'state')}
+
+
+COPY_IGNORE = copy_ignore
+
+
 def validate_case(spec, case, events):
     text = ''
     for event in events:
@@ -86,7 +98,10 @@ def validate_case(spec, case, events):
             if not isinstance(delta, str):
                 raise ValueError('invalid text delta')
             text += delta
-    value = json_object(text)
+    return validate_value(spec, case, json_object(text))
+
+
+def validate_value(spec, case, value):
     schemas = {'result': spec['outputs'][0]['schema'], 'refusal': spec['refusal']['schema']}
     expected = case['expect']
     if not Draft202012Validator(schemas[expected]).is_valid(value):
@@ -168,7 +183,7 @@ def run_daemon(package, spec, packs_dir, evidence, timeout, key_env):
     with tempfile.TemporaryDirectory(prefix='forge-live-') as temporary:
         base = Path(temporary).resolve()
         work = base / 'package'
-        shutil.copytree(package, work, ignore=shutil.ignore_patterns('.git', '__pycache__'))
+        shutil.copytree(package, work, ignore=COPY_IGNORE)
         home = base / 'home'
         home.mkdir()
         settings = base / 'settings.json'
@@ -264,6 +279,95 @@ def run_daemon(package, spec, packs_dir, evidence, timeout, key_env):
             process.wait(timeout=5)
 
 
+
+def workflow_value(stdout):
+    """Strip only the native trailing token rollup; never accept fences or arbitrary leading prose."""
+    match = re.search(r"\n\n\[workflow: \d+ subagent turn\(s\), \d+ in / \d+ out tokens\]", stdout)
+    if match is None:
+        raise ValueError('CLI workflow token summary missing')
+    return json_object(stdout[:match.start()])
+
+
+def workflow_process(binary, work, env, arguments, timeout, workflow='.thclaws/agent_workflow/run.js', trace=None):
+    process = subprocess.Popen([binary, 'agent', 'run', str(work), '--workflow', workflow,
+                                '--args', json.dumps(arguments)], cwd=work, env=env,
+                               stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+                               start_new_session=True)
+    try:
+        stdout, stderr = process.communicate(timeout=timeout)
+        if trace is not None:
+            turns = re.search(r"\n\n\[workflow: (\d+) subagent turn\(s\),", stdout)
+            trace.update(subagent_turns=int(turns[1]) if turns else 0, stderr=stderr[-65536:])
+        if process.returncode:
+            raise ValueError(f'CLI workflow failed (exit {process.returncode}; logs omitted)')
+        return workflow_value(stdout)
+    finally:
+        try:
+            os.killpg(process.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+        process.wait(timeout=5)
+
+
+def run_standalone(package, spec, packs_dir, evidence, timeout, key_env):
+    binary = shutil.which(os.environ.get('THCLAWS_BIN', 'thclaws'))
+    with tempfile.TemporaryDirectory(prefix='forge-standalone-') as temporary:
+        base = Path(temporary).resolve()
+        home = base / 'home'
+        home.mkdir()
+        settings = base / 'settings.json'
+        settings.write_text(json.dumps({'browserEnabled': False, 'model': spec['model']['id']}))
+        env = {'PATH': os.environ.get('PATH', os.defpath), 'HOME': str(home),
+               'XDG_CONFIG_HOME': str(home / '.config'), 'THCLAWS_CONFIG': str(settings),
+               'THCLAWS_MCP_ALLOW_ALL': '1', key_env: os.environ[key_env]}
+        hidden = [os.environ[key_env], str(base)]
+        if spec['model']['id'].startswith('oai/'):
+            from urllib.parse import urlsplit
+            endpoint = os.environ.get('OPENAI_COMPAT_BASE_URL', '')
+            if not endpoint:
+                raise FixtureUnavailable('OPENAI_COMPAT_BASE_URL is required for an oai/ model')
+            parsed = urlsplit(endpoint)
+            if parsed.scheme not in ('http', 'https') or not parsed.hostname or parsed.username or parsed.password:
+                raise ValueError('invalid OpenAI-compatible endpoint; credentials must use the key env')
+            if key_env != 'OPENAI_COMPAT_API_KEY':
+                raise ValueError('oai/ models require provider-key-env OPENAI_COMPAT_API_KEY')
+            env['OPENAI_COMPAT_BASE_URL'] = endpoint
+            hidden.append(endpoint)
+        for capability in spec['capabilities']:
+            name = capability['pack']
+            folder = packs_dir / name
+            fixture = base / ('fixture-' + name)
+            fixture.mkdir()
+            values, provenance = setup_fixture(folder, read_pack(folder), fixture, min(timeout, 30))
+            if provenance:
+                evidence['provenance'][name] = provenance
+                if not provenance['matched']:
+                    raise ValueError('SQL source revision differs from source.ref')
+            if set(values) & set(env):
+                raise ValueError('fixture env collides with CLI isolation or another pack')
+            env.update(values)
+            hidden.extend(values.values())
+        if set(spec['env']) - set(env):
+            raise FixtureUnavailable('no fixture values for all declared env names')
+        for index, case in enumerate(spec['evaluation']['golden_cases']):
+            # Every case gets a pristine package and no prior role session/output files.
+            work = base / f'case-{index}'
+            shutil.copytree(package, work, ignore=COPY_IGNORE)
+            result = {'id': case['id'], 'expect': case['expect'], 'status': 'failed', 'events': [], 'detail': ''}
+            evidence['cases'].append(result)
+            try:
+                trace = {}
+                value = workflow_process(binary, work, env, case['input'], timeout, trace=trace)
+                result['events'] = [{'event': 'workflow_result', 'data': redact({'value': value, **trace}, hidden)}]
+                if trace['subagent_turns'] < 3:
+                    raise ValueError('standalone pipeline did not record all three role turns')
+                validate_value(spec, case, value)
+                result['status'] = 'passed'
+            except (ValueError, OSError, subprocess.SubprocessError) as exc:
+                result['detail'] = str(exc) if isinstance(exc, ValueError) else type(exc).__name__
+        if any(case['status'] != 'passed' for case in evidence['cases']):
+            raise ValueError('one or more standalone golden cases failed')
+
 def live_audit(package: Path, *, packs_dir: Path | None = None, timeout: float = 120,
                key_env: str = 'OPENAI_API_KEY', strict: bool = False):
     package = Path(package).resolve()
@@ -282,15 +386,14 @@ def live_audit(package: Path, *, packs_dir: Path | None = None, timeout: float =
                 raise ValueError('static or manifest audit failed; live audit blocked')
             raise FixtureUnavailable('thclaws unavailable; package remains unverified')
         spec = json.loads((package / 'agentspec.json').read_text())
-        if spec['target'] not in ATLAS_TARGETS:
-            raise ValueError('M6 supports /agent/run only; standalone requires M9')
         if len(spec['outputs']) != 1 or spec['outputs'][0]['transport'] != 'assistant_json':
-            raise ValueError('M6 requires one sole assistant_json output')
+            raise ValueError('live audit requires one sole assistant_json output')
         if spec['model']['mode'] != 'pinned':
             raise ValueError('live audit requires a pinned model')
         if not os.environ.get(key_env, '').strip():
             raise FixtureUnavailable(f'no provider key in {key_env}; package remains draft')
-        run_daemon(package, spec, packs_dir or ROOT / 'packs', evidence, timeout, key_env)
+        runner = run_daemon if spec['target'] in ATLAS_TARGETS else run_standalone
+        runner(package, spec, packs_dir or ROOT / 'packs', evidence, timeout, key_env)
         evidence['status'] = 'passed'
         report['package_status'] = 'candidate'
         for row in report['guarantee_matrix']:

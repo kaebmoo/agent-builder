@@ -20,20 +20,23 @@ Exit code: `0` = package เป็น `draft`, `1` = มี error (กฎ static
 |---|---|---|
 | `spec` | `agentspec.json` ผ่าน M1 (schema + semantic) และ M3 (compatibility) และ generator render ได้ | error |
 | `packs` | descriptor ของทุก pack ต้องมี (`missing` = fail), `min_tier` ไม่เกิน tier ของ spec, `tools`/`env` ที่ pack ต้องการถูกประกาศใน spec, network ไม่ต่ำกว่า pack, contract v2 / conformance digest / asset paths ถูกต้อง | error |
-| `inventory` | ไฟล์ที่ generate ต้องมีครบ; ไฟล์ใด ๆ ในทั้ง package ที่ไม่ได้มาจาก spec หรือ pack ที่ประกาศ = fail (เช่น `secrets.env` หรือ README ที่ใส่เพิ่ม) และ symlink ทุกชนิด = fail; ยกเว้นเฉพาะสิ่งที่ runtime/VCS สร้างและ `thclaws agent pack` ตัดทิ้ง: `.thclaws/state/`, `.git/`, `__pycache__/`, `*.pyc`, `.DS_Store`; `.thclaws/agents/` และ `.thclaws/agent_workflow/` เป็นของกฎ `single_worker` | error |
+| `inventory` | ไฟล์ที่ generate ต้องมีครบ; ไฟล์ใด ๆ ในทั้ง package ที่ไม่ได้มาจาก spec หรือ pack ที่ประกาศ = fail (เช่น `secrets.env`, README ที่ใส่เพิ่ม, role เพิ่มใน `.thclaws/agents/`, workflow เพิ่มใน `.thclaws/agent_workflow/`, nested `__pycache__` payload, `.thclaws/state/todos.md` หรือ `.DS_Store`) และ symlink ทุกชนิด = fail; ยกเว้นเฉพาะสิ่งที่ runtime/VCS สร้างและ `thclaws agent pack` ตัดทิ้งโดยไม่ถูกโหลดกลับเป็น prompt: `.thclaws/state/` ยกเว้น `todos.md` ทุก case, `.git/`, root `__pycache__/`, `*.pyc` | error |
 | `drift` | ไฟล์ที่ไม่ใช่ prose ต้องตรงกับที่ render จาก `agentspec.json` ทุก byte: `manifest.json`, `.thclaws/settings.json`, schemas, golden cases, script/skill ของ pack, `audit.py`/`studio.py`, report schema; ไฟล์ JSON บอกตำแหน่งที่ต่าง เช่น `requires.mcp_servers: expected [] found ["sql-admin"]` | error |
 | `agents_md` | มี section `## Mission` / `## Must` / `## Refuse` / `## Output`, มีประโยค "ตอบ JSON ล้วน" เมื่อ output เป็น `assistant_json`, และ block `permissions` / `model` / `state` ตรงกับ spec | error |
 | `refusal` | ทุกข้อใน `refusal.conditions` และ `refusal.response` ต้องอยู่ใน AGENTS.md (`refusal.json` ตรวจผ่าน `drift`) | error |
 | `schema_vocabulary` | keyword ใน embedded schema (inputs / outputs / refusal) ที่อยู่นอก JSON Schema 2020-12 vocabularies เพราะ validator ไม่สนใจ keyword นั้น | warning: `draft` ผ่าน, `--strict` fail |
 | `tools` | ชื่อ tool อยู่ใน catalog `patterns/tools-0.116.0.json` หรือเป็น qualified MCP tool จาก pack; catalog รวม tool แบบ conditional ไม่ได้ยืนยันว่าเปิดอยู่บน daemon | warning: `draft` ผ่าน, `--strict` fail |
 | `single_worker` | เฉพาะ target Atlas: `.thclaws/agents/` และ `.thclaws/agent_workflow/` ต้องว่าง และ AGENTS.md ห้ามสั่ง `WorkflowRun` เพราะ `/agent/run` ไม่มี subagent factory | error |
-| manifest layer | `thclaws agent validate` ผ่าน; binary ต้องเป็น baseline `0.116.0` (ต่างจากนี้ = fail จนกว่าจะตรวจ DESIGN §4 ใหม่); รันโดยตั้ง `PYTHONPYCACHEPREFIX` นอก package จึงไม่ทิ้ง bytecode | passed / failed / skipped |
+| manifest layer | `thclaws agent validate` ผ่าน; binary ต้องเป็น baseline `0.116.0` ยกเว้น standalone T0 ที่รับรองเพิ่มบน `0.121.0` แล้ว (รุ่นอื่น = fail จนกว่าจะตรวจ DESIGN §4 ใหม่); รันโดยตั้ง `PYTHONPYCACHEPREFIX` นอก package จึงไม่ทิ้ง bytecode | passed / failed / skipped |
 
-`single_worker` ผูกกับ `TARGET_RULES` ใน `forge/audit.py` (ปัจจุบัน `atlas-worker`, `atlas-workflow`) ไม่ใช่กฎสากล; `rules_for(target)` บอกชุดกฎของ target นั้น เพื่อให้ M9 เพิ่ม `.thclaws/agents/` และ `run.js` ของ standalone ได้โดยไม่ต้องแก้กฎ Atlas
+`single_worker` ผูกกับ `TARGET_RULES` ใน `forge/audit.py` (ปัจจุบัน `atlas-worker`, `atlas-workflow`) ไม่ใช่กฎสากล; `rules_for(target)` บอกชุดกฎของ target นั้น เพื่อให้ M9 มี `.thclaws/agents/` และ `run.js` ที่ generate จาก spec ได้โดยไม่ต้องแก้กฎ Atlas. ไฟล์ role/workflow ที่เพิ่มเองยังถูกกฎ `inventory` จับทุก target
+
+ข้อยกเว้นของ manifest layer สำหรับ standalone T0 ที่ตรวจแล้วคือ version+revision `0.116.0/75edc48`,
+`0.121.0/35ccf16` และ `0.129.0/7a27129`; version หรือ revision อื่นยัง fail closed ตาม DESIGN §4.
 
 ## ไฟล์ที่แก้ได้หลัง generate
 
-`AGENTS.md` และ `.thclaws/skills/<identity.name>/SKILL.md` เท่านั้น (ขั้น "LLM customize เฉพาะส่วนข้อความ") ตราบใดที่เนื้อหาบังคับตามกฎ `agents_md` / `refusal` ยังอยู่. ไฟล์อื่นเป็นผลของ AgentSpec: ต้องแก้ที่ spec แล้ว generate ใหม่ มิฉะนั้น `drift` fail
+สำหรับ Atlas package: `AGENTS.md` และ `.thclaws/skills/<identity.name>/SKILL.md` แก้ได้หลัง generate (ขั้น "LLM customize เฉพาะส่วนข้อความ") ตราบใดที่เนื้อหาบังคับตามกฎ `agents_md` / `refusal` ยังอยู่. สำหรับ standalone T0: role ทั้งสามฝัง snapshot ของ `AGENTS.md` ไว้ จึงแก้ `AGENTS.md` หลัง generate ไม่ได้; ต้องแก้ spec/template แล้ว generate ใหม่. ไฟล์อื่นเป็นผลของ AgentSpec: ต้องแก้ที่ spec แล้ว generate ใหม่ มิฉะนั้น `drift` fail
 
 ## สถานะ
 
@@ -50,7 +53,7 @@ Exit code: `0` = package เป็น `draft`, `1` = มี error (กฎ static
 - MCP ถูกติดตั้งบน daemon จริงหรือไม่ และ agent เรียก skill/MCP จริงหรือไม่ (live audit M6)
 - permission ถูกบังคับที่ runtime: guarantee matrix ไม่เปลี่ยนจาก M4 เพราะ `/agent/run` ยังไม่ enforce (DESIGN §4, §6)
 - `sql-reader` ผ่าน static audit ได้ด้วย SQL pack v2 ของ M7a; การมี descriptor ไม่ยืนยันว่า runtime ถูกติดตั้ง ต้องใช้ `forge pack test` และ live audit ตามลำดับ
-- standalone package: generator ยัง render ไม่ได้จน M9 จึง fail ที่ `spec`
+- standalone package: M9 รองรับ static-pipeline T0 เท่านั้น; T1 เก่าถูก block โดย render; role/workflow drift เป็น error และ AGENTS.md ต้องระบุ WorkflowRun กับ path ที่ generate
 
 ## Gate
 
@@ -81,7 +84,7 @@ python3 out/sql-reader/studio.py --live
 
 `--timeout 120` กำหนด deadline ต่อ golden case เป็นวินาที; `--provider-key-env OPENAI_API_KEY` เลือก **ชื่อ** environment variable ของ provider ที่ตรงกับ pinned model (ไม่เปลี่ยน model และไม่รับค่า key ผ่าน CLI). ค่าเริ่มต้นตรงกับ fixture `sql-reader` ที่ใช้ OpenAI. Harness ไม่ค้น credential จากไฟล์หรือ keychain ของผู้ใช้.
 
-ก่อน live ต้องผ่าน static audit และ native validate ทุกครั้ง จึงไม่ใช้สถานะ candidate เก่าแทนหลักฐานใหม่. M6 รองรับเฉพาะ target Atlas ที่มี output เดียวเป็น `assistant_json` และ pinned model; standalone รอ M9. Fixture ข้อมูลมาจาก `fixture.setup` ของแต่ละ pack และไม่ใช้ข้อมูลจริง. คัดลอก package ไป temporary directory, start daemon ด้วย CWD ของสำเนา พร้อม HOME/XDG_CONFIG_HOME/THCLAWS_CONFIG ใหม่และ `browserEnabled: false` เพื่อปิด Playwright MCP ที่ runtime เพิ่มเอง, API token สุ่ม และ `THCLAWS_MCP_ALLOW_ALL=1`. ส่งต่อเฉพาะ PATH, provider key ที่เลือก และ env ที่ fixture ประกาศ; env ชนกับ isolation หรือ pack อื่นเป็น error. ปิด process group ของ daemon และลบไฟล์ชั่วคราวเมื่อจบหรือเกิดข้อผิดพลาด. Package ต้นทางเปลี่ยนเฉพาะ report เมื่อระบุ `--write`.
+ก่อน live ต้องผ่าน static audit และ native validate ทุกครั้ง จึงไม่ใช้สถานะ candidate เก่าแทนหลักฐานใหม่. Live audit ต้องมี output เดียวเป็น `assistant_json` และ pinned model; target Atlas ใช้ daemon (M6), standalone ใช้ CLI (M9). Fixture ข้อมูลมาจาก `fixture.setup` ของแต่ละ pack และไม่ใช้ข้อมูลจริง. คัดลอก package ไป temporary directory, start daemon ด้วย CWD ของสำเนา พร้อม HOME/XDG_CONFIG_HOME/THCLAWS_CONFIG ใหม่และ `browserEnabled: false` เพื่อปิด Playwright MCP ที่ runtime เพิ่มเอง, API token สุ่ม และ `THCLAWS_MCP_ALLOW_ALL=1`. ส่งต่อเฉพาะ PATH, provider key ที่เลือก และ env ที่ fixture ประกาศ; env ชนกับ isolation หรือ pack อื่นเป็น error. ปิด process group ของ daemon และลบไฟล์ชั่วคราวเมื่อจบหรือเกิดข้อผิดพลาด. Package ต้นทางเปลี่ยนเฉพาะ report เมื่อระบุ `--write`.
 
 แต่ละ case ส่ง input เป็น JSON ใน `prompt` ของ `/agent/run` พร้อม `stream:true` โดยไม่ใช้ session ร่วมกัน. ตรวจ SSE ว่ามี `result` และ `[DONE]`, ไม่มี error/denied event, แล้ว parse JSON ของ assistant turn สุดท้ายหลัง tool calls. ไม่รับ Markdown fences, duplicate JSON keys หรือ NaN. Validate กับ branch ตาม `expect` และต้องไม่ผ่าน schema ของอีก branch พร้อมกัน. เก็บ SSE events (รวม skill events) ลง `live_audit.cases`; แทนค่า provider key, daemon token และ fixture env ที่ทราบด้วย `<redacted>` ก่อนบันทึก. ไม่บันทึก daemon logs หรือ HTTP error body.
 
@@ -118,3 +121,34 @@ python3 scripts/check_m7b_packs.py --live --model oai/gpt-5.4-mini --provider-ke
 ```
 
 ไม่มี key → skip exit 2 และคง `draft`; ผ่านครบ 4 cases พร้อม SSE `publisher-email-sftp__send_email` → `candidate` โดย `human_approval` ยัง `Not verified` และไม่มีการส่งจริง. ผลรอบเดียวไม่ใช่หลักฐานความนิ่ง; กติกาคือผ่านครบอย่างน้อย 3 รอบติดบน package ที่ hash เท่ากันทุกไฟล์ (ดู PLAN; หลักฐานรอบต่อรอบเก็บใน `out/` ซึ่ง ignored ไม่อยู่ใน clone).
+
+
+## Standalone live audit (M9)
+
+`forge live-test` เลือก `thclaws agent run --workflow .thclaws/agent_workflow/run.js --args` จาก target.
+แต่ละ golden case ใช้สำเนา package ใหม่, HOME/XDG_CONFIG_HOME/THCLAWS_CONFIG แยก, ปิด browser injection,
+ส่งต่อเฉพาะ provider key และ fixture env; ปิดทั้ง process group เมื่อจบ/timeout.
+ตัด native token summary จาก stdout แล้วตรวจ result/refusal กับ expected branch และ reject กรณี match ทั้งสอง branch.
+ต้องมีอย่างน้อยสาม subagent turns; evidence เก็บ `workflow_result` พร้อมค่า JSON, turn count และ stderr ที่ redact แล้ว.
+ไม่ใช้ verifier.ok เป็น audit verdict และไม่สร้าง SSE หรือ MCP inventory ปลอม; skill_mcp_calls ยัง No evidence.
+
+`python3 scripts/check_m9_standalone.py` เป็น gate ของ **T0 ที่ส่งมอบ**: ตรวจ deterministic output,
+T1 generation/legacy audit rejection, safe tool subsets, role drift, native agent new/validate,
+pipeline และ wrong-branch rejection ผ่าน HTTP provider จำลองบน localhost รวมถึงบังคับ Write/Edit/Bash
+กับทุก role แล้วต้องถูกปฏิเสธ. จากนั้นรัน provider จริงเมื่อมี key; ไม่มี binary หรือ key = exit 2.
+`--model oai/gpt-5.4-mini --provider-key-env OPENAI_COMPAT_API_KEY` ใช้ model override โดยไม่แก้ fixture ต้นฉบับ.
+Native synthetic results ไม่ใช่หลักฐานว่า model จริงผ่าน golden cases.
+
+```bash
+# Gate ของ T0 ที่เปิดใช้งาน
+python3 scripts/check_m9_standalone.py
+
+# Security regression ของ T1 ที่ยังปิด: ไม่มี binary = 2, พบ bypass = 1, ปฏิเสธครบ = 0
+python3 scripts/check_m9_standalone.py --write-boundary
+```
+
+โหมด write-boundary ใช้ temporary native worker ที่เพิ่ม Write/writePaths ใน test เท่านั้น ไม่ bypass guard
+ของ generator และไม่เรียก audit เพื่อรับรอง package ทดลองนั้น. ตรวจ positive control, direct denial,
+`output/../traversal.txt` และ symlink ออกจาก output. ผล T1 เป็น BLOCKED/exit 1 หากมี bypass;
+ไม่รวมผลนี้เป็น PASS ของ T0 และไม่มีการปลดล็อก T1 อัตโนมัติแม้ binary ใหม่ผ่าน diagnostic.
+Default CI รัน gate T0; T1 diagnostic เป็นการตรวจแยกเมื่อจะประเมิน upstream fix ไม่ใช่ feature ที่ส่งมอบ.

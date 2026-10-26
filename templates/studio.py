@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Thin runner: audit this package and record the verdict in builder-build-report.json.
 
-Same rules as audit.py (forge.audit); the only difference is --write. Use it after customizing
-AGENTS.md or SKILL.md so the report reflects the package as it is now.
+Same rules as audit.py (forge.audit); the only difference is --write. Use it after supported
+customizations so the report reflects the package as it is now.
 """
 from __future__ import annotations
 

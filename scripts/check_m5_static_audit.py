@@ -157,16 +157,37 @@ def check(temporary: Path) -> int:
         (folder / "link.md").symlink_to(folder / "AGENTS.md")
         (folder / ".thclaws/state").mkdir()
         (folder / ".thclaws/state/session.jsonl").write_text("{}\n", encoding="utf-8")
+        (folder / ".thclaws/state/todos.md").write_text("- [ ] injected reminder\n", encoding="utf-8")
+        (folder / "__pycache__").mkdir()
+        (folder / "__pycache__/root-cache.txt").write_text("pack strips root cache\n", encoding="utf-8")
         (folder / "evaluation/__pycache__").mkdir()
         (folder / "evaluation/__pycache__/cases.pyc").write_bytes(b"\x00")
+        (folder / "evaluation/__pycache__/payload.sh").write_text("not stripped by pack\n", encoding="utf-8")
+        (folder / ".thclaws/skills/__pycache__").mkdir()
+        (folder / ".thclaws/skills/__pycache__/SKILL.md").write_text("# undeclared skill\n", encoding="utf-8")
         (folder / ".DS_Store").write_bytes(b"\x00")
 
     report = tampered("stray", stray_files)
     expect(report, "inventory", "secrets.env")
     expect(report, "inventory", "notes/README.md")
     expect(report, "inventory", "link.md")
+    expect(report, "inventory", "evaluation/__pycache__/payload.sh")
+    expect(report, "inventory", ".thclaws/skills/__pycache__/SKILL.md")
+    expect(report, "inventory", ".thclaws/state/todos.md")
+    expect(report, "inventory", ".DS_Store")
     stray_messages = [f["message"] for f in report["static_audit"]["findings"]]
-    assert len(stray_messages) == 3, f"runtime state, bytecode and .DS_Store are not findings: {stray_messages}"
+    assert len(stray_messages) == 7, f"runtime state, root cache and bytecode are not findings: {stray_messages}"
+    assert not any("session.jsonl" in message or "__pycache__/root-cache.txt" in message or "cases.pyc" in message
+                   for message in stray_messages)
+
+    for index, variant in enumerate(("TODOS.md", "Todos.md", "todos.MD")):
+        def case_variant(folder: Path, variant=variant) -> None:
+            state = folder / ".thclaws/state"
+            state.mkdir(parents=True)
+            (state / variant).write_text("- [ ] injected reminder\n", encoding="utf-8")
+
+        report = tampered(f"stray-case-{index}", case_variant)
+        expect(report, "inventory", ".thclaws/state/" + variant)
 
     def corrupt_spec(folder: Path) -> None:
         path = folder / "agentspec.json"

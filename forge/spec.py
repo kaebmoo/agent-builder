@@ -38,6 +38,22 @@ NETWORK_BUILTIN_TOOLS = {
     "websearch",
     "youtubetranscript",
 }
+# Built-ins that persist under the workspace `.thclaws/` tree instead of `output/`, checked on
+# v0.121.0 revision 35ccf16: TodoWrite (.thclaws/state/todos.md), Memory* (.thclaws/memory/),
+# Kms* writers (.thclaws/kms/) and GuiShell* (.thclaws/gui-shell/). Only write_scope=workspace
+# can hold them; otherwise a run leaves files the static audit must reject as undeclared.
+WORKSPACE_STATE_TOOLS = {
+    "todowrite",
+    "memoryappend",
+    "memorywrite",
+    "kmsappend",
+    "kmscreate",
+    "kmsdelete",
+    "kmswrite",
+    "kmswritesource",
+    "guishellcreate",
+    "guishellwritefile",
+}
 VERSION_OPERATORS = (">=", "<=", "==", ">", "<")
 # thClaws presents MCP tools as <server>__<tool> (mcp.rs::MCP_NAME_SEPARATOR). Keep both segments
 # reversible: server without "_", tool without "__". Built-ins never contain "__".
@@ -83,6 +99,14 @@ def semantic_errors(spec: dict[str, Any]) -> list[Finding]:
                 (
                     ("permissions", "tools", index),
                     f"write_scope=none cannot declare write tool: {tool}",
+                )
+            )
+        if (permissions.get("write_scope") in ("none", "output")
+                and normalized_tool in WORKSPACE_STATE_TOOLS):
+            errors.append(
+                (
+                    ("permissions", "tools", index),
+                    f"write_scope={permissions['write_scope']} cannot declare workspace state tool: {tool}",
                 )
             )
         if permissions.get("network") == "none" and normalized_tool in NETWORK_BUILTIN_TOOLS:

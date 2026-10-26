@@ -1,0 +1,12 @@
+// Fixed role order; exceptions fail the workflow instead of fabricating a refusal.
+const input = args;
+const plan = await thclaws.subagent({agent: "planner",
+  prompt: "Plan for original input: " + JSON.stringify(input),
+  budget: {tokens: 12000, time: "120s"}});
+const result = await thclaws.subagent({agent: "worker",
+  prompt: "Original input: " + JSON.stringify(input) + "\nAdvisory plan: " + JSON.stringify(plan),
+  budget: {tokens: 20000, time: "120s"}});
+const final = await thclaws.subagent({agent: "verifier",
+  prompt: "Original input: " + JSON.stringify(input) + "\nWorker response: " + JSON.stringify(result),
+  budget: {tokens: 12000, time: "120s"}});
+globalThis.__wf_result = JSON.stringify(final);

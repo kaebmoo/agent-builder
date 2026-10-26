@@ -15,7 +15,15 @@ import yaml
 from jinja2 import TemplateError
 from jsonschema import Draft202012Validator
 
-from forge.generate import REPORT_SCHEMA_PATH, ROOT, THCLAWS_BASELINE, editable_files, json_text, render
+from forge.generate import (
+    REPORT_SCHEMA_PATH,
+    ROOT,
+    STANDALONE_THCLAWS_COMPATIBILITY,
+    THCLAWS_BASELINE,
+    editable_files,
+    json_text,
+    render,
+)
 from forge.packs import conformance, mcp_tools, read_pack
 from forge.spec import ATLAS_TARGETS
 
@@ -87,6 +95,9 @@ def agents_md_findings(spec: dict[str, Any], text: str) -> list[Finding]:
             findings.append(error("agents_md", f"AGENTS.md is missing the required section '## {section}'"))
     if any(item["transport"] == "assistant_json" for item in spec["outputs"]) and PURE_JSON_SENTENCE not in text:
         findings.append(error("agents_md", f"AGENTS.md must contain '{PURE_JSON_SENTENCE}' because an output is assistant_json"))
+    if spec["target"] == "thclaws-standalone" and (
+            "WorkflowRun" not in text or ".thclaws/agent_workflow/run.js" not in text):
+        findings.append(error("agents_md", "standalone AGENTS.md must invoke WorkflowRun with the generated run.js path"))
     for label in ("permissions", "model", "state"):
         if json_text(spec[label]).rstrip("\n") not in text:
             findings.append(error("agents_md", f"AGENTS.md must embed the declared {label} block exactly as in agentspec.json"))
@@ -111,10 +122,10 @@ def single_worker_findings(package: Path, text: str) -> list[Finding]:
 
 
 def ignorable(path: str) -> bool:
-    """Runtime state, VCS and bytecode that thclaws agent pack strips; everything else must be rendered."""
+    """Runtime state, VCS and root bytecode/cache paths that thclaws agent pack strips."""
     parts = path.split("/")
-    return (path.startswith(".thclaws/state/") or ".git" in parts[:1] or "__pycache__" in parts
-            or parts[-1] == ".DS_Store" or path.endswith(".pyc"))
+    return ((path.startswith(".thclaws/state/") and path.rsplit("/", 1)[-1].casefold() != "todos.md")
+            or path.startswith("__pycache__/") or ".git" in parts[:1] or path.endswith(".pyc"))
 
 
 def error(rule: str, message: str) -> Finding:
@@ -171,8 +182,7 @@ def static_findings(package: Path, packs_dir: Path | None = None) -> tuple[list[
         path = target.relative_to(package).as_posix()
         if target.is_symlink():
             findings.append(error("inventory", f"{path}: symlinks are not allowed in a package"))
-        elif (target.is_file() and not ignorable(path) and path not in files
-              and not path.startswith((".thclaws/agents/", ".thclaws/agent_workflow/"))):
+        elif target.is_file() and not ignorable(path) and path not in files:
             findings.append(error("inventory", f"{path}: not generated from agentspec.json or a declared pack; "
                                   "remove it or declare it through the spec"))
 
@@ -192,7 +202,7 @@ def static_findings(package: Path, packs_dir: Path | None = None) -> tuple[list[
     return findings, report
 
 
-def thclaws_validate(package: Path) -> dict[str, Any]:
+def thclaws_validate(package: Path, *, standalone_t0: bool = False) -> dict[str, Any]:
     """Run `thclaws agent validate` without leaving bytecode in the package. Skips explicitly when absent."""
     binary = shutil.which(os.environ.get("THCLAWS_BIN", "thclaws"))
     if binary is None:
@@ -201,9 +211,23 @@ def thclaws_validate(package: Path) -> dict[str, Any]:
     lines = [line.strip() for line in subprocess.run([binary, "--version"], capture_output=True, text=True,
                                                      check=True, timeout=30).stdout.splitlines() if line.strip()]
     version = " ".join(lines[:2])
-    if lines[0] != f"thclaws {THCLAWS_BASELINE}":
+    if standalone_t0:
+        runtime_version = lines[0].removeprefix("thclaws ") if lines else ""
+        revision = next((line.split(":", 1)[1].strip().split()[0]
+                         for line in lines[1:] if line.startswith("revision:") and ":" in line
+                         and line.split(":", 1)[1].strip()), None)
+        supported_revisions = STANDALONE_THCLAWS_COMPATIBILITY.get(runtime_version, frozenset())
+        verified = revision in supported_revisions
+        expected = ", ".join(f"{runtime} ({', '.join(sorted(revisions))})"
+                             for runtime, revisions in STANDALONE_THCLAWS_COMPATIBILITY.items())
+        detail = (f"{version} revision {revision or '<missing>'} is not a verified runtime; "
+                  f"expected one of {expected}; re-check DESIGN §4 first")
+    else:
+        verified = bool(lines) and lines[0] == f"thclaws {THCLAWS_BASELINE}"
+        detail = f"{version} is not the verified baseline {THCLAWS_BASELINE}; re-check DESIGN §4 first"
+    if not verified:
         return {"status": "failed", "version": version,
-                "detail": f"{lines[0]} is not the verified baseline {THCLAWS_BASELINE}; re-check DESIGN §4 first"}
+                "detail": detail}
     with tempfile.TemporaryDirectory(prefix="agent-builder-pycache-") as cache:
         result = subprocess.run([binary, "agent", "validate", str(package)], capture_output=True, text=True,
                                 env={**os.environ, "PYTHONPYCACHEPREFIX": cache}, timeout=120, check=False)
@@ -226,7 +250,8 @@ def audit_package(package: Path, *, packs_dir: Path | None = None, strict: bool 
         if not isinstance(report, dict) or not isinstance(report.get("audit"), dict):
             raise ValueError("; ".join(f["message"] for f in findings) + " (no build report to record the failure)")
         report["audit"]["spec"] = "failed"
-    validate = thclaws_validate(package) if thclaws else {
+    standalone_t0 = report.get("target") == "thclaws-standalone" and report.get("declared_permissions", {}).get("tier") == "T0"
+    validate = thclaws_validate(package, standalone_t0=standalone_t0) if thclaws else {
         "status": "skipped", "version": None, "detail": "thclaws validation disabled for this run"}
     errors = [f for f in findings if f["severity"] == "error" or strict]
     report["audit"].update(static="failed" if errors else "passed", manifest=validate["status"])

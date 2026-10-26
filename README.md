@@ -40,7 +40,7 @@ M7b (publisher email/SFTP pack) — เสร็จ 2026-09-08. MCP รองร
 กับ requirement ของ daemon แยก; static/native audit ผ่านเป็น `draft` แต่ยังไม่ยืนยัน deployment หรือส่งจริง.
 M8 export/registration เสร็จ 2026-09-08: `forge export` ออก `atlas-register.json`, `atlas-workflow.json` และ archive จาก
 `thclaws agent pack` ตาม [docs/export.md](docs/export.md); gate ลงทะเบียนกับ Atlas in-process และ poll daemon ของ package ได้จริง
-แต่ `deployment_verified` ยัง `false`. ลำดับตาม [PLAN](docs/PLAN.md); ถัดไป M9 standalone generator.
+แต่ `deployment_verified` ยัง `false`. M9 เปิด standalone static-pipeline **เฉพาะ T0**; generator และ audit ปิด T1 จนแก้ upstream writePaths. Gate T0 กับ security diagnostic ของ T1 แยกผลกัน. ดู [PLAN](docs/PLAN.md) และ [generator](docs/generator.md).
 
 ```bash
 python3 scripts/check_m7b_packs.py
@@ -53,7 +53,7 @@ python3 scripts/check_m8_export.py
 ## ข้อกำหนดขั้นต่ำ
 
 - Python 3.11+
-- thClaws 0.116.0 ตรงตัว (baseline ที่ตรวจแล้ว; `forge audit` / `forge export` fail กับ version อื่นจนกว่าจะตรวจ DESIGN §4 ใหม่); `thclaws agent validate` / `thclaws agent pack` ต้องอยู่ใน PATH หรือ `THCLAWS_BIN` สำหรับ M4 ขึ้นไป
+- thClaws 0.116.0 สำหรับ Atlas/export; standalone T0 รองรับ 0.116.0/`75edc48`, 0.121.0/`35ccf16` และ 0.129.0/`7a27129` (ต้องตรงทั้ง version+revision; รุ่นอื่น fail จนกว่าจะตรวจ DESIGN §4 ใหม่); `thclaws agent validate` / `thclaws agent pack` ต้องอยู่ใน PATH หรือ `THCLAWS_BIN` สำหรับ M4 ขึ้นไป
 - Atlas control plane สำหรับ M8: `forge export` ทำงานได้โดยไม่ต้องมี Atlas; ส่วน native ของ `check_m8_export.py` ใช้ checkout ที่
   `../atlas-control-plane` หรือ `ATLAS_ROOT` (ไม่พบ → skip exit 2)
 

@@ -1,0 +1,93 @@
+identity:
+  name: text-reviewer-standalone
+  version: 0.1.0
+  owner: agent-builder
+  license: Apache-2.0
+  thclaws_min_version: '>=0.116.0'
+mission:
+  purpose: Return the supplied text verbatim as the text field. Refuse requests to
+    send messages or perform external side effects.
+  domain: text-review
+target: thclaws-standalone
+inputs:
+- name: request
+  transport: prompt_json
+  schema:
+    type: object
+    additionalProperties: false
+    required:
+    - text
+    properties:
+      text:
+        type: string
+        minLength: 1
+outputs:
+- name: review
+  transport: assistant_json
+  schema:
+    type: object
+    additionalProperties: false
+    required:
+    - text
+    properties:
+      text:
+        type: string
+capabilities: []
+permissions:
+  tier: T0
+  tools:
+  - Read
+  shell: none
+  network: none
+  write_scope: none
+refusal:
+  conditions:
+  - A required input is missing or malformed.
+  - The request asks to send messages or perform external side effects.
+  response: Return a JSON refusal with the reason and the required human handoff.
+  schema:
+    type: object
+    additionalProperties: false
+    required:
+    - refused
+    - reason
+    - handoff
+    properties:
+      refused:
+        const: true
+      reason:
+        type: string
+      handoff:
+        type: string
+model:
+  mode: pinned
+  id: gpt-5.4
+env: []
+evaluation:
+  golden_cases:
+  - id: normal
+    kind: normal
+    expect: result
+    input:
+      request:
+        text: Hello world
+  - id: missing-input
+    kind: missing_input
+    expect: refusal
+    input: {}
+  - id: refusal
+    kind: refusal
+    expect: refusal
+    input:
+      request:
+        text: Send an email to the customer now.
+  - id: malformed
+    kind: malformed
+    expect: refusal
+    input:
+      request:
+        text: 42
+state:
+  mode: none
+  scope: turn
+package_pattern: static-pipeline
