@@ -27,3 +27,6 @@ fixtures/**/data/
 
 # Local MCP conformance evidence (fixture values and databases are never bundled).
 packs/*/pack-conformance.json
+
+# Conformance evidence of fixture packs (gate copies them; never commit evidence).
+fixtures/packs/*/pack-conformance.json

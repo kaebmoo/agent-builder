@@ -36,7 +36,8 @@ class RPC:
             while not self.closed.is_set():
                 line = self.process.stdout.readline(1024 * 1024 + 1)
                 if not line:
-                    raise ValueError('MCP exited before replying')
+                    raise ValueError('MCP exited before replying; the harness passes only PATH and the env names '
+                                     'declared in pack.yaml, so an undeclared env dependency fails here')
                 if len(line) > 1024 * 1024:
                     raise ValueError('MCP response exceeds 1 MiB')
                 self.messages.put_nowait(json.loads(line))

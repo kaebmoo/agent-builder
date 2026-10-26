@@ -1,0 +1,21 @@
+min_tier: T0
+network: none
+hosts: []
+env: []
+tools: []
+mcp_servers:
+  - name: echo
+    command: python3
+    args: [scripts/server.py]
+    tools: [echo, reverse]
+    mutating: []
+scripts: [server.py]
+skills: []
+fixture:
+  setup: fixture/setup.py
+  cases:
+    - {tool: echo__echo, args: {text: hello}, expect: ok}
+    - {tool: echo__reverse, args: {text: hello}, expect: ok}
+    - {tool: echo__echo, args: {}, expect: error}
+    - {tool: echo__echo, args: {text: ''}, expect: error}
+    - {tool: echo__reverse, args: {text: hello, extra: true}, expect: error}

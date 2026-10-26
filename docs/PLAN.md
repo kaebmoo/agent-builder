@@ -276,3 +276,24 @@ M9 compatibility follow-up 2026-09-16: ตรวจ thClaws `0.129.0` revision `
 probes ผ่าน. `--write-boundary` ปฏิเสธ `..` และ symlink ที่มี target แล้ว แต่พบว่า final dangling symlink
 ยังเขียนนอก `output/` ได้ จึงคง T1 disabled และ `output_write_scope: Declared` ตาม DESIGN; ห้ามเลื่อนสถานะจาก
 diagnostic นี้จน upstream แก้ edge case ดังกล่าว.
+
+M10 เสร็จ 2026-10-26: `forge pack new <name>` scaffold (`pack.yaml` v2 ที่ทุกจุดตัดสินเป็น `TODO`, `fixture/setup.py`,
+README, โฟลเดอร์ `scripts/`), `forge pack discover --name <server> --command <cmd> [--env NAME] [--out <file>] --args ...`
+ร่าง `pack.yaml` จาก `initialize` → `tools/list` ของ server จริงด้วย env สะอาด (tools ครบ, inputSchema/description เป็น comment,
+digest ของ surface, `mutating` เป็นข้อเสนอจาก annotations) โดยปล่อย tier/network/fixture เป็น `TODO`; `forge pack test` รับ
+`--packs-dir`. ทั้ง scaffold และร่างตั้งใจให้ `forge pack test` fail พร้อมเหตุผล ("invalid min_tier or network") จนผู้เขียนเติม.
+Harness รายงานเหตุผลเมื่อ server ต้องการ env ที่ไม่ได้ประกาศ. เพิ่ม `docs/packs.md`, skill `builder/.thclaws/skills/pack-author/SKILL.md`
+(ที่ M11 จะใช้ต่อ) และ reference pack `fixtures/packs/echo/` (stdlib stdio MCP สอง tool, ไม่มี env/network, พร้อม `spec.yaml` ที่ใช้ pack นี้).
+`check_m10_pack_authoring.py` ผ่าน: scaffold → implement echo → conformant แบบ deterministic; discover → เติม → conformant;
+annotations destructive ถูกเสนอเป็น `mutating` และ T0 ที่คงข้อเสนอนั้นถูก reject; server ที่อ่าน env นอกประกาศ, tool เกิน/ขาด,
+tools/list แบ่งหน้า, negative case ที่ server ไม่ปฏิเสธ, ชื่อ server/tool นอก charset ถูก fail/reject พร้อมเหตุผล; CLI exit code
+0/1 และปฏิเสธเขียนทับ; spec echo ได้ `.thclaws/mcp.json` ที่มีแค่ command/args, static audit ผ่าน, dependency `conformant`,
+conformance ที่ลบ → `assets_bundled`, ที่ failed → static fail. ไม่ใช้ provider key.
+
+สภาพแวดล้อมรอบนี้ (cloud container): build thClaws จาก GitHub `kaebmoo/thClaws` tag `v0.116.0` = commit `b962abc` (placeholder
+`frontend/dist/index.html` สำหรับ CLI-only build). Revision ที่ gate pin ไว้ (`75edc48`, `35ccf16`, `7a27129`) **ไม่อยู่ใน history
+บน GitHub** (643 commits) จึงเป็น commit ใน checkout ของผู้ดูแลเท่านั้น. ผลด้วย binary นี้: M10 **exit 0** (`echo-reader` เป็น `draft`
+บน `thclaws 0.116.0 revision: b962abc`), M4/M5/M7b native exit 0, M8 archive ผ่านแต่ skip Atlas (exit 2), M7a/M6 skip เพราะไม่มี
+checkout AI (exit 2), M9 **exit 1 ตามที่ออกแบบ** (revision ไม่ใช่คู่ที่รับรอง; fail closed ไม่ใช่ skip) — ต้องรัน M9 บนเครื่องที่มี
+revision ที่ pin หรือ push commit เหล่านั้นขึ้น GitHub แล้วตรวจ DESIGN §4 ใหม่ก่อนเพิ่มคู่ `0.116.0/b962abc`. Ruff 0.16.9 และ
+`git diff --check` ผ่าน; ไม่มี commit/push ใน session นี้จนผู้ใช้สั่ง. ถัดไป M11.

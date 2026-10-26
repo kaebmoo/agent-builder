@@ -32,7 +32,8 @@ Atlas ไม่มี subagent definition หรือ run.js ใน package. `a
 ## Capability assets
 
 M7a แทน descriptor เดิมด้วย contract v2 ตาม [DESIGN §5](DESIGN.md) ทั้งชุด ไม่รองรับ v1.
-ดูตัวอย่างจริงที่ `packs/sql-readonly/pack.yaml` และ [คู่มือ SQL pack](../packs/sql-readonly/README.md).
+ดูตัวอย่างจริงที่ `packs/sql-readonly/pack.yaml` และ [คู่มือ SQL pack](../packs/sql-readonly/README.md);
+ผู้เขียน pack ใหม่เริ่มที่ [packs.md](packs.md) (`forge pack new` / `discover` / `test`, M10) และ reference `fixtures/packs/echo/`.
 
 `scripts` อ้างไฟล์ `.py` ใต้ `scripts/`; `skills` อ้าง `<name>/SKILL.md` ใต้ `skills/`.
 ไม่รับ symlink หรือ path traversal. Asset ถูกคัดลอกเป็น `.thclaws/scripts/<pack>--<file>.py`

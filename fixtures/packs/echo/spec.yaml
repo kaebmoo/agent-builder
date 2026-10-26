@@ -1,0 +1,82 @@
+identity:
+  name: echo-reader
+  version: 0.1.0
+  owner: agent-builder
+  license: Apache-2.0
+  thclaws_min_version: ">=0.116.0"
+mission:
+  purpose: Echo or reverse a short text through the echo capability pack and return the tool result unchanged.
+  domain: fixture
+target: atlas-worker
+routing:
+  role: echo-reader
+  tags: [fixture, echo]
+inputs:
+  - name: request
+    transport: prompt_json
+    schema:
+      type: object
+      additionalProperties: false
+      required: [text, operation]
+      properties:
+        text: {type: string, minLength: 1, maxLength: 1000}
+        operation: {type: string, enum: [echo, reverse]}
+outputs:
+  - name: echo_result
+    transport: assistant_json
+    schema:
+      type: object
+      additionalProperties: false
+      required: [operation, text]
+      properties:
+        operation: {type: string, enum: [echo, reverse]}
+        text: {type: string}
+capabilities:
+  - pack: echo
+    params: {}
+permissions:
+  tier: T0
+  tools: [echo__echo, echo__reverse]
+  shell: none
+  network: none
+  write_scope: none
+refusal:
+  conditions:
+    - A required request input is missing or malformed.
+    - The requested operation is not echo or reverse.
+  response: Return a JSON refusal with the reason.
+  schema:
+    type: object
+    additionalProperties: false
+    required: [refused, reason]
+    properties:
+      refused: {const: true}
+      reason: {type: string}
+model:
+  mode: pinned
+  id: gpt-5.4
+env: []
+evaluation:
+  golden_cases:
+    - id: normal
+      kind: normal
+      expect: result
+      input:
+        request: {text: hello, operation: reverse}
+    - id: missing-input
+      kind: missing_input
+      expect: refusal
+      input: {}
+    - id: refusal
+      kind: refusal
+      expect: refusal
+      input:
+        request: {text: hello, operation: delete}
+    - id: malformed
+      kind: malformed
+      expect: refusal
+      input:
+        request: {text: hello, operation: echo, unexpected: true}
+state:
+  mode: none
+  scope: turn

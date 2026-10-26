@@ -151,7 +151,7 @@ source: {repo: https://github.com/kaebmoo/AI, ref: <commit>}   # optional proven
 - `tools` ของ pack ส่วน MCP = **ทุก** tool ที่ server advertise เพราะ thClaws ลงทะเบียนทั้งหมด (§4) และ spec ต้องประกาศ ⊇ ชุดนี้: declaration ของ spec คือ inventory ของสิ่งที่ model จะเห็นจริง ไม่ใช่รายการที่อยากใช้. server ที่มี tool แบบ admin ต้องถูก launch ในโหมดที่ไม่ expose (ผ่าน `args`) หรือ pack นั้นเป็น T2
 - harness รัน server ด้วย environment สะอาด (PATH + env ที่ประกาศพร้อมค่าจาก fixture เท่านั้น) เพื่อให้ dependency ต่อ env ที่ไม่ได้ประกาศโผล่เป็น start failure ตั้งแต่ตอน test ไม่ใช่ตอน deploy
 - `pack-conformance.json` เก็บ digest ของ `tools/list` (ชื่อ + input schema) ครั้งล่าสุด; server ภายนอกที่เปลี่ยน surface จะถูกจับได้ในการ test ครั้งถัดไป และ pack owner ต้องแก้ `pack.yaml` ก่อน spec ที่ใช้มันจะกลับมา `draft`
-- `forge pack discover --command <cmd> [--args ...]` (M10) ร่าง `pack.yaml` จากสิ่งที่ MCP บอกเองได้ (ชื่อ server จาก argument, tools + input schema + description จาก `tools/list`, annotations ถ้ามีเป็นข้อเสนอของ `mutating`) แต่ไม่ตัดสิน `min_tier`, `network`, `env`, `mutating` และ fixture; ผลของ discover ไม่ใช่ `conformant` จนกว่าผู้เขียนจะเติมส่วนที่เหลือแล้ว `forge pack test` ผ่าน
+- `forge pack discover --name <server> --command <cmd> [--env NAME] [--out <file>] --args ...` (M10) ร่าง `pack.yaml` จากสิ่งที่ MCP บอกเองได้ (ชื่อ server จาก argument, tools + input schema + description จาก `tools/list`, digest ของ surface, annotations ถ้ามีเป็นข้อเสนอของ `mutating` ที่เขียนลง field พร้อม comment ให้ยืนยัน) แต่ไม่ตัดสิน `min_tier`, `network`, fixture (ปล่อย `TODO` ที่ทำให้ `validate_pack` reject) และไม่ยืนยัน `mutating`; `--env NAME` ส่งผ่านเฉพาะชื่อจาก process ปัจจุบันเพื่อให้ server start ได้และลงชื่อนั้นใน `env` ของร่าง ค่าไม่ถูกพิมพ์. server name/tool name นอก charset ถูก reject ตั้งแต่ discover. `forge pack new <name>` scaffold รูป v2 เดียวกันพร้อม `fixture/setup.py` และ README; ทั้งสองไม่ใช่ `conformant` จนกว่าผู้เขียนจะเติมส่วนที่เหลือแล้ว `forge pack test` ผ่าน (ดู `docs/packs.md`, reference `fixtures/packs/echo/`)
 
 Lifecycle ของความสามารถหนึ่งตัว (ตัวอย่าง: agent พยากรณ์อากาศจาก Google Weather)
 1. คนหรือ coding session เขียน MCP `google-weather` ในที่ของมันเองตาม contract: stdio JSON-RPC, tool `forecast`, อ่าน `GOOGLE_WEATHER_API_KEY` จาก env, fixture เป็น recorded response
@@ -290,6 +290,16 @@ M9 T0 native check 2026-09-09 บน 0.121.0 `35ccf16`: agent new/validate แ�
 forced Write/Edit/Bash ถูกปฏิเสธครบทั้งสาม role. T1 diagnostic แยกยัง fail ทั้ง `output/../traversal.txt`
 และ `output/link/escaped.txt` เมื่อ link ชี้ไป directory นอก output; positive control เขียนใน output ได้.
 ดังนั้น scoped compatibility ของ T0 ไม่ใช่การรับรอง writePaths หรือยกระดับ Atlas runtime.
+
+### Revision provenance (2026-10-26)
+
+ตรวจ history ของ `kaebmoo/thClaws` บน GitHub (643 commits ถึง `v0.146.0` = `492bfb2`): release commit ของ `v0.116.0` คือ
+`b962abc`, `v0.121.0` คือ `e45475d`, `v0.129.0` คือ `a3cb0a0`; revision ที่เอกสารนี้และ gate pin ไว้ (`75edc48`, `35ccf16`, `7a27129`)
+ไม่อยู่ใน history นั้น จึงเป็น commit ใน checkout ของผู้ดูแล (thClaws คำนวณ revision จาก `git rev-parse --short HEAD` ใน
+`crates/core/build.rs`). ผลต่อ gate: Atlas/export ตรวจเฉพาะ `thclaws 0.116.0` จึงรับ binary ที่ build จาก `b962abc` ได้
+(M4/M5/M7b/M8/M10 native ผ่านด้วย binary นี้) ส่วน standalone T0 ตรวจคู่ version+revision จึง fail closed กับ `b962abc` ตามที่ตั้งใจ;
+จะเพิ่มคู่ `0.116.0/b962abc` ได้ก็ต่อเมื่อตรวจ source ของ commit นั้นเทียบ claim ใน §4 และรัน M9 native ผ่านก่อน.
+Build แบบ CLI-only ต้องมี `frontend/dist/index.html` (ไฟล์ว่างพอ) เพราะ `gui.rs`/`server.rs` `include_str!` ไฟล์นี้.
 
 ### M9 compatibility follow-up (2026-09-16, thClaws 0.129.0 `7a27129`)
 
