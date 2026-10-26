@@ -1,0 +1,106 @@
+# Expected shape of the spec the builder-agent drafts for fixtures/builder/weather-request.md.
+# The pack google-weather does not exist in packs/: forge generate accepts this spec and the report says `missing`.
+# `confirmed_by` is the builder-only marker that build.py requires and strips; forge rejects it if left in.
+identity:
+  name: google-weather-forecaster
+  version: 0.1.0
+  owner: seal
+  license: Apache-2.0
+  thclaws_min_version: ">=0.116.0"
+mission:
+  purpose: Answer a weather forecast question for one location and date range using the Google Weather capability pack, and return the forecast as structured JSON.
+  domain: weather
+target: atlas-workflow
+routing:
+  role: google-weather-forecaster
+  tags: [weather, forecast]
+inputs:
+  - name: request
+    transport: prompt_json
+    schema:
+      type: object
+      additionalProperties: false
+      required: [location, days]
+      properties:
+        location: {type: string, minLength: 1, maxLength: 200}
+        days: {type: integer, minimum: 1, maximum: 10}
+outputs:
+  - name: forecast
+    transport: assistant_json
+    schema:
+      type: object
+      additionalProperties: false
+      required: [location, days, forecast]
+      properties:
+        location: {type: string}
+        days: {type: integer}
+        forecast:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required: [date, summary, temperature_c]
+            properties:
+              date: {type: string}
+              summary: {type: string}
+              temperature_c:
+                type: object
+                additionalProperties: false
+                required: [min, max]
+                properties:
+                  min: {type: number}
+                  max: {type: number}
+capabilities:
+  - pack: google-weather
+    params: {}
+permissions:
+  tier: T2
+  tools: [google-weather__forecast]
+  shell: none
+  network: allowlist
+  write_scope: workspace
+refusal:
+  conditions:
+    - The request input is missing or does not match its schema.
+    - The location cannot be resolved or the forecast range exceeds ten days.
+    - The request asks for anything other than a weather forecast.
+  response: Return a JSON refusal with the reason and ask the requester to correct the request.
+  schema:
+    type: object
+    additionalProperties: false
+    required: [refused, reason]
+    properties:
+      refused: {const: true}
+      reason: {type: string}
+model:
+  mode: pinned
+  id: gpt-5.4
+env: [GOOGLE_WEATHER_API_KEY]
+evaluation:
+  golden_cases:
+    - id: normal
+      kind: normal
+      expect: result
+      input:
+        request: {location: Bangkok, days: 3}
+    - id: missing-input
+      kind: missing_input
+      expect: refusal
+      input: {}
+    - id: refusal
+      kind: refusal
+      expect: refusal
+      input:
+        request: {location: Bangkok, days: 30}
+    - id: malformed
+      kind: malformed
+      expect: refusal
+      input:
+        request: {location: Bangkok, days: 3, unexpected: true}
+state:
+  mode: none
+  scope: turn
+confirmed_by:
+  permissions: seal
+  env: seal
+  capabilities: seal

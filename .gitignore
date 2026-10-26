@@ -30,3 +30,7 @@ packs/*/pack-conformance.json
 
 # Conformance evidence of fixture packs (gate copies them; never commit evidence).
 fixtures/packs/*/pack-conformance.json
+
+# builder-agent workspace drafts and builds (M11)
+builder/work/
+builder/out/

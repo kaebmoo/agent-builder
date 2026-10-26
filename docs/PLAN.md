@@ -297,3 +297,24 @@ conformance ที่ลบ → `assets_bundled`, ที่ failed → static fa
 checkout AI (exit 2), M9 **exit 1 ตามที่ออกแบบ** (revision ไม่ใช่คู่ที่รับรอง; fail closed ไม่ใช่ skip) — ต้องรัน M9 บนเครื่องที่มี
 revision ที่ pin หรือ push commit เหล่านั้นขึ้น GitHub แล้วตรวจ DESIGN §4 ใหม่ก่อนเพิ่มคู่ `0.116.0/b962abc`. Ruff 0.16.9 และ
 `git diff --check` ผ่าน; ไม่มี commit/push ใน session นี้จนผู้ใช้สั่ง. ถัดไป M11.
+
+M10 macOS follow-up 2026-10-26: ผู้ใช้รัน gate บน Mac แล้ว M10 fail ด้วย `PermissionError` ที่ case server อ่าน env นอกประกาศ.
+สาเหตุ: server ตายก่อนอ่าน stdin → `write` ได้ `BrokenPipeError` แล้ว `os.killpg` บน process group ที่เหลือแต่ zombie คืน `EPERM`
+บน macOS ทับ exception เดิม. แก้ `forge/pack_test.py` ให้ `send` แปลง OSError เป็นข้อความ `MCP exited before replying; ...` เดียวกันทุก platform
+และให้ `close` (รวม `forge/live_test.py` สองจุด) ทน `PermissionError` แล้ว fallback เป็น `Popen.kill`. ยังไม่มี Mac ใน session นี้ให้ยืนยันซ้ำ;
+ผู้ใช้ต้องรัน `check_m10_pack_authoring.py` บน Mac อีกครั้ง. ผล M9 บน Mac: binary เป็น `0.138.0` revision `d452ece` (ไม่อยู่บน GitHub เช่นกัน)
+จึง fail closed ตามออกแบบ; จะรองรับรุ่นนี้ต้องตรวจ DESIGN §4 (writePaths/traversal/symlink, todos.md, MCP naming) กับ source รุ่นนั้นก่อนเพิ่มคู่ version+revision.
+
+M11 เสร็จ 2026-10-26 (offline + native): workspace `builder/` (AGENTS.md ที่มี Mission/Interview/Must/Refuse/Output, manifest `sandboxed`,
+settings identity, skills `spec-author` + `pack-author`, ไม่มี subagent/workflow/MCP) ผ่าน `thclaws agent validate` บน `0.116.0/b962abc`.
+runner `.thclaws/scripts/build.py` บังคับ `confirmed_by` และรัน `forge pack test` → `forge generate` → `forge audit --write` แล้วพิมพ์ผลจาก report
+(DESIGN §9). Fixture `fixtures/builder/weather-spec.yaml` (T2/atlas-workflow เพราะ network allowlist, pack `google-weather`) ผ่าน forge generate
+และ report บอก `google-weather: missing`; `fixtures/builder/weather-request.md` คือ prompt ที่ตอบ 7 ข้อครบสำหรับ live. `check_m11_builder_agent.py`
+offline ผ่าน: layout/ข้อห้าม/7 คำถาม, forge ปฏิเสธ marker ที่ไม่ถูกตัด, build.py ปฏิเสธ spec ที่ไม่มี/ไม่ครบ/ค่าสงวน marker โดยไม่สร้างไฟล์,
+strip marker ออกจาก `agentspec.json`, rebuild `--replace` ได้ byte เดิมและไม่ลบ directory ที่ไม่ใช่ของ runner, spec ผิดกฎ M1 fail ที่ forge,
+checkout หายรายงานชัด, echo pack ผ่าน runner เป็น `conformant` และ `draft` เมื่อมี binary. **Live ยังไม่รัน**: ไม่มี provider key ใน session นี้
+→ exit 2 ประกาศชัด; ผู้ใช้รัน `python3 scripts/check_m11_builder_agent.py --model oai/gpt-5.4-mini --provider-key-env OPENAI_COMPAT_API_KEY`
+บนเครื่องที่มี thclaws 0.116.0 และ key (gate ตรวจว่า model เขียน spec ที่ forge รับ, เรียก build.py ผ่าน Bash จริง, report บอก missing และข้อความสรุป
+ไม่อ้าง candidate/shippable/deploy-ready; evidence redact ลง `out/m11-live/report.json`). ผล live ไปใน DoD ของ M11 รอบถัดไป.
+Regression: M0–M3 exit 0; M4/M5/M7b/M10 native exit 0; M8 archive ผ่าน skip Atlas; M6/M7a skip (ไม่มี AI checkout); M9 exit 1 กับ `b962abc`
+ตามออกแบบ; โหมด CI ไม่มี binary ทุก gate เป็น 0/2. Ruff และ `git diff --check` ผ่าน.

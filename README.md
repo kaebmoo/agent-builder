@@ -33,6 +33,7 @@ User goal → Discovery (7 questions) → AgentSpec (SSOT)
 - [docs/audit.md](docs/audit.md) — M5 static audit: กฎ, สถานะ, wrappers และ gate
 - [docs/export.md](docs/export.md) — M8 `forge export`: atlas-register.json, workflow, archive และลำดับลงทะเบียน
 - [docs/packs.md](docs/packs.md) — M10 pack contract สำหรับผู้เขียน MCP ภายนอก: `forge pack new` / `discover` / `test`
+- [builder/README.md](builder/README.md) — M11 builder-agent workspace: interview, `confirmed_by`, `build.py` และ gate
 
 ## สถานะ
 
@@ -43,12 +44,15 @@ M8 export/registration เสร็จ 2026-09-08: `forge export` ออก `atl
 `thclaws agent pack` ตาม [docs/export.md](docs/export.md); gate ลงทะเบียนกับ Atlas in-process และ poll daemon ของ package ได้จริง
 แต่ `deployment_verified` ยัง `false`. M9 เปิด standalone static-pipeline **เฉพาะ T0**; generator และ audit ปิด T1 จนแก้ upstream writePaths. Gate T0 กับ security diagnostic ของ T1 แยกผลกัน. ดู [PLAN](docs/PLAN.md) และ [generator](docs/generator.md).
 M10 (pack authoring) เสร็จ 2026-10-26: `forge pack new` / `forge pack discover` ร่าง pack ที่ตั้งใจให้ยังไม่ conformant จนผู้เขียนเติม tier/network/fixture
-แล้ว `forge pack test` ตัดสิน; reference pack `fixtures/packs/echo/` ผ่านครบวงจรโดยไม่ใช้ LLM ดู [docs/packs.md](docs/packs.md). ถัดไป M11 builder-agent.
+แล้ว `forge pack test` ตัดสิน; reference pack `fixtures/packs/echo/` ผ่านครบวงจรโดยไม่ใช้ LLM ดู [docs/packs.md](docs/packs.md).
+M11 (builder-agent) offline/native เสร็จ 2026-10-26: workspace `builder/` ให้ thClaws interview และร่าง spec แต่ build ได้ทางเดียวผ่าน
+`.thclaws/scripts/build.py` ที่บังคับ `confirmed_by` และรายงานผลจาก forge เท่านั้น; ส่วน live (ต้องมี provider key) ยังไม่รัน ดู [builder/README.md](builder/README.md).
 
 ```bash
 python3 scripts/check_m7b_packs.py
 python3 scripts/check_m8_export.py
 python3 scripts/check_m10_pack_authoring.py
+python3 scripts/check_m11_builder_agent.py
 ```
 
 ดู [Publisher pack](packs/publisher-email-sftp/README.md) และ [SQL pack](packs/sql-readonly/README.md)

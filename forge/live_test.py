@@ -274,8 +274,8 @@ def run_daemon(package, spec, packs_dir, evidence, timeout, key_env):
         finally:
             try:
                 os.killpg(process.pid, signal.SIGKILL)
-            except ProcessLookupError:
-                pass
+            except (ProcessLookupError, PermissionError):
+                process.kill()  # macOS answers EPERM for an already-exited (zombie) process group
             process.wait(timeout=5)
 
 
@@ -304,8 +304,8 @@ def workflow_process(binary, work, env, arguments, timeout, workflow='.thclaws/a
     finally:
         try:
             os.killpg(process.pid, signal.SIGKILL)
-        except ProcessLookupError:
-            pass
+        except (ProcessLookupError, PermissionError):
+            process.kill()  # macOS answers EPERM for an already-exited (zombie) process group
         process.wait(timeout=5)
 
 

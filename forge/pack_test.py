@@ -18,6 +18,9 @@ from jsonschema import Draft202012Validator, SchemaError
 
 from forge.packs import asset, digest, pack_digest, read_pack, server_config
 
+EXITED = ('MCP exited before replying; the harness passes only PATH and the env names '
+          'declared in pack.yaml, so an undeclared env dependency fails here')
+
 
 class RPC:
     def __init__(self, argv, cwd, env, timeout):
@@ -36,8 +39,7 @@ class RPC:
             while not self.closed.is_set():
                 line = self.process.stdout.readline(1024 * 1024 + 1)
                 if not line:
-                    raise ValueError('MCP exited before replying; the harness passes only PATH and the env names '
-                                     'declared in pack.yaml, so an undeclared env dependency fails here')
+                    raise ValueError(EXITED)
                 if len(line) > 1024 * 1024:
                     raise ValueError('MCP response exceeds 1 MiB')
                 self.messages.put_nowait(json.loads(line))
@@ -48,8 +50,13 @@ class RPC:
                 pass
 
     def send(self, message):
-        self.process.stdin.write((json.dumps({'jsonrpc': '2.0', **message}) + '\n').encode())
-        self.process.stdin.flush()
+        try:
+            self.process.stdin.write((json.dumps({'jsonrpc': '2.0', **message}) + '\n').encode())
+            self.process.stdin.flush()
+        except OSError:
+            # A server that died before reading (for example on a missing env name) races the EOF seen by the
+            # reader thread; report the same reason on every platform instead of a bare BrokenPipeError.
+            raise ValueError(EXITED) from None
 
     def call(self, method, params):
         self.counter += 1
@@ -77,8 +84,10 @@ class RPC:
         self.closed.set()
         try:
             os.killpg(self.process.pid, signal.SIGKILL)
-        except ProcessLookupError:
-            pass
+        except (ProcessLookupError, PermissionError):
+            # macOS answers EPERM for a process group whose only member already exited (zombie); Popen.kill is
+            # a no-op once the exit status is known and otherwise targets the server process itself.
+            self.process.kill()
         self.process.wait(timeout=5)
         for pipe in (self.process.stdin, self.process.stdout):
             pipe.close()

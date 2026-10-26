@@ -262,6 +262,17 @@ M4 เก็บ `execution_surface` เป็นข้อความใน repo
 
 builder-agent (M11) คือการให้ thClaws ทำหน้าที่นี้: workspace `builder/` ที่มี AGENTS.md + skills (`spec-author`, `pack-author`) และเรียก `forge generate` / `forge audit` / `forge pack test` ผ่าน Bash **ใน workspace ของ builder เท่านั้น** ไม่ใช่ใน package ที่กำลังสร้าง. ผู้ใช้พิมพ์ความต้องการ → model ถาม 7 ข้อที่ยังไม่รู้ → เขียน `spec.yaml` → รัน forge วนจนผ่าน → รายงานสถานะตาม `builder-build-report.json` เท่านั้น. block `permissions`, `env`, `network` และ `capabilities` ต้องถูกยืนยันโดยคนก่อน generate (marker `confirmed_by` ใน spec ที่ builder-agent ต้องเห็นก่อนรัน generate; forge ไม่รู้จัก marker นี้ ตัดออกก่อนส่ง); ถ้า pack ที่ต้องใช้ยังไม่มี model ต้องรายงาน `missing` ตรง ๆ ไม่ประดิษฐ์ MCP หรือชื่อ tool และงานเขียน MCP เป็นงานแยกตาม §5 ที่กลับเข้ามาทาง `forge pack test`
 
+Implementation ของ M11 (2026-10-26): `builder/` เป็น thClaws agent package (manifest `shell_execution: sandboxed`, ไม่มี MCP, ไม่มี `.thclaws/agents/`
+หรือ workflow) ที่ผ่าน `thclaws agent validate`. การเรียก forge ทุกครั้งผ่าน runner เดียว `builder/.thclaws/scripts/build.py <work/<name>/spec.yaml> --out out/<name> [--replace]`
+ซึ่ง (1) ปฏิเสธ spec ที่ไม่มี block `confirmed_by: {permissions, env, capabilities}` ครบสามคีย์พอดี (network ยืนยันรวมกับ permissions)
+หรือค่าว่าง/ชื่อสงวน (`model`, `assistant`, `builder` ...) โดยไม่สร้างไฟล์ใด (2) ตัด marker แล้ว `validate_spec` (3) `forge pack test` ทุก pack
+ที่มี descriptor (4) `forge generate` แล้ว `forge audit --write` (5) พิมพ์ `package_status`, audit layers, สถานะ pack และ findings จาก report
+และคืน exit code ของ audit (0 draft / 1 fail / 2 ไม่มี binary). `--replace` ลบได้เฉพาะ directory ที่มี `agentspec.json` + `builder-build-report.json`
+ที่ runner สร้างไว้; checkout ของ forge มาจาก `AGENT_BUILDER_ROOT` หรือ repo ที่ `builder/` อยู่ และ `AGENT_BUILDER_PACKS` ใช้ได้เฉพาะ gate.
+ข้อจำกัด: runner ตรวจได้เพียงว่ามี marker ถูกรูป ไม่พิสูจน์ว่าคนเป็นผู้ยืนยัน; AGENTS.md จึงห้าม model เติม marker โดยไม่มีคำยืนยัน และ gate live
+ตรวจว่า model เรียก build.py ผ่าน Bash จริง (SSE `tool_use_start` ที่ input มี `build.py`) ก่อนเชื่อสรุปของมัน. เพราะ schema บังคับ `network != none`
+→ T2 → `atlas-workflow` (§5) spec พยากรณ์อากาศจาก Google Weather จึงเป็น T2 เสมอจนกว่าจะมี tier/target สำหรับ MCP ที่ออก network โดยไม่มี side effect
+
 ## 10. นอกขอบเขต MVP (future)
 
 - patch `agent_runtime.rs` ให้ `/agent/run` เคารพ `allowed_tools` / `disallowed_tools` / MCP allowlist / write-path (ต้อง filter ทั้ง tool definitions และ invocation จริง) — ควร upstream

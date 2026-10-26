@@ -1,0 +1,20 @@
+{
+  "author": "agent-builder",
+  "categories": [
+    "custom"
+  ],
+  "license": "Apache-2.0",
+  "permissions": {
+    "filesystem_scope": "workspace",
+    "shell_execution": "sandboxed"
+  },
+  "requires": {
+    "mcp_servers": [],
+    "thclaws_min_version": ">=0.116.0"
+  },
+  "tags": [
+    "builder",
+    "agentspec"
+  ],
+  "version": "0.1.0"
+}

@@ -4,6 +4,7 @@
 
 ### Added
 
+- M11 (2026-10-26): builder-agent workspace `builder/` (a validated thClaws agent package with `spec-author` and `pack-author` skills and no subagents) whose only build path is `.thclaws/scripts/build.py`: it refuses a spec without a person's `confirmed_by` marker on permissions/env/capabilities, strips the marker, runs `forge pack test`, `forge generate` and `forge audit --write`, and prints verdicts from the build report; weather fixtures and `check_m11_builder_agent.py` (offline/native/live with explicit skips). The live interview has not been run yet
 - M10 (2026-10-26): pack authoring workflow — `forge pack new` scaffolds a TODO-marked v2 descriptor, `forge pack discover` drafts `pack.yaml` from a live server's `tools/list` under a clean environment (tool inventory, surface digest, annotation-based `mutating` proposals; tier/network/fixture stay the author's decision), `forge pack test --packs-dir`, `docs/packs.md`, the `pack-author` skill under `builder/`, and the stdlib `echo` reference pack with an AgentSpec fixture; the harness now names the clean-environment rule when a server exits before replying
 - M9 (2026-09-09): standalone `static-pipeline` T0 generation for planner/worker/verifier roles, native CLI live audit, per-role denial probes for Write/Edit/Bash, and a separate `--write-boundary` diagnostic that keeps T1 blocked when upstream writePaths traversal or symlink bypasses are present
 - M8 (2026-09-08): `forge export` writes Atlas registration payloads, node/edge/policy templates, a schema-valid workflow definition (the T2 approval flow bound to operator worker/workspace ids) and a `thclaws agent pack` archive with a sha256 sidecar; the Atlas workflow-definition schema is pinned from atlas-control-plane `daa0f49`, and the M8 gate registers the export in an in-process Atlas and polls a packaged daemon. Export copies `package_status` and never verifies a deployment
@@ -31,6 +32,7 @@
 
 ### Fixed
 
+- MCP harness on macOS: a server that exits before reading stdin now yields the same "exited before replying" reason on every platform instead of a `BrokenPipeError`, and process-group cleanup tolerates the `EPERM` macOS returns for an already-exited (zombie) group in both the pack harness and the live harness
 - M9 upstream recheck: `0.129.0/7a27129` blocks parent traversal and existing symlink escapes, but a final dangling symlink can still escape `output/**`; the diagnostic now covers that case and T1 remains disabled
 - M9 review follow-up 3: AgentSpec validation rejects built-ins that persist under `.thclaws/` (`TodoWrite`, `Memory*`, `Kms*` writers, `GuiShell*`) unless `write_scope` is `workspace`, so a documented CWD=package run can no longer leave a file the static audit reports as undeclared with no way to declare it; both live-audit copytree calls share one `COPY_IGNORE` set and the M6 gate checks source `state/` never reaches a run directory
 - M9 review follow-up 4: static audit catches case variants of `.thclaws/state/todos.md`, while the live-audit copy filter is anchored to `.thclaws/state` and preserves a generated skill whose identity is `state`
