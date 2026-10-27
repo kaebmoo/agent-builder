@@ -29,7 +29,7 @@ try:
     import yaml
 
     from forge.generate import render
-    from forge.live_test import COPY_IGNORE, redact, request
+    from forge.live_test import COPY_IGNORE, check_layout, isolated_env, redact, request
     from forge.spec import validate_spec
 except ModuleNotFoundError:
     print("M11 FAIL: install project dependencies from pyproject.toml first")
@@ -199,9 +199,7 @@ def live_interview(work: Path, model: str, key_env: str, timeout: float) -> None
     settings = work / 'live-settings.json'
     settings.write_text(json.dumps({'browserEnabled': False}))
     token = secrets.token_urlsafe(32)
-    env = {'PATH': os.environ.get('PATH', os.defpath), 'HOME': str(home), 'XDG_CONFIG_HOME': str(home / '.config'),
-           'THCLAWS_CONFIG': str(settings), 'THCLAWS_MCP_ALLOW_ALL': '1', 'THCLAWS_API_TOKEN': token,
-           'AGENT_BUILDER_ROOT': str(ROOT), key_env: os.environ[key_env]}
+    env = isolated_env(home, settings, token, AGENT_BUILDER_ROOT=str(ROOT), **{key_env: os.environ[key_env]})
     hidden = [token, os.environ[key_env], str(work)]
     if model.startswith('oai/'):
         endpoint = os.environ.get('OPENAI_COMPAT_BASE_URL', '')
@@ -225,6 +223,7 @@ def live_interview(work: Path, model: str, key_env: str, timeout: float) -> None
             except (OSError, ValueError, http.client.HTTPException):
                 assert time.monotonic() < deadline, 'temporary daemon readiness timed out'
                 time.sleep(0.1)
+        check_layout(info, workspace)  # the Mac failure: a desktop build converted the copy into a host workspace
         assert not info.get('mcp_servers'), 'builder daemon must not load MCP servers'
         events = request(port, token, '/agent/run', timeout,
                          {'prompt': REQUEST.read_text(encoding='utf-8'), 'workspace_dir': str(workspace),

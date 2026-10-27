@@ -230,6 +230,12 @@ M1 ตรวจว่า embedded schema เป็น JSON Schema ที่ถ�
 - `atlas-register.json` (M8, `forge export`, อยู่นอก package): worker payload (`id`, `name`, `base_url`, `role` / `tags` จาก `routing`; token ไม่อยู่ในไฟล์), workspace payload (`worker_id`, `workspace_key`, deployment-time `workspace_dir`), node template (`model`, `prompt` ที่ render แล้วเป็น JSON เทียบเท่า input envelope ของ live audit, `collect_files` จาก `files.globs`, `outputs` + `output_format: json` เฉพาะ `assistant_json`; omit ทั้งคู่เมื่อเป็น `collect_files` ล้วน), edge template (`push_files: ["files.__UPSTREAM_NODE_ID__.*"]` + `policy_template.file_handoff: true` เมื่อมี input `atlas_file_handoff`), deployment list (env names, MCP servers, network/hosts, daemon CWD, `reachability_checks`, `deployment_verified: false` ซึ่ง builder ไม่เคยตั้งเป็น true) และ `package_status` ที่คัดลอกจาก build report โดยไม่เลื่อน. Export ปฏิเสธ package ที่ report ไม่บันทึก `audit.static = passed` หรือบันทึก `audit.manifest = failed`; มี binary แต่ report ยัง `manifest: skipped` → รัน `thclaws agent validate` ก่อน pack และปฏิเสธเมื่อไม่ผ่าน; `--out` ต้องอยู่นอก package เพราะ `thclaws agent pack` เดินทุกไฟล์ใน package รวม staging directory
 - `atlas-workflow.json` เมื่อ target = `atlas-workflow`: workflow definition ที่ POST เข้า `/api/workflows` ได้ตรง ๆ; T2 คือ fragment ของ M7b ที่ bind worker/workspace id แล้ว, T0/T1 คือ graph node เดียวไม่มี edge
 - archive `<name>-<version>.tar.gz` จาก `thclaws agent pack` พร้อม sidecar `.sha256`; ไม่มี binary → export เขียนเฉพาะไฟล์ JSON และรายงาน skip (exit 2); binary ที่ไม่ใช่ baseline `0.116.0` → fail (exit 1). พฤติกรรม pack (ตรวจ source v0.116.0 revision `75edc48`, 2026-09-09): `agent_cli.rs::pack_to_file` fuse identity จาก `.thclaws/settings.json::agent` ลง `manifest.json` (เพิ่ม `id`, `name`, `description`, `preview`, `pricing`; field เดิมคงค่า) และ `pack.rs` ตัด block `agent` ออกจาก `.thclaws/settings.json`, strip prefix `.thclaws/state/`, `.git/`, `node_modules/`, `target/`, `__pycache__/`, `.venv/`, `.next/`, `dist/`, `build/`, suffix `.env`/`.key`/`.pyc`/`.log`, path ที่มี `_secret` และ `.thclaws/audit-findings.json`/`.thclaws/usage.jsonl`; mtime ของสมาชิกมาจากไฟล์จริง archive จึงไม่ byte-stable ข้าม generate. (0.138.0/`d452ece` เพิ่ม prefix `.thclaws/bots/`, `.home/`, `.playwright-mcp/` และ exact `.thclaws/media-jobs.jsonl` → ดู §4 M12; กฎ fuse/rewrite สองไฟล์ไม่เปลี่ยน) Tree ที่แตกจาก archive จึงต่างจาก package ที่ audit เฉพาะ `manifest.json` และ `.thclaws/settings.json`: `audit.py` บน tree นั้นรายงาน `drift` เป็นเรื่องปกติ ต้องรัน audit กับ source package; `forge export` ตรวจ archive หลัง pack ทุกครั้ง: สมาชิกต้องเท่ากับ `generated_files` ของ report และ byte ตรงกับ package ยกเว้นสองไฟล์นั้น มิฉะนั้น fail (asset ของ pack หรือ generated file ที่ path มี `_secret` หรือลงท้าย `.env`/`.key`/`.log` เช่น script `client_secret.py` หรือ input ชื่อ `api_secret` → `inputs--api_secret.json` ถูก pack ตัดเงียบ ๆ และ daemon จะรันต่อโดยไม่มี MCP นั้นตาม §4); gate M8 ตรวจกรณีนี้ด้วย input `api_secret` และ start daemon จาก tree ที่แตกจาก archive
+- Layout ของ package ที่ deploy (M13, ตรวจ source 0.138.0 `d452ece`, รายละเอียดใน §4 "Host + bots layout"): package และ tree ที่แตกจาก archive เป็น **single-agent workspace**
+  (agent อยู่ที่ root) เสมอ; daemon-per-package start ด้วย `THCLAWS_AUTO_MIGRATE=0` ตั้งชัดเจน เพราะ `thclaws --serve` ของ desktop build จะแปลง tree เป็น host workspace
+  ในที่เดิมและเขียนทับ AGENTS.md/skills/scripts (drift ต่อ audit, `collect_files` กับ identity อ้างคนละ directory). ห้ามเปิด package ที่ audit แล้วใน desktop app
+  หรือรัน `thclaws bots migrate` กับมัน; ถ้าเกิดขึ้นให้ deploy ใหม่จาก archive ไม่ใช่ `unmigrate` แล้วใช้ต่อ. `thclaws agent validate`/`pack` ชี้โฟลเดอร์ที่มี `manifest.json`
+  (ใน host workspace คือ `.thclaws/bots/<slug>/`). harness ของ builder ใช้ env จาก `forge/live_test.py::isolated_env` และตรวจ `check_layout` หลัง daemon พร้อม (M6/M7b/M8/M11);
+  `deployment_verified` ยัง `false` และ operator ต้องตรวจ `/v1/agent/info.workspace_dir` เท่ากับ `deployment.package_root` ก่อนลงทะเบียน
 
 Atlas registration contract (M8, ตรวจ source `atlas-control-plane` ref `daa0f4966899327fb563501435f5d6180eeef9c3` 2026-09-08; schema pinned ไว้ที่ `patterns/atlas-workflow-definition.schema.json` และ gate M8 fail เมื่อไฟล์ต้นทางต่างจากที่ pin):
 - `POST /api/workers` (permission `admin`) upsert ด้วย `id` **หรือ** `base_url` (`db.py::upsert_worker`): register export ที่สองด้วย URL เดิมจะเขียนทับ worker เดิมโดยคง id เดิม และ `wrk_<name>` ของ package ที่สองไม่ถูกสร้าง → หนึ่ง daemon URL ต่อหนึ่ง worker หรือระบุ `--worker-id` ให้ตรง worker ที่มีอยู่; `base_url` ต้อง http(s) เท่านั้น; `token` คือ `THCLAWS_API_TOKEN` ของ daemon และ response ไม่คืน token. `POST /api/workspaces` ต้องมี `worker_id`, `workspace_key`, `workspace_dir` (path บนเครื่อง worker). `POST /api/workflows` validate graph, policy และ reference ตอนบันทึก: worker/workspace ที่ node pin ต้องมีอยู่ก่อน จึงต้อง register worker → workspace → workflow ตามลำดับ
@@ -351,6 +357,7 @@ env literal สำหรับ stdio, `${VAR}` เฉพาะ headers, allowlis
 4. `cloud/pack.rs` strip เพิ่ม prefix `.thclaws/bots/`, `.home/`, `.playwright-mcp/` และ exact `.thclaws/media-jobs.jsonl`;
    `unpack` รองรับ directory entry และปฏิเสธ symlink/hardlink entry. ไม่กระทบ `forge export` เพราะ generated file ไม่เคยใช้ path เหล่านี้
    และ `pack_archive` ยังเทียบสมาชิกกับ `generated_files` เหมือนเดิม; `ARCHIVE_REWRITTEN` ยังเป็น `manifest.json` + `.thclaws/settings.json`.
+   สิ่งที่ M12 ไม่ได้บันทึก: โฟลเดอร์ `.thclaws/bots/` มาจาก **layout migration** ที่ `--serve`/desktop ทำกับ package ในที่เดิม → ดู "Host + bots layout (M13)" ด้านล่าง.
 5. `config.rs`: template settings ของ workspace ใหม่เขียน `"browserEnabled": false` แต่ `AppConfig` default ยังเป็น on เมื่อไม่มี key
    (และฉีด `browser` MCP เมื่อพบ `npx`); live harness จึงยังตั้ง `{"browserEnabled": false}` ใน `THCLAWS_CONFIG` และตรวจ inventory
    เท่าเดิม. shared workspace ปฏิเสธ browser. `apply_runtime_policy` เติม `disallowed_tools` จาก org policy (`policy/mod.rs`,
@@ -370,6 +377,54 @@ env literal สำหรับ stdio, `${VAR}` เฉพาะ headers, allowlis
 M7b (`draft`), M8 (archive + sha, inventory ตรง), M9 T0 (pipeline สาม role, denial 9/9, `--write-boundary` 5/5), M10 (`draft`),
 M11 (`thclaws agent validate` ของ `builder/`) ผ่าน; M6/M7a skip (ไม่มี `../AI`), M8 Atlas skip (ไม่มี `ATLAS_ROOT`), ส่วน provider
 ของ M9/M11 skip (ไม่มี key). ยังไม่ได้รัน live audit ใด ๆ บน baseline นี้; evidence `candidate` เดิมทั้งหมดเป็นของ 0.116.0.
+
+### Host + bots layout (M13, 2026-10-27, thClaws 0.138.0 `d452ece`)
+
+พบจาก M11 live บน Mac (exit 1): binary 0.138.0 แบบ desktop build ที่เปิดด้วย `--serve` แปลงโฟลเดอร์ agent (layout เดิม = "v2", agent อยู่ที่ root)
+เป็น **host workspace** (`workspaceVersion` 4) ในที่เดิม แล้ว `/agent/run` ที่ชี้ `workspace_dir` = root ได้ agent ที่ไม่มี AGENTS.md/skills.
+ตรวจ source `d452ece` (path ใต้ `crates/core/src/`) และบันทึกเป็น claim ของ §4 ดังนี้ (แผนงานอยู่ที่ `docs/host-layout-plan.md`):
+
+1. **เงื่อนไข auto-migrate** (`bin/app.rs:1017-1060`): ทำงานเมื่อ binary build ด้วย feature `gui` เท่านั้น (`#[cfg(feature = "gui")]`; `Cargo.toml` `default = []`
+   → build CLI-only ไม่มีโค้ดนี้, `workspace_is_v3()` คืน false ตลอด `bin/app.rs:870-872`, และไม่มี subcommand `thclaws bots` `:354-358`), `auto_migrate_allowed()` เป็นจริง
+   (`bots/migrate.rs:256-265`: `THCLAWS_AUTO_MIGRATE=0` หรือ `THCLAWS_SUPERVISED=1` → false; มิฉะนั้น true ยกเว้น `THCLAWS_INSIDE_DOCKER=1` ที่ไม่มี
+   `THCLAWS_AUTO_MIGRATE=1`), ไม่ใช่ `-p`/`--cli`/`agent run`, ไม่ใช่ `--multi-tenant`, และเป็น `--serve` หรือ desktop. โฟลเดอร์เป้าหมาย = ไม่มี `.thclaws/bots.json`
+   แต่มี `AGENTS.md` หรือ `manifest.json` หรือ `.thclaws/settings.json` หรือ `.thclaws/state/` (`:1237-1245`) → ทุก package ที่ generator สร้างและ `builder/` เข้าเกณฑ์.
+   Mac (desktop build) กับ cloud (CLI-only build) จึงต่างกันที่ build feature ก่อน env.
+2. **สิ่งที่ migration ทำ** (`bots/migrate.rs:63,79,470-532,1024-1072`): ย้ายเฉพาะ `.thclaws/`, `AGENTS.md`, `CLAUDE.md`, `manifest.json` ไป `.thclaws/bots/main/`;
+   ไฟล์อื่นอยู่ root และไม่มี tombstone `AGENTS.md` ที่ root; host เขียน `.thclaws/settings.json` (`workspaceVersion: 4`, `_doc`), `.thclaws/bots.json`,
+   `.thclaws/state/.gitignore`. ใน agent: `mint_identity` เติม `agent.id/name/description` ถ้าขาด, `ProjectConfig::backfill_defaults_in` เติม key ใน settings,
+   และ `agent_paths::fix` (`bots/agent_paths.rs:191-260`) **เขียนทับ** `AGENTS.md`, `CLAUDE.md` และ `.md/.js/.py` ใต้ `.thclaws/{scripts,skills,workflows,agent_workflow,
+   gui-shell,agents,commands,templates}`: `python3 .thclaws/x.py` → `python3 "$THCLAWS_AGENT_DIR/.thclaws/x.py"`, `Path("./.thclaws/..")`/`open(...)` → `AGENT_DIR / "..."`
+   พร้อมแทรก `AGENT_DIR = Path(os.environ.get("THCLAWS_AGENT_DIR") or ".")`; ต้นฉบับสำรองที่ `.thclaws/state/pre-agent-dir/`. ผล: tree ที่ถูก migrate ไม่ byte-identical
+   กับ package ที่ audit (static audit รายงาน drift ถูกต้องแล้ว) และ `thclaws bots unmigrate` (`:773`) ย้อนได้เฉพาะเมื่อมี agent เดียวชื่อ `main`.
+3. **host process** (`server.rs:1067-1210`, `bots/supervisor.rs:613-660`): host ฟัง port ที่สั่ง ไม่โหลด agent/model/MCP; spawn ต่อ agent
+   `thclaws --serve --bind 127.0.0.1 --port 0` ด้วย cwd = `.thclaws/bots/<slug>` และ env `THCLAWS_SERVE_TOKEN`, `THCLAWS_SERVE_ADDR_FILE`, `THCLAWS_SUPERVISED=1`,
+   `THCLAWS_WORKSPACE_ROOT=<root>`; env อื่นสืบทอด (`THCLAWS_API_TOKEN`, `THCLAWS_CONFIG`, `HOME`, provider key ไปถึง agent). `/v1/*` และ `/agent/run` ถูก forward
+   ไป agent ที่เลือกด้วย query `?bot=<slug>` (ไม่ระบุ = ตัวแรกใน `bots.json`) และส่ง `Authorization` ของผู้เรียกผ่านตรง (`server.rs:1369-1390`);
+   `/v1/agent/info.workspace_dir` = process cwd ของ agent = bot dir (`api_v1/info.rs:128`). host ที่พบ v2 โดยไม่มีสิทธิ์ migrate จะ error "`thclaws bots migrate` first" (`server.rs:1093-1101`).
+4. **`/agent/run` ใต้ host ใช้ `workspace_dir` เดียวกับสองความหมาย**: skills จาก `<workspace_dir>/.thclaws/skills` (`agent_runtime.rs:171`), AGENTS.md walk ขึ้นจาก
+   `workspace_dir` และหยุดที่ shelf ไม่โหลด AGENTS.md ของ host (`context.rs:238-262`), `collect_files` snapshot เดิน `workspace_dir` โดยข้าม `.thclaws`
+   (`api_v1/artifacts.rs:110-150`, `api_v1/agent.rs:460`). แต่ file tools และ Bash ทำงานที่ `THCLAWS_WORKSPACE_ROOT` (`sandbox.rs:28-45`, `workdir.rs:55-110`):
+   path relative ทั่วไป → root, `.thclaws/...` ของ agent → bot dir (ยกเว้น `state/kms`, `state/logs`), Bash cwd = root และได้ `THCLAWS_AGENT_DIR` **เสมอแม้ไม่มี host**
+   (`tools/bash.rs:1422-1430`); system prompt อธิบายสองโฟลเดอร์นี้ (`context.rs:112-130`). MCP config, `allowedTools`, `.thclaws/prompt/system.md`, `todos.md`
+   ยังอ่านจาก cwd ของ process = bot dir. ผลบน host: `workspace_dir` = root → ไม่มี identity (อาการ M11) แต่ `collect_files` เห็นไฟล์;
+   `workspace_dir` = bot dir → identity ครบ แต่ agent เขียนไฟล์ที่ root และ `collect_files` เดิน bot dir จึง**ไม่เห็น** → ไม่มีค่าใดที่ทำให้ contract `atlas-worker` สมบูรณ์.
+5. **`thclaws bots add`** (`bots/install.rs:30-80` → `cloud/cmd.rs:708-723`): รับเฉพาะ slug ของ Agent Template ใน catalogue thClaws.cloud และต้อง login token;
+   ไม่รับ archive หรือ path local. `bots.json` ออกแบบให้แก้มือได้ (`bots/mod.rs:34`) จึงมีทางติดตั้งมือ (แตก archive ของ `agent pack` ลง `.thclaws/bots/<slug>/` แล้วเติม `bots.json`) ที่ยังไม่ทดสอบ.
+6. `thclaws agent validate`/`pack` ต้องการ `manifest.json` ที่โฟลเดอร์ที่ชี้ (`cloud/agent_cli.rs:32-36,58-63,96-104`) และ pack strip `.thclaws/bots/` → ใน host workspace ต้องชี้ bot dir;
+   archive เป็น agent เดี่ยว (v2 shape) เสมอ → output ของ generator และ `forge export` ไม่เปลี่ยนรูป.
+7. `thclaws -p`/`--cli` ที่ root ของ host workspace ก้าวเข้า `bots[0]` และตั้ง `THCLAWS_WORKSPACE_ROOT` (gui build, `bin/app.rs:1067-1095`); `thclaws agent run <dir>` (M9) ไม่อยู่ในเงื่อนไข migrate
+   (M9 live ผ่านบนเครื่องเดียวกับที่ M11 fail).
+8. host ซ่อม agent "stale" ตอนเปิด (`server.rs:1150`, `agent_paths::repair_stale`) เฉพาะ agent ที่ข้อความของตนไม่กล่าวถึง `$THCLAWS_AGENT_DIR` (`migrate.rs:565`).
+9. `THCLAWS_AGENT_WORKSPACE_ROOT` จำกัดให้ `workspace_dir` ของ request อยู่ใต้ root ที่กำหนด (`agent_runtime.rs:284-325`) — ตัวเลือก hardening ของ deployment ยังไม่ใช้.
+10. (ตอบคำถามที่ข้อ 1 ของรายการ M12 ทิ้งไว้) `apply_filter(allowed_tools, disallowed_tools)` ถูกเรียก**ก่อน**ลงทะเบียน Skill tools และ MCP tools
+    (`agent_runtime.rs:135` เทียบ `:171-185`, `:197`) → `allowedTools` กรองเฉพาะ built-in ไม่กรอง MCP/Skill; milestone `allowedTools` ต้องรับข้อนี้.
+
+**การตัดสินใจ (M13)**: (a) deployment contract และ package ที่ generate คง layout agent เดี่ยว (v2) เท่านั้น; host layout ไม่รองรับสำหรับ `/agent/run` ตามข้อ 2 และ 4
+(กฎอยู่ที่ §8). (b) harness ทุกจุดที่สตาร์ท `--serve` ต้องตั้ง `THCLAWS_AUTO_MIGRATE=0` ผ่าน helper เดียว (`forge/live_test.py::isolated_env`) และต้องตรวจผลจริงหลัง readiness
+(`forge/live_test.py::check_layout`: `/v1/agent/info.workspace_dir` ที่ resolve แล้วต้องเท่ากับ run directory และต้องไม่มี `.thclaws/bots.json`) ไม่เชื่อ env อย่างเดียว
+เพราะ default ขึ้นกับ build feature และ container. (c) `builder/` เป็นที่เดียวที่ผู้ใช้เปิดด้วย desktop/`--serve` จริง จึงจะปรับเป็น host workspace (v4) ใน git ตามแผน M13
+(ยังไม่ทำในขั้นนี้; §9 จะอัปเดตเมื่อปรับ). (d) หลาย agent ต่อ host ไม่ขัด §8 เพราะ Atlas เห็น host เป็น daemon URL เดียว (`base_url` ห้าม `?`) จึงถึง agent default ตัวเดียว.
 
 ### M9 compatibility follow-up (2026-09-16, thClaws 0.129.0 `7a27129`)
 
