@@ -45,6 +45,7 @@ if 'validate' in sys.argv:
     raise SystemExit()
 assert 'FORGE_TEST_SECRET' not in os.environ
 assert os.environ['THCLAWS_MCP_ALLOW_ALL'] == '1'
+assert os.environ['THCLAWS_AUTO_MIGRATE'] == '0'  # DESIGN §8: the run directory stays a single-agent workspace
 assert json.loads(Path(os.environ['THCLAWS_CONFIG']).read_text()) == {'browserEnabled': False}
 assert Path(os.environ['HOME']).is_dir()
 assert Path('.thclaws/mcp.json').is_file()
@@ -55,7 +56,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
     def do_GET(self):
         assert self.headers['Authorization'] == 'Bearer ' + os.environ['THCLAWS_API_TOKEN']
         self.send_response(200); self.end_headers()
-        self.wfile.write(json.dumps({'mcp_servers': SERVERS}).encode())
+        # HOST imitates a desktop build that migrated the tree: the agent now reports .thclaws/bots/main as its cwd.
+        reported = Path.cwd() / '.thclaws/bots/main' if HOST else Path.cwd()
+        self.wfile.write(json.dumps({'mcp_servers': SERVERS, 'workspace_dir': str(reported)}).encode())
     def do_POST(self):
         if HANG:
             time.sleep(5)
@@ -105,8 +108,8 @@ def offline(base):
     package = base / 'package'
     generate(spec, package, packs_dir=packs)
     binary = base / 'thclaws'
-    def fake(tools=True, servers=True, hang=False, extra=False):
-        binary.write_text('#!' + sys.executable + '\n' + f'TOOLS={tools!r}\nHANG={hang!r}\nSERVERS=' +
+    def fake(tools=True, servers=True, hang=False, extra=False, host=False):
+        binary.write_text('#!' + sys.executable + '\n' + f'TOOLS={tools!r}\nHANG={hang!r}\nHOST={host!r}\nSERVERS=' +
                           repr(([{'name':'sql-readonly','tool_count':3}] if servers else [])
                                + ([{'name':'browser','tool_count':20}] if extra else [])) + '\n' + FAKE)
         binary.chmod(0o700)
@@ -141,6 +144,10 @@ def offline(base):
             report, code = live_audit(package, packs_dir=packs, timeout=3)
             assert code == 1 and "unexpected=['browser']" in report['live_audit']['detail'], report
             assert report['live_audit']['cases'] == [], 'inventory mismatch must block model calls'
+            fake(host=True)
+            report, code = live_audit(package, packs_dir=packs, timeout=3)
+            assert code == 1 and 'workspace_dir is not the run directory' in report['live_audit']['detail'], report
+            assert report['live_audit']['cases'] == [], 'a migrated layout must block model calls'
             fake(hang=True)
             report, code = live_audit(package, packs_dir=packs, timeout=0.4)
             assert code == 1 and report['package_status'] == 'draft', report

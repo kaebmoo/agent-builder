@@ -15,7 +15,7 @@ The seven discovery questions map onto the AgentSpec sections (`docs/agentspec.m
 1. Purpose and domain: what the agent does in one paragraph, and a short kebab-case name.
 2. Where it runs: `thclaws-standalone` (with `package_pattern`) or Atlas (`atlas-worker` / `atlas-workflow` with `routing`).
 3. Inputs and outputs: names, transports and JSON Schemas; one `assistant_json` output for Atlas.
-4. Capabilities: which existing packs under `packs/` it needs. Report a pack that does not exist as **missing**.
+4. Capabilities: which existing packs it needs, as printed by `--list-packs` (below). Report a pack that is not printed as **missing**.
 5. Permissions and environment: tier, tools, shell, network, write_scope and the env **names** the person provides.
 6. Refusal: conditions that must be refused or handed off, and the refusal response.
 7. Model and evaluation: pinned model id, and golden cases for normal / missing_input / refusal / malformed.
@@ -23,23 +23,27 @@ The seven discovery questions map onto the AgentSpec sections (`docs/agentspec.m
 ## Must
 
 - Read `.thclaws/skills/spec-author/SKILL.md` before drafting and follow its field rules.
-- Write the draft to `work/<name>/spec.yaml` inside this workspace. Show the `permissions`, `env`, `network` and
-  `capabilities` blocks to the person verbatim and ask them to confirm. Only after they confirm, add the
-  `confirmed_by` block with the name they give, exactly as described in the skill.
-- Build only with `python3 .thclaws/scripts/build.py work/<name>/spec.yaml --out out/<name>` (add `--replace` to
-  rebuild). It refuses a spec without `confirmed_by`, strips the marker, and runs `forge pack test`, `forge generate`
-  and `forge audit --write` through the builder's own forge checkout.
+- Write the draft to `work/<name>/spec.yaml` at the workspace root (the shell's working directory). Show the
+  `permissions`, `env`, `network` and `capabilities` blocks to the person verbatim and ask them to confirm, then stop
+  and wait for their answer. When the person confirms in a later message, add the `confirmed_by` block with the name
+  they give, exactly as described in the skill, and run build.py in that same turn without asking again.
+- This workspace has a host: your own folder is `$THCLAWS_AGENT_DIR` (AGENTS.md, skills, scripts), while the shell runs
+  at the workspace root where `work/` and `out/` live. Address what you ship through that variable.
+- Build only with `python3 "$THCLAWS_AGENT_DIR/.thclaws/scripts/build.py" work/<name>/spec.yaml --out out/<name>`
+  (add `--replace` to rebuild). It refuses a spec without `confirmed_by`, strips the marker, and runs `forge pack test`,
+  `forge generate` and `forge audit --write` through the builder's own forge checkout.
 - Report status only from `out/<name>/builder-build-report.json` as printed by build.py: `package_status`, the `audit`
   layers, pack statuses and findings. Quote them; do not paraphrase them into something stronger.
 - When build.py reports a failure, fix the spec with the person and rebuild. Never edit files under `out/`.
-- Use `ls packs` and `cat packs/<name>/pack.yaml` through the builder checkout (path printed by build.py, or
-  `AGENT_BUILDER_ROOT`) to learn real pack names, qualified tool names `<server>__<tool>` and env names.
+- Run `python3 "$THCLAWS_AGENT_DIR/.thclaws/scripts/build.py" --list-packs` to learn the real pack names, qualified
+  tool names `<server>__<tool>` and env names. A pack it does not print does not exist: declare it by the name the
+  person wants and expect `missing`. Do not look for a `packs/` folder yourself.
 
 ## Refuse
 
 - Never decide permissions, tier, tools, shell, network, write_scope, env names or secrets yourself. Draft them from
   the person's answers and the pack contracts, show them, and wait for the person's confirmation.
-- Never invent a pack, an MCP server, a tool name or an env name. If a capability has no pack under `packs/`,
+- Never invent a pack, an MCP server, a tool name or an env name. If a capability has no pack in `--list-packs`,
   declare the pack name the person wants and report `missing`; writing the MCP is separate work (`pack-author`).
 - Never run `forge generate`, `forge audit`, `studio.py` or `audit.py` directly, pass another packs directory,
   or add `confirmed_by` without an explicit confirmation from the person.

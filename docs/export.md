@@ -56,9 +56,12 @@ guarantee matrix ใน build report คือคำรับรองเดี�
 ## ลำดับลงทะเบียน (ทำด้วยมือ)
 
 1. แตก archive ที่ `deployment.package_root` บนเครื่อง worker ตรวจ sha256 แล้ว start `thclaws --serve` จาก directory นั้น
-   พร้อม `THCLAWS_API_TOKEN` และ env ตามชื่อใน `deployment.env`. Tree ที่แตกได้ต่างจาก package ที่ audit เฉพาะ `manifest.json`
-   (identity ที่ fuse) และ `.thclaws/settings.json` (block `agent` ถูกตัด) จึงรัน `audit.py`/`forge audit` กับ source package
-   ไม่ใช่ tree ที่แตก
+   พร้อม `THCLAWS_API_TOKEN`, **`THCLAWS_AUTO_MIGRATE=0`** และ env ตามชื่อใน `deployment.env`. Package ต้องคงเป็น single-agent workspace
+   (DESIGN §4 "Host + bots layout", §8): desktop build ของ thClaws 0.138.0 จะแปลงโฟลเดอร์ที่เปิดด้วย `--serve`/desktop เป็น host workspace ในที่เดิม
+   และเขียนทับ AGENTS.md/skills/scripts ทำให้ `workspace_dir` ที่ Atlas ลงทะเบียนไม่ใช่ agent อีกต่อไป จึงห้ามเปิด package ใน desktop app หรือรัน
+   `thclaws bots migrate` กับมัน; ถ้าเกิดขึ้นให้ deploy ใหม่จาก archive. ตรวจ `GET /v1/agent/info` ว่า `workspace_dir` เท่ากับ `deployment.package_root`.
+   Tree ที่แตกได้ต่างจาก package ที่ audit เฉพาะ `manifest.json` (identity ที่ fuse) และ `.thclaws/settings.json` (block `agent` ถูกตัด)
+   จึงรัน `audit.py`/`forge audit` กับ source package ไม่ใช่ tree ที่แตก
 2. `POST /api/workers` ด้วย `worker` + `token`; `POST /api/workspaces` ด้วย `workspace`
 3. Atlas upsert worker ด้วย `id` หรือ `base_url`: URL ที่ลงทะเบียนให้ worker อื่นแล้วจะเขียนทับ worker นั้นแทนการสร้าง
    `wrk_<name>` และ workflow ของ package ใหม่จะอ้าง worker ที่ไม่มี → ใช้ URL แยกต่อ daemon หรือระบุ `--worker-id` ให้ตรง worker เดิม

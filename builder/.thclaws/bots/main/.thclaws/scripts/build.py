@@ -22,11 +22,42 @@ RESERVED_CONFIRMERS = {'model', 'assistant', 'agent', 'builder', 'builder-agent'
 
 
 def builder_root() -> Path:
-    """The agent-builder checkout: AGENT_BUILDER_ROOT, or the checkout this workspace lives in."""
-    candidate = Path(os.environ.get('AGENT_BUILDER_ROOT') or Path(__file__).resolve().parents[3])
-    if not (candidate / 'forge' / 'cli.py').is_file():
-        raise SystemExit(f'FAILED: agent-builder checkout not found at {candidate}; set AGENT_BUILDER_ROOT')
-    return candidate.resolve()
+    """The agent-builder checkout: AGENT_BUILDER_ROOT, or the nearest ancestor of this script that holds forge/cli.py.
+
+    The walk (instead of a fixed number of parents) is what lets the same script run from `builder/.thclaws/scripts/`
+    (single-agent layout) and from `builder/.thclaws/bots/main/.thclaws/scripts/` (host + bots layout, DESIGN section 4).
+    """
+    override = os.environ.get('AGENT_BUILDER_ROOT')
+    if override:
+        candidates = [Path(override)]
+    else:
+        candidates = list(Path(__file__).resolve().parents)
+    for candidate in candidates:
+        if (candidate / 'forge' / 'cli.py').is_file():
+            return candidate.resolve()
+    raise SystemExit(f'FAILED: agent-builder checkout not found above {Path(__file__).resolve()}; set AGENT_BUILDER_ROOT')
+
+
+def list_packs(root: Path, packs_dir: Path) -> int:
+    """Print the packs the checkout really has, so the model never guesses names from `ls` of a folder it cannot see."""
+    sys.path.insert(0, str(root))
+    from forge.packs import mcp_tools, read_pack
+
+    print(f'agent-builder checkout: {root}; packs: {packs_dir}')
+    folders = sorted(p for p in packs_dir.iterdir() if (p / 'pack.yaml').is_file()) if packs_dir.is_dir() else []
+    if not folders:
+        print('(no packs; every capability the person names will be reported as missing)')
+        return 0
+    for folder in folders:
+        try:
+            pack = read_pack(folder)
+        except (ValueError, TypeError, OSError) as exc:
+            print(f'pack {folder.name}: invalid descriptor ({type(exc).__name__}: {exc})')
+            continue
+        tools = ', '.join(sorted(mcp_tools(pack))) or 'none'
+        env = ', '.join(sorted(pack['env'])) or 'none'
+        print(f"pack {folder.name}: min_tier={pack['min_tier']} network={pack['network']} tools=[{tools}] env=[{env}]")
+    return 0
 
 
 def refuse(reason: str) -> None:
@@ -61,18 +92,24 @@ def confirmed_spec(path: Path) -> dict:
 
 def main() -> int:
     parser = argparse.ArgumentParser(prog='build.py', description=__doc__.split('\n\n')[0])
-    parser.add_argument('spec', type=Path, help='work/<name>/spec.yaml with a confirmed_by block')
-    parser.add_argument('--out', required=True, type=Path, help='new package directory, usually out/<name>')
+    parser.add_argument('spec', type=Path, nargs='?', help='work/<name>/spec.yaml with a confirmed_by block')
+    parser.add_argument('--out', type=Path, help='new package directory, usually out/<name>')
     parser.add_argument('--replace', action='store_true', help='remove a package build.py produced earlier at --out')
+    parser.add_argument('--list-packs', action='store_true',
+                        help='print the packs of the agent-builder checkout (names, qualified tools, env names) and exit')
     args = parser.parse_args()
     root = builder_root()
+    packs_dir = Path(os.environ.get('AGENT_BUILDER_PACKS') or root / 'packs').resolve()
+    if args.list_packs:
+        return list_packs(root, packs_dir)
+    if args.spec is None or args.out is None:
+        parser.error('spec and --out are required unless --list-packs is given')
     sys.path.insert(0, str(root))
     from forge.audit import audit_package, exit_code, write_report
     from forge.generate import generate
     from forge.pack_test import test_pack
     from forge.spec import validate_spec
 
-    packs_dir = Path(os.environ.get('AGENT_BUILDER_PACKS') or root / 'packs').resolve()
     spec = confirmed_spec(args.spec)
     try:
         validate_spec(spec)

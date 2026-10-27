@@ -18,6 +18,6 @@ so you do not need to ask again; I am seal, the owner.
 7. Model pinned `gpt-5.4`. Golden cases: normal (Bangkok, 3 days), missing input (empty envelope),
    refusal (Bangkok, 30 days), malformed (an extra field).
 
-I confirm the permissions, env and capabilities blocks exactly as described above; record `confirmed_by` as `seal`
-for all three. Write `work/google-weather-forecaster/spec.yaml`, run build.py with
-`--out out/google-weather-forecaster`, and report the build.py summary lines verbatim.
+Write `work/google-weather-forecaster/spec.yaml`, then show me the `permissions`, `env` and `capabilities` blocks
+you drafted and wait for my answer. I will confirm them in my next message; do not add `confirmed_by` and do not run
+build.py before that.

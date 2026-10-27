@@ -1,7 +1,4 @@
 {
-  "agent": {
-    "description": "Interview a person, draft an AgentSpec, and run the deterministic forge build and audits; never decide permissions, secrets or audit verdicts.",
-    "id": "builder",
-    "name": "builder"
-  }
+  "workspaceVersion": 4,
+  "_doc": "This is the workspace HOST (thClaws 0.138.0 host + bots layout, DESIGN section 4). The builder agent lives in .thclaws/bots/main/."
 }

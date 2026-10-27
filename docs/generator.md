@@ -42,7 +42,8 @@ M7a แทน descriptor เดิมด้วย contract v2 ตาม [DESIGN 
 
 Generator สร้าง `.thclaws/mcp.json` จาก server command/args และ `manifest.requires.mcp_servers`.
 ห้าม server name ซ้ำข้าม pack. ค่า secret ไม่อยู่ใน MCP config; operator ตั้ง env ตามชื่อใน spec
-แล้ว start daemon โดยใช้ CWD=package. การติดตั้ง runtime, daemon isolation และ egress เป็นงาน deployment.
+แล้ว start daemon โดยใช้ CWD=package และ `THCLAWS_AUTO_MIGRATE=0` (package ต้องคงเป็น single-agent workspace; ห้ามเปิดใน thClaws desktop
+หรือรัน `thclaws bots migrate` กับมัน — DESIGN §4 "Host + bots layout"). การติดตั้ง runtime, daemon isolation และ egress เป็นงาน deployment.
 
 Spec ต้องประกาศ tools ครบทุกตัวที่ server advertise รวม built-ins ที่ pack ต้องใช้, env ครบ,
 tier ไม่น้อยกว่า min_tier และ network ไม่น้อยกว่า pack. `mutating` ต้องเป็น subset ของ server tools

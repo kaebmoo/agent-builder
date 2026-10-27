@@ -41,8 +41,12 @@ def json_object(text):
     return json.loads(text, parse_constant=invalid, object_pairs_hook=unique)
 
 
-def parse_sse(lines):
-    """Parse native thClaws SSE, including multi-line data and its terminal sentinel."""
+def parse_sse(lines, sink=None):
+    """Parse native thClaws SSE, including multi-line data and its terminal sentinel.
+
+    `sink` (a list) receives every event as soon as it is parsed, so a caller keeps the evidence of a run that later
+    times out or fails instead of losing the whole stream (M11 live on Mac lost 900 s of events that way).
+    """
     events, data, name = [], [], 'message'
     total = 0
     done = False
@@ -61,6 +65,8 @@ def parse_sse(lines):
                 if not isinstance(value, dict):
                     raise ValueError('SSE data must be an object')
                 events.append({'event': name, 'data': value})
+                if sink is not None:
+                    sink.append(events[-1])
             name, data = 'message', []
         elif not line.startswith(':'):
             field, _, value = line.partition(':')
@@ -111,7 +117,43 @@ def validate_value(spec, case, value):
     return value
 
 
-def request(port, token, path, timeout, body=None):
+def isolated_env(home, settings, token=None, **extra):
+    """Environment for a temporary thClaws process started by a gate or live audit (DESIGN §4, §8).
+
+    Isolated HOME/config, no MCP allowlist prompt, and the single-agent layout pinned: a desktop build of
+    thClaws 0.138.0 otherwise converts the run directory into a host workspace on `--serve` (moving AGENTS.md
+    and skills into `.thclaws/bots/main/` and rewriting them), which is why the flag is set explicitly rather
+    than left to a default that depends on the build feature and on whether a container is detected.
+    """
+    env = {'PATH': os.environ.get('PATH', os.defpath), 'HOME': str(home), 'XDG_CONFIG_HOME': str(Path(home) / '.config'),
+           'THCLAWS_CONFIG': str(settings), 'THCLAWS_MCP_ALLOW_ALL': '1', 'THCLAWS_AUTO_MIGRATE': '0'}
+    if token is not None:
+        env['THCLAWS_API_TOKEN'] = token
+    if set(extra) & set(env):
+        raise ValueError('extra env must not override daemon isolation')
+    env.update(extra)
+    return env
+
+
+def check_layout(info, work):
+    """Fail when thClaws did not serve the run directory as a single-agent workspace (DESIGN §4 host layout).
+
+    `info` is the `/v1/agent/info` body. Both paths are resolved because macOS maps `/tmp` to `/private/tmp`.
+    """
+    work = Path(work)
+    if (work / '.thclaws' / 'bots.json').exists():
+        raise ValueError('thClaws converted the run directory into a host workspace (.thclaws/bots.json appeared); '
+                         'DESIGN §4 "Host + bots layout"')
+    reported = info.get('workspace_dir')
+    if not isinstance(reported, str) or not reported:
+        raise ValueError('/v1/agent/info did not report workspace_dir')
+    if Path(reported).resolve() != work.resolve():
+        raise ValueError(f'daemon workspace_dir is not the run directory: {reported}')
+
+
+def request(port, token, path, timeout, body=None, sink=None, idle_timeout=None):
+    """GET `path` (JSON) or POST `body` to it (SSE). `sink`/`idle_timeout` apply to SSE: events are appended to `sink`
+    as they arrive and a stream silent for `idle_timeout` seconds fails as a stall instead of waiting for `timeout`."""
     connection = http.client.HTTPConnection('127.0.0.1', port, timeout=timeout)
     deadline = time.monotonic() + timeout
     timer = None
@@ -141,14 +183,20 @@ def request(port, token, path, timeout, body=None):
                 remaining = deadline - time.monotonic()
                 if remaining <= 0:
                     raise TimeoutError('case deadline exceeded')
+                wait = remaining if idle_timeout is None else min(remaining, idle_timeout)
                 if connection.sock:
-                    connection.sock.settimeout(remaining)
-                line = response.readline(1024 * 1024 + 1)
+                    connection.sock.settimeout(wait)
+                try:
+                    line = response.readline(1024 * 1024 + 1)
+                except TimeoutError:  # socket.timeout is this class since Python 3.10
+                    if idle_timeout is not None and deadline - time.monotonic() > 0:
+                        raise TimeoutError(f'SSE stalled: no bytes for {idle_timeout:g}s') from None
+                    raise TimeoutError('case deadline exceeded') from None
                 if not line:
                     break
                 yield line
 
-        return parse_sse(lines())
+        return parse_sse(lines(), sink)
     finally:
         if timer is not None:
             timer.cancel()
@@ -189,10 +237,7 @@ def run_daemon(package, spec, packs_dir, evidence, timeout, key_env):
         settings = base / 'settings.json'
         settings.write_text(json.dumps({'browserEnabled': False}))
         token = secrets.token_urlsafe(32)
-        env = {'PATH': os.environ.get('PATH', os.defpath), 'HOME': str(home),
-               'XDG_CONFIG_HOME': str(home / '.config'), 'THCLAWS_CONFIG': str(settings),
-               'THCLAWS_MCP_ALLOW_ALL': '1', 'THCLAWS_API_TOKEN': token,
-               key_env: os.environ[key_env]}
+        env = isolated_env(home, settings, token, **{key_env: os.environ[key_env]})
         hidden = [token, os.environ[key_env], str(base)]
         if spec['model']['id'].startswith('oai/'):
             endpoint = os.environ.get('OPENAI_COMPAT_BASE_URL', '')
@@ -244,6 +289,7 @@ def run_daemon(package, spec, packs_dir, evidence, timeout, key_env):
                     if time.monotonic() >= deadline:
                         raise ValueError('temporary daemon readiness timed out') from None
                     time.sleep(0.1)
+            check_layout(info, work)
             check_servers(info, expected_servers, evidence)
             called = set()
             for case in spec['evaluation']['golden_cases']:
@@ -317,9 +363,7 @@ def run_standalone(package, spec, packs_dir, evidence, timeout, key_env):
         home.mkdir()
         settings = base / 'settings.json'
         settings.write_text(json.dumps({'browserEnabled': False, 'model': spec['model']['id']}))
-        env = {'PATH': os.environ.get('PATH', os.defpath), 'HOME': str(home),
-               'XDG_CONFIG_HOME': str(home / '.config'), 'THCLAWS_CONFIG': str(settings),
-               'THCLAWS_MCP_ALLOW_ALL': '1', key_env: os.environ[key_env]}
+        env = isolated_env(home, settings, **{key_env: os.environ[key_env]})
         hidden = [os.environ[key_env], str(base)]
         if spec['model']['id'].startswith('oai/'):
             from urllib.parse import urlsplit

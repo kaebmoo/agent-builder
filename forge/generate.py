@@ -333,7 +333,9 @@ def render(spec: dict[str, Any], packs_dir: Path | None = None) -> tuple[dict[st
         "dependencies": dependencies,
         "deployment_hints": [
             "Run thclaws agent validate, then static/live/security audits before promoting package status.",
-            ("Start the daemon with CWD=package to load .thclaws/mcp.json and .thclaws/prompt/system.md; "
+            ("Start the daemon with CWD=package and THCLAWS_AUTO_MIGRATE=0 to load .thclaws/mcp.json and "
+             ".thclaws/prompt/system.md; never open the package in the thClaws desktop app or run thclaws bots migrate "
+             "on it (a host layout moves the agent files and breaks the Atlas workspace_dir contract); "
              "install external MCP runtimes separately."),
             "Provision model and environment variable names from agentspec.json at deployment time; no secret values are bundled.",
             "Manifest filesystem_scope=workspace is the packaging scope, not enforcement of the AgentSpec write_scope.",

@@ -167,7 +167,9 @@ def render_export(spec: dict[str, Any], report: dict[str, Any], binding: dict[st
         },
         "registration": [
             ("Unpack the archive at deployment.package_root on the worker host; start thclaws --serve there with "
-             "THCLAWS_API_TOKEN and the deployment.env names set (values never live in this file)."),
+             "THCLAWS_API_TOKEN, THCLAWS_AUTO_MIGRATE=0 and the deployment.env names set (values never live in this "
+             "file). The package must stay a single-agent workspace: never open it in the thClaws desktop app or run "
+             "thclaws bots migrate on it, and check GET /v1/agent/info workspace_dir equals deployment.package_root."),
             (f"The unpacked tree differs from the audited package only in {' and '.join(ARCHIVE_REWRITTEN)} "
              "(thclaws agent pack fuses the identity manifest and strips the settings agent block); run audit.py "
              "against the source package, not the unpacked copy."),

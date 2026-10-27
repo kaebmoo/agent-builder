@@ -46,7 +46,9 @@ M8 export/registration เสร็จ 2026-09-08: `forge export` ออก `atl
 M10 (pack authoring) เสร็จ 2026-10-26: `forge pack new` / `forge pack discover` ร่าง pack ที่ตั้งใจให้ยังไม่ conformant จนผู้เขียนเติม tier/network/fixture
 แล้ว `forge pack test` ตัดสิน; reference pack `fixtures/packs/echo/` ผ่านครบวงจรโดยไม่ใช้ LLM ดู [docs/packs.md](docs/packs.md).
 M11 (builder-agent) offline/native เสร็จ 2026-10-26: workspace `builder/` ให้ thClaws interview และร่าง spec แต่ build ได้ทางเดียวผ่าน
-`.thclaws/scripts/build.py` ที่บังคับ `confirmed_by` และรายงานผลจาก forge เท่านั้น; ส่วน live (ต้องมี provider key) ยังไม่รัน ดู [builder/README.md](builder/README.md).
+`.thclaws/scripts/build.py` ที่บังคับ `confirmed_by` และรายงานผลจาก forge เท่านั้น; ส่วน live (ต้องมี provider key) ยังไม่ผ่าน ดู [builder/README.md](builder/README.md).
+M13 (2026-10-27): รองรับ host + bots layout ของ thClaws 0.138.0 — `builder/` เป็น host workspace (agent ที่ `.thclaws/bots/main/`), harness ตั้ง
+`THCLAWS_AUTO_MIGRATE=0` และตรวจ layout จริงทุกครั้งที่สตาร์ท `--serve`, ส่วน package ที่ deploy กับ Atlas คง single-agent layout (DESIGN §4/§8).
 M12 (2026-10-27) ย้าย baseline thClaws ไป 0.138.0/`d452ece` หลังตรวจ DESIGN §4 ซ้ำกับ source จริง; native gate ทุกตัวผ่านบน binary นี้ และ `--write-boundary` ของ T1 ผ่านครบแต่ T1 ยังปิดรอ review.
 
 ```bash
@@ -54,6 +56,7 @@ python3 scripts/check_m7b_packs.py
 python3 scripts/check_m8_export.py
 python3 scripts/check_m10_pack_authoring.py
 python3 scripts/check_m11_builder_agent.py
+python3 scripts/check_m13_host_layout.py
 python3 scripts/check_m12_baseline.py
 ```
 

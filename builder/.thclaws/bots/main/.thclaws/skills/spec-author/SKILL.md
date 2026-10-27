@@ -18,7 +18,7 @@ elsewhere. Draft `work/<name>/spec.yaml` with these sections and rules.
 - `inputs`: `{name, transport, schema}` with transport `prompt_json`, `atlas_file_handoff` or `local_workspace`.
   Atlas input names match `[A-Za-z_][A-Za-z0-9_]*` and schemas are `type: object` (or array).
 - `outputs`: Atlas has exactly one output; `assistant_json` needs `schema`, `collect_files` needs `files.globs`.
-- `capabilities`: `[{pack: <name>, params: {}}]` using only names you saw under `packs/`. A pack the person needs
+- `capabilities`: `[{pack: <name>, params: {}}]` using only names printed by `build.py --list-packs`. A pack the person needs
   but that does not exist is still declared by its intended name so the report says `missing`; never invent its tools.
 - `permissions`: `tier`, `tools`, `shell`, `network`, `write_scope`.
   - T0: `shell: none`, `network: none`, `write_scope: none`. T1: same but `write_scope: output` (standalone T1 is disabled).
@@ -52,8 +52,12 @@ reuse a confirmation for a changed block: when a confirmed block changes, remove
 ## Build and report
 
 ```bash
-python3 .thclaws/scripts/build.py work/<name>/spec.yaml --out out/<name> [--replace]
+python3 "$THCLAWS_AGENT_DIR/.thclaws/scripts/build.py" --list-packs
+python3 "$THCLAWS_AGENT_DIR/.thclaws/scripts/build.py" work/<name>/spec.yaml --out out/<name> [--replace]
 ```
+
+`$THCLAWS_AGENT_DIR` is the builder agent's own folder (thClaws sets it for every shell, with or without a workspace
+host); `work/` and `out/` live at the workspace root where the shell runs.
 
 build.py prints `package_status=`, the audit layers, each pack's status (`missing`, `assets_bundled`, `conformant`,
 plus the `forge pack test` verdict when a descriptor exists) and every finding. Copy those lines into your

@@ -1,0 +1,7 @@
+{
+  "agent": {
+    "description": "Interview a person, draft an AgentSpec, and run the deterministic forge build and audits; never decide permissions, secrets or audit verdicts.",
+    "id": "builder",
+    "name": "builder"
+  }
+}

@@ -253,7 +253,8 @@ def check(work: Path) -> int:
     test_pack('echo', packs, timeout=5)
 
     # 8. Authoring material exists and points at the contract.
-    skill = (ROOT / 'builder/.thclaws/skills/pack-author/SKILL.md').read_text(encoding='utf-8')
+    # builder/ is a host workspace since M13; its agent (and the skill) live in .thclaws/bots/main (DESIGN §9).
+    skill = (ROOT / 'builder/.thclaws/bots/main/.thclaws/skills/pack-author/SKILL.md').read_text(encoding='utf-8')
     assert skill.startswith('---\nname: pack-author\n') and 'forge pack test' in skill and 'docs/packs.md' in skill
     guide = (ROOT / 'docs/packs.md').read_text(encoding='utf-8')
     for phrase in ('forge pack new', 'forge pack discover', 'forge pack test', 'fixtures/packs/echo', 'dry_run', 'idempotency_key'):

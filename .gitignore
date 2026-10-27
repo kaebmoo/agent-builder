@@ -31,6 +31,9 @@ packs/*/pack-conformance.json
 # Conformance evidence of fixture packs (gate copies them; never commit evidence).
 fixtures/packs/*/pack-conformance.json
 
-# builder-agent workspace drafts and builds (M11)
+# builder-agent workspace drafts and builds (M11); host and agent runtime state (M13 host + bots layout)
 builder/work/
 builder/out/
+builder/.thclaws/state/
+builder/.thclaws/bots/main/.thclaws/state/
+builder/.thclaws/bots/main/.thclaws/sessions/

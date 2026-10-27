@@ -64,7 +64,8 @@ def native() -> int:
     revision = next((line.split(':', 1)[1].strip().split()[0] for line in lines[1:] if line.startswith('revision:')), None)
     assert lines and lines[0] == f'thclaws {THCLAWS_BASELINE}', f'{lines[:1]} is not the baseline {THCLAWS_BASELINE}; re-check DESIGN §4 first'
     assert revision in STANDALONE_THCLAWS_COMPATIBILITY[THCLAWS_BASELINE], f'revision {revision} is not the reviewed source; re-check DESIGN §4 first'
-    validate = subprocess.run([binary, 'agent', 'validate', str(ROOT / 'builder')], capture_output=True, text=True,
+    # builder/ is a host workspace since M13; the agent thclaws validates lives in its shelf folder (DESIGN §9).
+    validate = subprocess.run([binary, 'agent', 'validate', str(ROOT / 'builder/.thclaws/bots/main')], capture_output=True, text=True,
                               env={**os.environ, 'PYTHONPYCACHEPREFIX': '/tmp/m12-pycache'}, timeout=120, check=False)
     assert validate.returncode == 0, validate.stdout + validate.stderr
     # The T1 blocker documented for 0.116.0–0.129.0 must stay closed on this baseline; a regression fails the gate.

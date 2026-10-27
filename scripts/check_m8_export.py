@@ -28,6 +28,7 @@ from jsonschema import Draft202012Validator
 from forge.atlas_export import ARCHIVE_REWRITTEN, ATLAS_REF, ATLAS_SCHEMA_PATH, UPSTREAM, WORKFLOW, export
 from forge.audit import audit_package, write_report
 from forge.generate import generate
+from forge.live_test import check_layout, isolated_env, request
 from forge.spec import load_spec
 
 SCHEMA = json.loads(ATLAS_SCHEMA_PATH.read_text(encoding='utf-8'))
@@ -315,8 +316,7 @@ def daemon_probe(atlas_port, register, files):
         settings = base / 'settings.json'
         settings.write_text(json.dumps({'browserEnabled': False}))
         token = secrets.token_urlsafe(32)
-        env = {'PATH': os.environ.get('PATH', os.defpath), 'HOME': str(home), 'XDG_CONFIG_HOME': str(home / '.config'),
-               'THCLAWS_CONFIG': str(settings), 'THCLAWS_MCP_ALLOW_ALL': '1', 'THCLAWS_API_TOKEN': token}
+        env = isolated_env(home, settings, token)
         with socket.socket() as listener:
             listener.bind(('127.0.0.1', 0))
             port = listener.getsockname()[1]
@@ -332,6 +332,8 @@ def daemon_probe(atlas_port, register, files):
                 except (OSError, ValueError, AssertionError, http.client.HTTPException):
                     assert time.monotonic() < deadline, 'temporary daemon readiness timed out'
                     time.sleep(0.1)
+            # The unpacked tree must be served as the single-agent workspace Atlas will register (DESIGN §8).
+            check_layout(request(port, token, '/v1/agent/info', 10), work)
             worker = call(atlas_port, 'POST', '/api/workers',
                           {**register['worker'], 'base_url': f'http://127.0.0.1:{port}', 'token': token})['worker']
             assert worker['id'] == register['worker']['id'] and worker.get('token_set')
