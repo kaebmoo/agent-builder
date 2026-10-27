@@ -1,7 +1,8 @@
 # แผน M13 — รองรับ host + bots layout ของ thClaws 0.138.0 (`d452ece`)
 
 สถานะเอกสาร: แผน (2026-10-27). **ขั้น A และ D1 ทำแล้ว** (DESIGN §4 "Host + bots layout" + กฎ §8, `forge/live_test.py::isolated_env`/`check_layout`
-ใช้ใน M6/M7b/M8/M11 และ gate M6 มี negative case ของ layout ที่ถูกแปลง); ขั้น B–F ยังไม่ทำ. เขียนจาก session cloud ที่ clone source `kaebmoo/thClaws`
+ใช้ใน M6/M7b/M8/M11 และ gate M6 มี negative case ของ layout ที่ถูกแปลง); **ขั้น B และ C ทำแล้ว** (แถว M13 ใน PLAN, CHANGELOG,
+`scripts/check_m13_host_layout.py` ตาม DoD ซึ่ง offline ส่วน layout/docs ยัง fail ตามคาดจนกว่า D2–D5 เสร็จ); ขั้น D–F ยังไม่ทำ. เขียนจาก session cloud ที่ clone source `kaebmoo/thClaws`
 branch `baseline-0.138.0-d452ece` (HEAD = `d452ece`) แล้วอ่าน source โดยตรง; ไม่มี binary ใน session นี้ จึงยังไม่ได้รันพฤติกรรมจริง
 ข้อที่ต้องยืนยันด้วย binary บน Mac ระบุไว้ใน §6. กติกาที่บังคับทุกขั้น: AGENTS.md (DESIGN ก่อนโค้ด, generator deterministic,
 หนึ่ง milestone หนึ่ง `scripts/check_<m>.py` exit 0/1/2, ไม่แก้ gate/pin/เกณฑ์ audit เพื่อให้ผ่าน, แก้ prompt/skill ของ `builder/` ต้องรัน M11 live ซ้ำ 3 รอบ)
