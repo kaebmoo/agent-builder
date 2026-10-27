@@ -37,7 +37,8 @@ UPSTREAM = "__UPSTREAM_NODE_ID__"
 T2_PLACEHOLDERS = {"__OPERATOR_T2_WORKER_ID__": "worker_id", "__OPERATOR_T2_WORKSPACE_ID__": "workspace_id"}
 ID_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,127}")
 FILES_DIR_LINE = "\nHandoff files directory: {files_dir}"
-# thclaws agent pack (v0.116.0 revision 75edc48) rewrites exactly these two files; every other member is byte-identical.
+# thclaws agent pack (agent_cli.rs, unchanged from 0.116.0/75edc48 to 0.138.0/d452ece) rewrites exactly these two
+# files; every other member is byte-identical.
 ARCHIVE_REWRITTEN = ("manifest.json", ".thclaws/settings.json")
 NOT_VERIFIED = ("These checks prove reachability and MCP inventory only. Daemon isolation, egress control and the "
                 "approval path are verified by the operator outside this file; the builder never sets deployment_verified.")

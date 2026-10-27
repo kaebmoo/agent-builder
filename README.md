@@ -47,12 +47,14 @@ M10 (pack authoring) เสร็จ 2026-10-26: `forge pack new` / `forge pack 
 แล้ว `forge pack test` ตัดสิน; reference pack `fixtures/packs/echo/` ผ่านครบวงจรโดยไม่ใช้ LLM ดู [docs/packs.md](docs/packs.md).
 M11 (builder-agent) offline/native เสร็จ 2026-10-26: workspace `builder/` ให้ thClaws interview และร่าง spec แต่ build ได้ทางเดียวผ่าน
 `.thclaws/scripts/build.py` ที่บังคับ `confirmed_by` และรายงานผลจาก forge เท่านั้น; ส่วน live (ต้องมี provider key) ยังไม่รัน ดู [builder/README.md](builder/README.md).
+M12 (2026-10-27) ย้าย baseline thClaws ไป 0.138.0/`d452ece` หลังตรวจ DESIGN §4 ซ้ำกับ source จริง; native gate ทุกตัวผ่านบน binary นี้ และ `--write-boundary` ของ T1 ผ่านครบแต่ T1 ยังปิดรอ review.
 
 ```bash
 python3 scripts/check_m7b_packs.py
 python3 scripts/check_m8_export.py
 python3 scripts/check_m10_pack_authoring.py
 python3 scripts/check_m11_builder_agent.py
+python3 scripts/check_m12_baseline.py
 ```
 
 ดู [Publisher pack](packs/publisher-email-sftp/README.md) และ [SQL pack](packs/sql-readonly/README.md)
@@ -61,7 +63,7 @@ python3 scripts/check_m11_builder_agent.py
 ## ข้อกำหนดขั้นต่ำ
 
 - Python 3.11+
-- thClaws 0.116.0 สำหรับ Atlas/export; standalone T0 รองรับ 0.116.0/`75edc48`, 0.121.0/`35ccf16` และ 0.129.0/`7a27129` (ต้องตรงทั้ง version+revision; รุ่นอื่น fail จนกว่าจะตรวจ DESIGN §4 ใหม่); `thclaws agent validate` / `thclaws agent pack` ต้องอยู่ใน PATH หรือ `THCLAWS_BIN` สำหรับ M4 ขึ้นไป
+- thClaws baseline `0.138.0` revision `d452ece` สำหรับ Atlas/export/catalog (M12, 2026-10-27; เดิม 0.116.0); standalone T0 รองรับคู่ version+revision 0.116.0/`75edc48`, 0.121.0/`35ccf16`, 0.129.0/`7a27129`, 0.138.0/`d452ece` (รุ่นอื่น fail จนกว่าจะตรวจ DESIGN §4 ใหม่); `thclaws agent validate` / `thclaws agent pack` ต้องอยู่ใน PATH หรือ `THCLAWS_BIN` สำหรับ M4 ขึ้นไป
 - Atlas control plane สำหรับ M8: `forge export` ทำงานได้โดยไม่ต้องมี Atlas; ส่วน native ของ `check_m8_export.py` ใช้ checkout ที่
   `../atlas-control-plane` หรือ `ATLAS_ROOT` (ไม่พบ → skip exit 2)
 
@@ -70,6 +72,6 @@ python3 scripts/check_m11_builder_agent.py
 Apache-2.0 (ดู [LICENSE](LICENSE) และ [NOTICE](NOTICE)) — ครอบเฉพาะโค้ดของ builder; package ที่ generate ออกมาเป็นของผู้ใช้ ใช้ license ตาม `identity.license` ใน AgentSpec
 
 Live audit (M6): `forge live-test out/sql-reader --write` หรือ `forge audit out/sql-reader --live --write`.
-ต้องมี thClaws v0.116.0 และ provider key ใน environment (`OPENAI_API_KEY` สำหรับ fixture SQL).
+ต้องมี thClaws baseline (0.138.0) และ provider key ใน environment (`OPENAI_API_KEY` สำหรับ fixture SQL).
 ไม่มี key จะรายงาน SKIP (exit 2) และคง `draft`; ผ่าน golden cases และหลักฐาน MCP จึงเป็น `candidate`.
 รายละเอียดและขอบเขตการตรวจอยู่ใน [docs/audit.md](docs/audit.md).

@@ -1,8 +1,9 @@
 # Design baseline (2026-09-03)
 
 เอกสารนี้คือข้อตกลงการออกแบบที่ใช้เป็นฐานของทุก milestone ใน [PLAN.md](PLAN.md)
-ข้อเท็จจริงเกี่ยวกับ thClaws อ้างจาก source ของ fork `kaebmoo/thClaws` ที่ `crates/core` v0.116.0
-ถ้า thClaws เปลี่ยนพฤติกรรม ให้แก้เอกสารนี้ก่อนแก้โค้ด
+ข้อเท็จจริงเกี่ยวกับ thClaws อ้างจาก source ของ fork `kaebmoo/thClaws` ที่ `crates/core`: baseline เดิม v0.116.0 (revision `75edc48`)
+และตั้งแต่ M12 (2026-10-27) คือ v0.138.0 revision `d452ece` ซึ่งตรวจทุก claim ซ้ำแล้วใน §4 "Baseline 0.138.0 / d452ece"; ข้อความที่ยังอ้าง v0.116.0
+คือ claim ที่ diff ยืนยันว่าไม่เปลี่ยน. ถ้า thClaws เปลี่ยนพฤติกรรม ให้แก้เอกสารนี้ก่อนแก้โค้ด
 
 ## 1. ขอบเขต
 
@@ -97,6 +98,7 @@ unknown tools, Task/WorkflowRun, KMS/Memory writers และ shell ไม่อ
 ไม่ปลด guard ของ generator. หาก traversal/symlink หลุดต้อง exit 1 และรายงาน BLOCKED; ไม่มี binary exit 2.
 แม้ diagnostic ผ่านในอนาคต ก็ไม่ปลด T1 อัตโนมัติ ต้อง review evidence แล้วแก้ DESIGN/implementation ก่อน.
 
+Compatibility ของ standalone T0: คู่ที่รับรองคือ 0.116.0/`75edc48`, 0.121.0/`35ccf16`, 0.129.0/`7a27129` และ 0.138.0/`d452ece` (M12).
 Compatibility ของ standalone T0 ตรวจเพิ่มบน thClaws 0.121.0 revision `35ccf16` (binary rebuilt 2026-09-09):
 ใช้ native agent new/validate, named role tool subsets, CLI workflow output และ provider แบบเดียวกับ baseline
 0.116.0. Native gate เป็นเงื่อนไขรับรองรุ่นเพิ่มนี้; scope เฉพาะ T0 CLI ไม่เลื่อน baseline ของ Atlas/export.
@@ -227,7 +229,7 @@ M1 ตรวจว่า embedded schema เป็น JSON Schema ที่ถ�
 - `builder-build-report.json` (schema: `builder-build-report.schema.json`, สร้างและตรวจใน M4): target, generated files, guarantee matrix, audit result, compatibility result, deployment hints
 - `atlas-register.json` (M8, `forge export`, อยู่นอก package): worker payload (`id`, `name`, `base_url`, `role` / `tags` จาก `routing`; token ไม่อยู่ในไฟล์), workspace payload (`worker_id`, `workspace_key`, deployment-time `workspace_dir`), node template (`model`, `prompt` ที่ render แล้วเป็น JSON เทียบเท่า input envelope ของ live audit, `collect_files` จาก `files.globs`, `outputs` + `output_format: json` เฉพาะ `assistant_json`; omit ทั้งคู่เมื่อเป็น `collect_files` ล้วน), edge template (`push_files: ["files.__UPSTREAM_NODE_ID__.*"]` + `policy_template.file_handoff: true` เมื่อมี input `atlas_file_handoff`), deployment list (env names, MCP servers, network/hosts, daemon CWD, `reachability_checks`, `deployment_verified: false` ซึ่ง builder ไม่เคยตั้งเป็น true) และ `package_status` ที่คัดลอกจาก build report โดยไม่เลื่อน. Export ปฏิเสธ package ที่ report ไม่บันทึก `audit.static = passed` หรือบันทึก `audit.manifest = failed`; มี binary แต่ report ยัง `manifest: skipped` → รัน `thclaws agent validate` ก่อน pack และปฏิเสธเมื่อไม่ผ่าน; `--out` ต้องอยู่นอก package เพราะ `thclaws agent pack` เดินทุกไฟล์ใน package รวม staging directory
 - `atlas-workflow.json` เมื่อ target = `atlas-workflow`: workflow definition ที่ POST เข้า `/api/workflows` ได้ตรง ๆ; T2 คือ fragment ของ M7b ที่ bind worker/workspace id แล้ว, T0/T1 คือ graph node เดียวไม่มี edge
-- archive `<name>-<version>.tar.gz` จาก `thclaws agent pack` พร้อม sidecar `.sha256`; ไม่มี binary → export เขียนเฉพาะไฟล์ JSON และรายงาน skip (exit 2); binary ที่ไม่ใช่ baseline `0.116.0` → fail (exit 1). พฤติกรรม pack (ตรวจ source v0.116.0 revision `75edc48`, 2026-09-09): `agent_cli.rs::pack_to_file` fuse identity จาก `.thclaws/settings.json::agent` ลง `manifest.json` (เพิ่ม `id`, `name`, `description`, `preview`, `pricing`; field เดิมคงค่า) และ `pack.rs` ตัด block `agent` ออกจาก `.thclaws/settings.json`, strip prefix `.thclaws/state/`, `.git/`, `node_modules/`, `target/`, `__pycache__/`, `.venv/`, `.next/`, `dist/`, `build/`, suffix `.env`/`.key`/`.pyc`/`.log`, path ที่มี `_secret` และ `.thclaws/audit-findings.json`/`.thclaws/usage.jsonl`; mtime ของสมาชิกมาจากไฟล์จริง archive จึงไม่ byte-stable ข้าม generate. Tree ที่แตกจาก archive จึงต่างจาก package ที่ audit เฉพาะ `manifest.json` และ `.thclaws/settings.json`: `audit.py` บน tree นั้นรายงาน `drift` เป็นเรื่องปกติ ต้องรัน audit กับ source package; `forge export` ตรวจ archive หลัง pack ทุกครั้ง: สมาชิกต้องเท่ากับ `generated_files` ของ report และ byte ตรงกับ package ยกเว้นสองไฟล์นั้น มิฉะนั้น fail (asset ของ pack หรือ generated file ที่ path มี `_secret` หรือลงท้าย `.env`/`.key`/`.log` เช่น script `client_secret.py` หรือ input ชื่อ `api_secret` → `inputs--api_secret.json` ถูก pack ตัดเงียบ ๆ และ daemon จะรันต่อโดยไม่มี MCP นั้นตาม §4); gate M8 ตรวจกรณีนี้ด้วย input `api_secret` และ start daemon จาก tree ที่แตกจาก archive
+- archive `<name>-<version>.tar.gz` จาก `thclaws agent pack` พร้อม sidecar `.sha256`; ไม่มี binary → export เขียนเฉพาะไฟล์ JSON และรายงาน skip (exit 2); binary ที่ไม่ใช่ baseline `0.116.0` → fail (exit 1). พฤติกรรม pack (ตรวจ source v0.116.0 revision `75edc48`, 2026-09-09): `agent_cli.rs::pack_to_file` fuse identity จาก `.thclaws/settings.json::agent` ลง `manifest.json` (เพิ่ม `id`, `name`, `description`, `preview`, `pricing`; field เดิมคงค่า) และ `pack.rs` ตัด block `agent` ออกจาก `.thclaws/settings.json`, strip prefix `.thclaws/state/`, `.git/`, `node_modules/`, `target/`, `__pycache__/`, `.venv/`, `.next/`, `dist/`, `build/`, suffix `.env`/`.key`/`.pyc`/`.log`, path ที่มี `_secret` และ `.thclaws/audit-findings.json`/`.thclaws/usage.jsonl`; mtime ของสมาชิกมาจากไฟล์จริง archive จึงไม่ byte-stable ข้าม generate. (0.138.0/`d452ece` เพิ่ม prefix `.thclaws/bots/`, `.home/`, `.playwright-mcp/` และ exact `.thclaws/media-jobs.jsonl` → ดู §4 M12; กฎ fuse/rewrite สองไฟล์ไม่เปลี่ยน) Tree ที่แตกจาก archive จึงต่างจาก package ที่ audit เฉพาะ `manifest.json` และ `.thclaws/settings.json`: `audit.py` บน tree นั้นรายงาน `drift` เป็นเรื่องปกติ ต้องรัน audit กับ source package; `forge export` ตรวจ archive หลัง pack ทุกครั้ง: สมาชิกต้องเท่ากับ `generated_files` ของ report และ byte ตรงกับ package ยกเว้นสองไฟล์นั้น มิฉะนั้น fail (asset ของ pack หรือ generated file ที่ path มี `_secret` หรือลงท้าย `.env`/`.key`/`.log` เช่น script `client_secret.py` หรือ input ชื่อ `api_secret` → `inputs--api_secret.json` ถูก pack ตัดเงียบ ๆ และ daemon จะรันต่อโดยไม่มี MCP นั้นตาม §4); gate M8 ตรวจกรณีนี้ด้วย input `api_secret` และ start daemon จาก tree ที่แตกจาก archive
 
 Atlas registration contract (M8, ตรวจ source `atlas-control-plane` ref `daa0f4966899327fb563501435f5d6180eeef9c3` 2026-09-08; schema pinned ไว้ที่ `patterns/atlas-workflow-definition.schema.json` และ gate M8 fail เมื่อไฟล์ต้นทางต่างจากที่ pin):
 - `POST /api/workers` (permission `admin`) upsert ด้วย `id` **หรือ** `base_url` (`db.py::upsert_worker`): register export ที่สองด้วย URL เดิมจะเขียนทับ worker เดิมโดยคง id เดิม และ `wrk_<name>` ของ package ที่สองไม่ถูกสร้าง → หนึ่ง daemon URL ต่อหนึ่ง worker หรือระบุ `--worker-id` ให้ตรง worker ที่มีอยู่; `base_url` ต้อง http(s) เท่านั้น; `token` คือ `THCLAWS_API_TOKEN` ของ daemon และ response ไม่คืน token. `POST /api/workspaces` ต้องมี `worker_id`, `workspace_key`, `workspace_dir` (path บนเครื่อง worker). `POST /api/workflows` validate graph, policy และ reference ตอนบันทึก: worker/workspace ที่ node pin ต้องมีอยู่ก่อน จึงต้อง register worker → workspace → workflow ตามลำดับ
@@ -311,6 +313,63 @@ forced Write/Edit/Bash ถูกปฏิเสธครบทั้งสาม
 (M4/M5/M7b/M8/M10 native ผ่านด้วย binary นี้) ส่วน standalone T0 ตรวจคู่ version+revision จึง fail closed กับ `b962abc` ตามที่ตั้งใจ;
 จะเพิ่มคู่ `0.116.0/b962abc` ได้ก็ต่อเมื่อตรวจ source ของ commit นั้นเทียบ claim ใน §4 และรัน M9 native ผ่านก่อน.
 Build แบบ CLI-only ต้องมี `frontend/dist/index.html` (ไฟล์ว่างพอ) เพราะ `gui.rs`/`server.rs` `include_str!` ไฟล์นี้.
+
+### Baseline 0.138.0 / d452ece (M12, 2026-10-27)
+
+Source: GitHub branch `baseline-0.138.0-d452ece` (tree `bd085f15077261755d98fc3b5afcc70cd77ed14a` ตรงกับ binary บน Mac ของผู้ดูแล;
+commit = `v0.138.0` `e614db6` + merge `upstream/main`). ตรวจด้วย `git diff b962abc d452ece` บนทุกไฟล์ที่ §3/§4/§7/§8 อ้างถึง แล้วเปิด source อ่านยืนยัน:
+
+**ไม่เปลี่ยน** (diff ว่างหรือไม่แตะ claim): `api_v1/agent.rs` (field ของ `/agent/run`, ชื่อ/payload ของ SSE รวม `tool_use_start.input`),
+`api_v1/info.rs` (`skills`, `mcp_servers{name,command,tool_count}`), `api_v1/mod.rs` (`THCLAWS_API_TOKEN` ไม่ตั้ง → 404),
+`cloud/agent_cli.rs` (validate, pack fuse), `cloud/manifest.rs`, `cloud/agent_scaffold.rs`, `agent_defs.rs`, `net_guard.rs`,
+`tools/workflow_run.rs` (summary `\n\n[workflow: N subagent turn(s), X in / Y out tokens]`), `config.rs::load_mcp_servers`
+(user → project `.mcp.json`/`.thclaws/mcp.json`/`.claude/mcp.json` merge ตามชื่อ), `mcp.rs` (`MCP_NAME_SEPARATOR = "__"`, sanitize,
+env literal สำหรับ stdio, `${VAR}` เฉพาะ headers, allowlist + `THCLAWS_MCP_ALLOW_ALL`, `InitializeResult.instructions` →
+`# MCP server instructions`), `agent_runtime.rs::load_mcp_servers_silent` (eprintln แล้วรันต่อ), `prompts.rs::load`
+(project override `.thclaws/prompt/<name>.md` ที่ CWD), `agent.rs::build_todos_reminder` (cap 80 บรรทัด/6 KB),
+`tools/todo.rs` (`.thclaws/state/todos.md`), `repl.rs` (`oai/` + `OPENAI_COMPAT_*`, `run_agent_workflow` ใช้ AutoApprover +
+`PermissionMode::Auto`), `/agent/run` ยังลงทะเบียน `WorkflowRun` โดยไม่มี subagent factory. รูปแบบ `--version` คือ
+`thclaws 0.138.0` / `revision: d452ece (<branch>)` / `built: ...`; parser ใช้ token แรกหลัง `revision:`.
+
+**เปลี่ยน** (ต้องรู้):
+1. `agent_runtime.rs::build_runtime_with_provider` เรียก `ToolRegistry::apply_filter(allowed_tools, disallowed_tools)` หลังลงทะเบียน
+   tool ทั้งหมด (upstream issue #221): `allowed` ไม่ว่าง → เหลือเฉพาะชื่อในรายการ, `disallowed` → ถอดชื่อนั้น. ค่ามาจาก `AppConfig`
+   ซึ่ง `ProjectConfig` (`<cwd>/.thclaws/settings.json`) ตั้งได้ด้วย `allowedTools` / `disallowedTools` (รวม `permissions.allow/deny`
+   แบบ Claude Code). ผลคือ `/agent/run` ของ daemon ที่ start จาก CWD=package **บังคับ tool allowlist ได้** เป็นครั้งแรก. M12 ยังไม่ใช้
+   ช่องทางนี้: generator ไม่เขียน `allowedTools` และ guarantee matrix คง `tool_allowlist: Declared` จนกว่าจะมี milestone ที่ generate +
+   พิสูจน์ด้วย native gate (tool ที่ไม่อยู่ใน allowlist ต้องหายจาก registry/ถูกปฏิเสธจริง). `apply_filter` ไม่กรอง MCP tools ที่โหลดหลังจากนั้นหรือไม่ ต้องตรวจตอนทำ.
+2. `KmsEditTool` ถูกลงทะเบียนเพิ่มใน `/agent/run` → catalog `patterns/tools-0.138.0.json` มี 69 tools (= catalog 0.116.0 + `KmsEdit`;
+   ตรวจแล้วว่าทุกชื่อใน catalog เดิมยังเป็น tool name ใน source). `KmsEdit` เป็น writer ใต้ `.thclaws/` → `WORKSPACE_STATE_TOOLS`
+   (`Kms*` prefix ใน `forge/spec.py`) ครอบคลุมอยู่แล้ว.
+3. `subagent.rs::PathScopedWriteTool::check` ใช้ `resolve_destination` → `sandbox::resolve_landing` (lexical normalize `.`/`..`,
+   canonicalize, ตาม symlink รวม dangling symlink ทีละ component จน `MAX_SYMLINK_HOPS`) และ canonicalize cwd ก่อน match glob
+   (upstream issues #204/#219). Native diagnostic `check_m9_standalone.py --write-boundary` บน `d452ece` ปฏิเสธครบ:
+   `outside.txt`, `output/../traversal.txt`, `output/link/escaped.txt`, `output/dangling` และยอมรับ positive control. blocker ของ T1
+   ที่บันทึกไว้สำหรับ 0.116.0–0.129.0 จึงไม่พบบน baseline นี้; **T1 ยังปิด** ตามกติกา "diagnostic ผ่านไม่ปลดอัตโนมัติ" ต้อง review
+   ขอบเขต (Bash/MCP นอก wrapper, runtime state) และแก้ generator/matrix/audit ใน milestone แยก. `writePaths` ยังครอบเฉพาะ
+   Write/Edit/Docx*/Pptx*/Xlsx*/PdfCreate/EpubCreate/NotebookEdit.
+4. `cloud/pack.rs` strip เพิ่ม prefix `.thclaws/bots/`, `.home/`, `.playwright-mcp/` และ exact `.thclaws/media-jobs.jsonl`;
+   `unpack` รองรับ directory entry และปฏิเสธ symlink/hardlink entry. ไม่กระทบ `forge export` เพราะ generated file ไม่เคยใช้ path เหล่านี้
+   และ `pack_archive` ยังเทียบสมาชิกกับ `generated_files` เหมือนเดิม; `ARCHIVE_REWRITTEN` ยังเป็น `manifest.json` + `.thclaws/settings.json`.
+5. `config.rs`: template settings ของ workspace ใหม่เขียน `"browserEnabled": false` แต่ `AppConfig` default ยังเป็น on เมื่อไม่มี key
+   (และฉีด `browser` MCP เมื่อพบ `npx`); live harness จึงยังตั้ง `{"browserEnabled": false}` ใน `THCLAWS_CONFIG` และตรวจ inventory
+   เท่าเดิม. shared workspace ปฏิเสธ browser. `apply_runtime_policy` เติม `disallowed_tools` จาก org policy (`policy/mod.rs`,
+   signed policy; ไม่มี policy = ไม่มีผล; build flag `THCLAWS_POLICY_REQUIRED`). `retired_model_successor` เปลี่ยน `model` ที่ pin
+   ตอน load ถ้าอยู่ใน `RETIRED_MODELS` (ตอนนี้มีเฉพาะ deepseek) → model ที่ spec pin อาจถูกแทนเงียบ ๆ ในอนาคต; live audit ควร
+   บันทึก model ที่ใช้จริง (follow-up).
+6. ผล MCP tool ถูก cap 256 KiB (`THCLAWS_MCP_MAX_TEXT_BYTES`, `browser_snapshot` 48 KiB) และ tool output ที่เกินถูก spill ไป
+   `<sandbox root>/.thclaws/state/tool-output/` → เป็น state ที่ static audit ignore อยู่แล้ว (`.thclaws/state/` ยกเว้น `todos.md`)
+   และ live copy ไม่คัดลอก; ไฟล์ spill ไม่ใช่ generated file.
+7. `api_v1/messages.rs` endpoint ใหม่ และ `server.rs` เปลี่ยนมาก แต่ builder ไม่ใช้.
+
+**การตัดสินใจ**: baseline ของ Atlas/export/catalog = `0.138.0` (binary ต้องรายงาน `thclaws 0.138.0`); standalone T0 เพิ่มคู่
+`0.138.0/d452ece` และคงคู่เดิมสามคู่เป็นหลักฐานประวัติ (ไม่ได้รันซ้ำ). `patterns/tools-0.116.0.json` คงไว้เป็นหลักฐาน; static audit
+ใช้ `tools-<baseline>.json`. Build แบบ CLI-only ใน container ใช้ placeholder `frontend/dist/index.html`.
+
+**Native evidence 2026-10-27 บน build จาก `d452ece`**: M4 (scaffold compat ทั้งสาม pattern + validate 4 packages), M5 (`draft`),
+M7b (`draft`), M8 (archive + sha, inventory ตรง), M9 T0 (pipeline สาม role, denial 9/9, `--write-boundary` 5/5), M10 (`draft`),
+M11 (`thclaws agent validate` ของ `builder/`) ผ่าน; M6/M7a skip (ไม่มี `../AI`), M8 Atlas skip (ไม่มี `ATLAS_ROOT`), ส่วน provider
+ของ M9/M11 skip (ไม่มี key). ยังไม่ได้รัน live audit ใด ๆ บน baseline นี้; evidence `candidate` เดิมทั้งหมดเป็นของ 0.116.0.
 
 ### M9 compatibility follow-up (2026-09-16, thClaws 0.129.0 `7a27129`)
 

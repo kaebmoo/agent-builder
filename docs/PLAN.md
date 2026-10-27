@@ -3,7 +3,7 @@
 กติกาเดียวกับ Atlas: **หนึ่ง milestone = หนึ่ง check script** ใน `scripts/check_<milestone>.py` ที่ fail เมื่อพฤติกรรมพัง
 ห้าม tick milestone ก่อน check ผ่าน commit ต่อ milestone เมื่อ gate เขียว
 
-ลำดับตาม baseline ที่ตกลง: schema → fixtures → matrix → generator → thclaws validate → static audit → SQL pack ขั้นต่ำ (M7a) → live audit → publisher pack (M7b) → export → standalone generator (M9, เพิ่ม 2026-09-07 ต่อท้าย MVP เพื่อไม่เลื่อนสาย Atlas) → pack authoring workflow (M10) → builder-agent (M11) (เพิ่ม 2026-09-07 หลัง MVP; M7a ขยายเป็น pack contract ในวันเดียวกัน)
+ลำดับตาม baseline ที่ตกลง: schema → fixtures → matrix → generator → thclaws validate → static audit → SQL pack ขั้นต่ำ (M7a) → live audit → publisher pack (M7b) → export → standalone generator (M9, เพิ่ม 2026-09-07 ต่อท้าย MVP เพื่อไม่เลื่อนสาย Atlas) → pack authoring workflow (M10) → builder-agent (M11) (เพิ่ม 2026-09-07 หลัง MVP; M7a ขยายเป็น pack contract ในวันเดียวกัน) → baseline 0.138.0 (M12, เพิ่ม 2026-10-27 เพราะ binary ที่ผู้ดูแลใช้จริงไม่ใช่ 0.116.0 อีกแล้ว)
 
 | M | ชื่อ | ผลลัพธ์ | Definition of done | check |
 |---|---|---|---|---|
@@ -20,6 +20,7 @@
 | M9 | Standalone generator (`static-pipeline`, T0) | fixture `text-reviewer-standalone`, role planner/worker/verifier, CLI live audit; T1 disabled | deterministic package ผ่าน native validate, ทุก role ใช้ nonempty Read/Grep/Glob หรือ pack-declared nonmutating MCP subset; Write/Edit/Bash เรียกไม่ได้จริง; T1 generate และ legacy audit ถูก reject; CLI คืน result/refusal ที่ forge validate; provider golden cases ผ่านด้วย model ที่ระบุ; ไม่รับรอง filesystem isolation | `check_m9_standalone.py` (ไม่มี binary/key → explicit skip 2); `--write-boundary` ตรวจ blocker T1 แยกและคืน 1 เมื่อพบ bypass |
 | M10 | Pack authoring workflow | `forge pack new <name>` scaffold (`pack.yaml` v2 + `fixture/setup.py` + cases + README ของ contract), `forge pack discover --command <cmd> [--args ...]` ร่าง `pack.yaml` จาก `tools/list` (tools, input schema, annotations เป็นข้อเสนอของ `mutating`) โดยไม่ตัดสิน tier/network/env/fixture, `docs/packs.md` สำหรับผู้เขียน MCP ภายนอก, skill `pack-author` (SKILL.md ที่ session ของ thClaws ใช้เขียน MCP ตาม contract ได้), reference server `fixtures/packs/echo/` (stdlib stdio MCP ~50 บรรทัด) เป็น fixture ของ gate | scaffold → implement echo → `forge pack test` ผ่านครบวงจรโดยไม่ใช้ LLM; `discover` จาก echo server ได้ `pack.yaml` ที่ผ่าน `forge pack test` หลังผู้เขียนเติม tier/fixture; harness รัน server ด้วย env สะอาด (PATH + env ที่ประกาศ) และ server ที่ต้องการ env ที่ไม่ได้ประกาศ fail พร้อมเหตุผล; ชื่อ server/tool นอก charset ของ contract ถูก reject; server ที่ advertise tool นอกที่ประกาศหรือขาด tool fail พร้อมเหตุผล; pack ที่มี `mutating` แต่ `min_tier: T0` ถูก reject; `forge generate` กับ spec ที่ใช้ echo pack ได้ `.thclaws/mcp.json` ที่ไม่มีค่า secret และ `forge audit` ได้ `draft` | `check_m10_pack_authoring.py` (ไม่ต้องใช้ key; ไม่มี `thclaws` → skip ส่วน validate exit 2) |
 | M11 | builder-agent (thClaws เป็นผู้สร้าง) | workspace `builder/` (AGENTS.md, skills `spec-author` + `pack-author`, ไม่มี subagent) ที่ interview 7 ข้อ, เขียน `spec.yaml`, รัน `forge generate` / `forge audit` / `forge pack test` ผ่าน Bash ใน workspace ของ builder, รายงานสถานะจาก `builder-build-report.json`; marker `confirmed_by` สำหรับ block permissions/env/network/capabilities ตาม DESIGN §9 | offline: workspace ผ่าน `thclaws agent validate`, AGENTS.md ห้าม model ตัดสิน permission/network/secret และห้ามประดิษฐ์ pack, `spec.yaml` ที่ไม่มี `confirmed_by` ต้องถูก skill ปฏิเสธก่อน generate; live (ต้องมี key): prompt fixture "agent พยากรณ์อากาศจาก Google Weather" ได้ spec ที่ `forge generate` รับ และ report บอก pack `google-weather` เป็น `missing` ตรง ๆ; ผล audit ทุกชั้นมาจาก forge ไม่ใช่คำสรุปของ model | `check_m11_builder_agent.py` (ไม่มี `thclaws` → skip exit 2; ไม่มี provider key → skip ส่วน live exit 2 พร้อมประกาศ) |
+| M12 | thClaws baseline 0.138.0 (เพิ่ม 2026-10-27) | ตรวจ DESIGN §4 ซ้ำกับ source `d452ece` (branch `baseline-0.138.0-d452ece`), `patterns/tools-0.138.0.json`, `THCLAWS_BASELINE` + คู่ standalone `0.138.0/d452ece`, docs | ทุก claim ใน §4 มีสถานะ ไม่เปลี่ยน/เปลี่ยน พร้อมผลต่อ builder; native gate M4–M11 ผ่านบน binary จาก `d452ece`; `--write-boundary` บันทึกผล; T1/allowedTools ยังไม่เปิด | `check_m12_baseline.py` (ไม่มี binary → exit 2; binary ไม่ตรงคู่ → exit 1) |
 
 ## นอกแผน (ทำหลัง MVP เมื่อมีเหตุผล)
 
@@ -318,3 +319,21 @@ checkout หายรายงานชัด, echo pack ผ่าน runner เ
 ไม่อ้าง candidate/shippable/deploy-ready; evidence redact ลง `out/m11-live/report.json`). ผล live ไปใน DoD ของ M11 รอบถัดไป.
 Regression: M0–M3 exit 0; M4/M5/M7b/M10 native exit 0; M8 archive ผ่าน skip Atlas; M6/M7a skip (ไม่มี AI checkout); M9 exit 1 กับ `b962abc`
 ตามออกแบบ; โหมด CI ไม่มี binary ทุก gate เป็น 0/2. Ruff และ `git diff --check` ผ่าน.
+
+M12 เสร็จ 2026-10-27 (ยกเว้นส่วน live): ผู้ดูแล push `d452ece` เป็น branch `baseline-0.138.0-d452ece` (tree `bd085f15` ตรง binary บน Mac,
+= `v0.138.0` + merge upstream). ตรวจ diff `b962abc → d452ece` ทุกไฟล์ที่ DESIGN อ้าง และบันทึกใน §4 "Baseline 0.138.0 / d452ece":
+ไม่เปลี่ยน — API/SSE ของ `/agent/run`, `/v1/agent/info`, validate/pack fuse, scaffold, MCP config/naming/env/instructions, system.md override,
+todos reminder, CLI workflow summary, `oai/` provider; เปลี่ยน — (1) `/agent/run` ใช้ `apply_filter(allowedTools/disallowedTools)` จาก
+project settings ได้แล้ว (ยังไม่ adopt; `tool_allowlist` คง Declared) (2) `KmsEdit` เพิ่ม → catalog 69 tools (3) writePaths resolve
+ปลายทางผ่าน `sandbox::resolve_landing` → `--write-boundary` ผ่าน 5/5 เป็นครั้งแรก แต่ T1 ยังปิดรอ review (4) `agent pack` strip เพิ่ม
+`.thclaws/bots/`, `.home/`, `.playwright-mcp/`, `media-jobs.jsonl` (5) browserEnabled template off/AppConfig default on, org policy
+denied tools, retired-model repoint (deepseek เท่านั้น) (6) MCP text cap 256 KiB และ spill ลง `.thclaws/state/tool-output/`.
+โค้ด: `THCLAWS_BASELINE = "0.138.0"`, คู่ standalone เพิ่ม `0.138.0/d452ece` (คงสามคู่เดิม), `patterns/tools-0.138.0.json`,
+gate M6 ใช้ baseline จาก forge แทน literal, comments/docs. ผลบน build จาก `d452ece` (CLI-only, placeholder frontend): M0–M5, M7b, M10
+**exit 0** (M4 scaffold compat สาม pattern + validate; M5/M7b/M10 `draft`), M8 archive ผ่าน/Atlas skip, M9 T0 pipeline + denial 9/9
+ผ่าน/provider skip, M11 validate ผ่าน/live skip, M6/M7a skip (ไม่มี `../AI`), `check_m12_baseline.py` **exit 0**
+(`thclaws 0.138.0 revision d452ece`, builder validates, write-boundary 5/5). โหมด CI ไม่มี binary ทุก gate 0/2; Ruff/`git diff --check` ผ่าน.
+ค้าง: live audit ทุกตัวบน baseline ใหม่ (M6 SQL, M7b publisher 3 รอบ, M9 provider, M11 interview) ต้องรันบน Mac ด้วย key —
+evidence `candidate` เดิมเป็นของ 0.116.0 ทั้งหมด; `docs/local-test-plan.md` ปรับให้ใช้ binary 0.138.0 ของเครื่องแล้ว.
+ข้อเสนอ milestone ถัดไป: M13 ปลด T1 standalone (review ขอบเขต writePaths ที่ยังไม่ครอบ Bash/MCP, matrix, audit, gate) และ
+M14 adopt `allowedTools` ใน `.thclaws/settings.json` เพื่อยก `tool_allowlist` บน `/agent/run` จาก Declared เป็น Enforced พร้อม native proof.

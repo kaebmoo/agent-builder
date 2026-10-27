@@ -15,7 +15,7 @@ from unittest.mock import patch
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 from forge.audit import audit_package, write_report
-from forge.generate import generate, render
+from forge.generate import THCLAWS_BASELINE, generate, render
 from forge.live_test import COPY_IGNORE, live_audit, parse_sse, validate_case
 from forge.pack_test import setup_fixture, test_pack
 from forge.packs import read_pack, validate_pack
@@ -40,7 +40,7 @@ FAKE = r'''
 import http.server, json, os, sys, time
 from pathlib import Path
 if '--version' in sys.argv:
-    print('thclaws 0.116.0'); raise SystemExit()
+    print('thclaws __BASELINE__'); raise SystemExit()
 if 'validate' in sys.argv:
     raise SystemExit()
 assert 'FORGE_TEST_SECRET' not in os.environ
@@ -76,6 +76,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
         self.wfile.write(b'data: [DONE]\n\n')
 http.server.HTTPServer(('127.0.0.1',int(sys.argv[-1])),Handler).serve_forever()
 '''
+FAKE = FAKE.replace('__BASELINE__', THCLAWS_BASELINE)
 
 
 def offline(base):

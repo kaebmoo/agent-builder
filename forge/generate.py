@@ -17,13 +17,16 @@ from forge.spec import validate_spec
 
 ROOT = Path(__file__).resolve().parents[1]
 REPORT_SCHEMA_PATH = ROOT / "builder-build-report.schema.json"
-THCLAWS_BASELINE = "0.116.0"
+# Atlas/export baseline (DESIGN §4): moved from 0.116.0 to 0.138.0 in M12 after re-checking every claim against
+# source revision d452ece; the baseline catalog is patterns/tools-<baseline>.json.
+THCLAWS_BASELINE = "0.138.0"
 # Standalone compatibility is evidence-bound: a version without the reviewed
 # source revision is not enough to reopen a runtime-sensitive guarantee.
 STANDALONE_THCLAWS_COMPATIBILITY = {
-    THCLAWS_BASELINE: frozenset({"75edc48"}),
+    "0.116.0": frozenset({"75edc48"}),
     "0.121.0": frozenset({"35ccf16"}),
     "0.129.0": frozenset({"7a27129"}),
+    THCLAWS_BASELINE: frozenset({"d452ece"}),
 }
 # Thin runners copied verbatim into every package; the audit rules live in forge.audit only.
 WRAPPERS = ("audit.py", "studio.py")
@@ -271,7 +274,7 @@ def render(spec: dict[str, Any], packs_dir: Path | None = None) -> tuple[dict[st
         "version": identity["version"], "license": identity["license"], "author": identity["owner"],
         "categories": ["custom"], "tags": spec.get("routing", {}).get("tags", []),
         "requires": {
-            # v0.116.0 stores this string without parsing; retain the full spec range.
+            # thClaws stores this string without parsing (checked 0.116.0 and 0.138.0); retain the full spec range.
             "thclaws_min_version": identity["thclaws_min_version"],
             "mcp_servers": sorted({server for pack in dependencies for server in pack["mcp_servers"]}),
         },

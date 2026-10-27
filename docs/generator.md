@@ -18,7 +18,7 @@ forge generate fixtures/sql-reader/spec.yaml --out out/sql-reader
 
 ## ไฟล์ที่ได้
 
-- `manifest.json` และ `.thclaws/settings.json`: identity/catalog fields ตาม thClaws v0.116.0. ส่งต่อให้ `thclaws agent validate` ตรวจ ไม่สร้าง manifest validator อีกชุด
+- `manifest.json` และ `.thclaws/settings.json`: identity/catalog fields ตาม thClaws v0.116.0 (ไม่เปลี่ยนถึง 0.138.0/`d452ece`, M12). ส่งต่อให้ `thclaws agent validate` ตรวจ ไม่สร้าง manifest validator อีกชุด
 - `AGENTS.md` และ `.thclaws/skills/<identity.name>/SKILL.md`: mission, permission declarations, refusal และ output จาก spec
 - `agentspec.json`: source contract ที่ serialize แบบ canonical JSON
 - `.thclaws/schemas/inputs--<name>.json`, `outputs--<name>.json`, `refusal.json`: schema ตาม spec. collect_files ที่ไม่มี schema จะไม่สร้าง schema สมมติ
@@ -65,7 +65,7 @@ Gate ตรวจซ้ำทั้งสอง fixture แบบ byte-for-byte,
 - `1`: generation, contract, compatibility baseline หรือ native validation ล้มเหลว
 - `2`: offline checks ผ่าน แต่ไม่มี `thclaws` จึงประกาศ skip native checks
 
-Native gate ตรวจ thClaws v0.116.0; ถ้า version เปลี่ยนต้องตรวจและปรับ DESIGN ก่อนเปลี่ยน baseline. บนเครื่องที่ binary อยู่ใน source checkout ใช้ PATH เฉพาะ command เช่น:
+Native gate ตรวจ thClaws baseline `0.138.0` (M12; เดิม 0.116.0); ถ้า version เปลี่ยนต้องตรวจและปรับ DESIGN ก่อนเปลี่ยน baseline. บนเครื่องที่ binary อยู่ใน source checkout ใช้ PATH เฉพาะ command เช่น:
 
 ```bash
 PATH="/path/to/thClaws/target/debug:$PATH" python3 scripts/check_m4_generate.py
@@ -101,11 +101,11 @@ Tool subset ถูก runtime บังคับ แต่ writePaths ของ 
 T0 ที่ส่งมอบมี `output_write_scope: Not applicable` และ `no_file_writes: Not guaranteed`: ไม่มี write tools ใน role
 แต่ runtime state/MCP ไม่ใช่ filesystem isolation. T1 ปิดการใช้งานจนตรวจ upstream fix ผ่านและ review ก่อนปลดล็อก.
 บน thClaws 0.129.0 `7a27129` การ traversal และ symlink ที่มี target ถูกปฏิเสธแล้ว แต่ final dangling symlink
-ยัง bypass `output/**` ได้; `check_m9_standalone.py --write-boundary` จึงยังต้อง fail และ T1 ยังไม่เปิด.
+ยัง bypass `output/**` ได้; บน 0.138.0 `d452ece` diagnostic ปฏิเสธครบทั้ง 5 กรณี (DESIGN §4 M12) แต่ T1 ยังไม่เปิดจนกว่าจะ review ใน milestone แยก.
 ดูหลักฐานและขอบเขตใน [DESIGN](DESIGN.md).
 
 
-รองรับ native validation ของ standalone T0 บน thClaws 0.116.0 (`75edc48`), 0.121.0 (`35ccf16`) และ
-0.129.0 (`7a27129`) เท่านั้นในรอบนี้; ต้องตรงทั้ง version และ revision. Atlas/export ยัง pin 0.116.0.
+รองรับ native validation ของ standalone T0 บน thClaws 0.116.0 (`75edc48`), 0.121.0 (`35ccf16`),
+0.129.0 (`7a27129`) และ 0.138.0 (`d452ece`) เท่านั้น; ต้องตรงทั้ง version และ revision. Atlas/export ยัง pin 0.116.0.
 `thclaws_baseline` ใน report คือ template/catalog baseline;
 ดู runtime ที่ใช้จริงใน `static_audit.thclaws_validate.version`.

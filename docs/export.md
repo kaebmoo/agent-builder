@@ -37,7 +37,7 @@ forge export out/publisher --out out/publisher-export \
   เชื่อตาม report ที่ผ่าน schema (schema ผูก status กับหลักฐาน audit ไว้แล้ว) ไม่ได้รัน static audit หรือ live audit ซ้ำ
 - `atlas-workflow.json` เฉพาะ target `atlas-workflow`: POST เข้า `/api/workflows` ได้ตรง ๆ หลัง register worker/workspace
 - `<name>-<version>.tar.gz` + `.sha256` จาก `thclaws agent pack` (binary จาก PATH หรือ `THCLAWS_BIN`); ไม่มี binary → ข้าม
-  archive และ exit 2; binary ที่ไม่ใช่ baseline `0.116.0` → exit 1. หลัง pack export เปิด archive ตรวจว่าสมาชิกเท่ากับ
+  archive และ exit 2; binary ที่ไม่ใช่ baseline `0.138.0` (M12; เดิม 0.116.0) → exit 1. หลัง pack export เปิด archive ตรวจว่าสมาชิกเท่ากับ
   `generated_files` ของ report และ byte ตรงกับ package ยกเว้น `manifest.json`/`.thclaws/settings.json`; `thclaws agent pack`
   ตัด path ที่มี `_secret` และไฟล์ `.env`/`.key`/`.log`/`.pyc` ออกเงียบ ๆ ดังนั้น pack script ชื่อ `client_secret.py` หรือ input
   ชื่อ `api_secret` (ได้ `inputs--api_secret.json`) ทำให้ export fail แทนที่จะได้ archive ที่ daemon รันต่อโดยไม่มี MCP

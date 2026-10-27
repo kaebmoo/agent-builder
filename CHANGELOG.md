@@ -27,6 +27,7 @@
 
 ### Changed
 
+- M12 (2026-10-27): thClaws baseline moves from 0.116.0 to 0.138.0 revision `d452ece` after re-checking every DESIGN §4 claim against that source (GitHub branch `baseline-0.138.0-d452ece`); new tool catalog `patterns/tools-0.138.0.json` (adds `KmsEdit`), standalone T0 pair `0.138.0/d452ece` added alongside the three historical pairs, M6 gate derives its fake binary version from the baseline. Recorded but not yet adopted: `/agent/run` now honours `allowedTools`/`disallowedTools`, and the T1 write-boundary diagnostic passes on this baseline while T1 stays disabled pending review
 - M7a: capability pack descriptors now require the v2 contract in DESIGN §5; v1 descriptors are no longer supported. Build reports include pack conformance evidence and deployment requirements when available
 - M9 compatibility: standalone T0 now accepts only the reviewed thClaws version/revision pairs `0.116.0/75edc48`, `0.121.0/35ccf16`, and `0.129.0/7a27129`; Atlas/export remains pinned to `0.116.0`
 
