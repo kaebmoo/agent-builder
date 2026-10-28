@@ -265,11 +265,11 @@ Worker และ policy pin worker/workspace เป็น placeholder ที่ 
 
 | Claim | สถานะบน `/agent/run` วันนี้ | บังคับด้วย |
 |---|---|---|
-| ใช้ tool ตาม allowlist | **Enforced** สำหรับ built-in ตั้งแต่ M15 (0.138.0); Skill/SkillList/SkillSearch และ MCP tools อยู่นอก claim | `.thclaws/settings.json::allowedTools` = `permissions.tools` บน daemon ที่ start ด้วย CWD=package; flag browser/HAL/media pin ปิด; settings หาย/เสียหรือ `THCLAWS_PROJECT_ROOT` = fail-open (§4 "Tool allowlist บน `/agent/run`") |
+| ใช้ tool ตาม allowlist | **Enforced** สำหรับ built-in ตั้งแต่ M15 (0.138.0); Skill/SkillList/SkillSearch และ MCP tools อยู่นอก claim | `.thclaws/settings.json::allowedTools` = `permissions.tools` บน daemon ที่ start ด้วย CWD=package (รวม agent process ที่ host spawn จาก bot dir เมื่อ export `--layout host`, M16); flag browser/HAL/media pin ปิด; settings หาย/เสียหรือ `THCLAWS_PROJECT_ROOT` = fail-open (§4 "Tool allowlist บน `/agent/run`") |
 | ห้ามเขียนไฟล์ | Enforced เฉพาะกรณี | daemon แยก + ไม่มี write MCP + sandbox; built-in writer ที่ไม่ประกาศถูก `allowedTools` ถอด แต่ writer ที่ประกาศ, MCP และ runtime state ยังเขียนได้ |
 | T1 เขียนได้เฉพาะ `output/**` | Declared บน `/agent/run`; **Enforced** บน standalone `static-pipeline` ตั้งแต่ M14 (เฉพาะ `Write`/`Edit` ของ worker บน 0.138.0/`d452ece`) | `/agent/run`: `permissions.write_scope=output` เท่านั้น; standalone: native `writePaths: output/**` ของ worker + tree diff ใน live audit (§4 "Standalone T1 rollout") |
 | `collect_files` เป็นผลลัพธ์ | Enforced เป็น snapshot | thClaws copy ไฟล์ที่มีอยู่หลัง run; ไม่ยืนยันว่า agent เขียนไฟล์นั้น |
-| ห้าม shell | **Enforced** เมื่อ `shell: none` ตั้งแต่ M15 | Bash ไม่อยู่ใน `allowedTools` จึงถูกถอดก่อนส่ง tool list (gate M15: forced Bash ได้ `unknown tool`); MCP server ที่ spawn process เองอยู่นอก claim |
+| ห้าม shell | **Enforced** เมื่อ `shell: none` ตั้งแต่ M15 | Bash ไม่อยู่ใน `allowedTools` จึงถูกถอดก่อนส่ง tool list (gate M15: forced Bash ได้ `unknown tool`; gate M16: เหมือนกันผ่าน host); MCP server ที่ spawn process เองอยู่นอก claim |
 | `network: none` ไม่มี web built-in ใน declaration | Static check | reject `WebFetch`, `WebSearch`, `WebScrape`, `FetchImages`, `YouTubeTranscript`; runtime egress ยังไม่ถูกบังคับ |
 | network เฉพาะ host | Not guaranteed | policy allowlist ครอบเฉพาะ URL ตอนติดตั้ง plugin/skill/MCP config; `net_guard` กันแค่ private IP ของ WebFetch/WebScrape/FetchImages → ต้องใช้ egress control ของเครื่อง |
 | ต้องมีคนอนุมัติก่อน side effect | Not verified สำหรับ package ที่ generate; Enforced เฉพาะ deployment ที่ตรวจแล้ว | ต้องผ่าน Atlas `human_gate` ก่อน worker และ operator bind worker/workspace กับ T2 daemon แยกที่ยืนยันแล้ว; การเรียก `/agent/run` โดยตรงสามารถข้าม gate นี้ได้ |
@@ -313,6 +313,9 @@ M1 ตรวจว่า embedded schema เป็น JSON Schema ที่ถ�
   (ใน host workspace คือ `.thclaws/bots/<slug>/`). `.thclaws/settings.json` ของทุก package ประกาศ `"workspaceVersion": 2` เพื่อให้ stamp ของ thClaws ตอนเปิด project
   (§4 "Host + bots layout" ข้อ 14) ไม่เขียนทับไฟล์ที่ audit แล้ว. harness ของ builder ใช้ env จาก `forge/live_test.py::isolated_env` และตรวจ `check_layout` หลัง daemon พร้อม (M6/M7b/M8/M11);
   `deployment_verified` ยัง `false` และ operator ต้องตรวจ `/v1/agent/info.workspace_dir` เท่ากับ `deployment.package_root` ก่อนลงทะเบียน
+- Host layout (M16, §4 "Host deployment ของ package prompt/assistant"): `forge export --layout host --host-root <abs>` ใช้ archive เดียวกัน แต่ให้ operator ติดตั้งมือเป็น bot ตัวเดียว
+  ของ host (`deployment.host_files` + แตก archive ที่ `<host-root>/.thclaws/bots/<name>/`), `workspace_dir` = `deployment.package_root` = bot dir และ `daemon_cwd` = host root;
+  รับเฉพาะ package ที่ทุก input เป็น `prompt_json` และทุก output เป็น `assistant_json` และไม่มี asset ที่ host จะเขียนทับ. package และ archive ยังเป็น single-agent (v2) เสมอ
 
 Atlas registration contract (M8, ตรวจ source `atlas-control-plane` ref `daa0f4966899327fb563501435f5d6180eeef9c3` 2026-09-08; schema pinned ไว้ที่ `patterns/atlas-workflow-definition.schema.json` และ gate M8 fail เมื่อไฟล์ต้นทางต่างจากที่ pin):
 - `POST /api/workers` (permission `admin`) upsert ด้วย `id` **หรือ** `base_url` (`db.py::upsert_worker`): register export ที่สองด้วย URL เดิมจะเขียนทับ worker เดิมโดยคง id เดิม และ `wrk_<name>` ของ package ที่สองไม่ถูกสร้าง → หนึ่ง daemon URL ต่อหนึ่ง worker หรือระบุ `--worker-id` ให้ตรง worker ที่มีอยู่; `base_url` ต้อง http(s) เท่านั้น; `token` คือ `THCLAWS_API_TOKEN` ของ daemon และ response ไม่คืน token. `POST /api/workspaces` ต้องมี `worker_id`, `workspace_key`, `workspace_dir` (path บนเครื่อง worker). `POST /api/workflows` validate graph, policy และ reference ตอนบันทึก: worker/workspace ที่ node pin ต้องมีอยู่ก่อน จึงต้อง register worker → workspace → workflow ตามลำดับ
@@ -519,7 +522,8 @@ M11 (`thclaws agent validate` ของ `builder/`) ผ่าน; M6/M7a skip (�
     (`api_v1/artifacts.rs:316-345,354-416`) และ Atlas render `{files_dir}` เป็น path **relative** `inputs/incoming/<run_id>/<node_key>` (`atlas/jobs.py:1247`);
     `collect_files` อ่านผ่าน `/v1/artifacts` จาก `workspace_dir` เดียวกัน (`atlas/thclaws_client.py:358`). บน host (ข้อ 4) agent อ่าน path relative ที่ workspace root
     จึงไม่พบไฟล์ที่ลงใน bot dir และไฟล์ที่ agent เขียนที่ root ไม่ถูก snapshot → package ที่มี `atlas_file_handoff` หรือ `files.globs` ใช้ host layout ไม่ได้ใน d452ece+daa0f49.
-12. ติดตั้ง agent มือใน host workspace (แตก archive ของ `agent pack` ลง `.thclaws/bots/<slug>/` + เติม `bots.json`) เป็นไปได้ตาม design ของ `bots.json` แต่**ยังไม่ยืนยัน**ด้วย binary.
+12. ติดตั้ง agent มือใน host workspace (แตก archive ของ `agent pack` ลง `.thclaws/bots/<slug>/` + เติม `bots.json`) เป็นไปได้ตาม design ของ `bots.json` แต่**ยังไม่ยืนยัน**ด้วย binary
+    (ยืนยันแล้วใน M16 — ดู "Host deployment ของ package prompt/assistant").
 13. build ที่ไม่มี feature `gui` **ไม่มี `--serve` เลย**: `thclaws --serve` พิมพ์ "--serve not available — rebuild with: cargo build --features gui" แล้ว exit 1
     (`bin/app.rs:1356-1362`, ยืนยันด้วย binary ที่ build ใน cloud 2026-10-27). ดังนั้น native evidence บน cloud มีได้เฉพาะ `agent validate`, `agent pack`, `agent run` (M9)
     และ `--write-boundary`; ทุก check ที่ต้องมี daemon (`/agent/run`, `/v1/agent/info`, M6/M7b/M11 live, M8 daemon probe, M13 ส่วน layout จริง) ต้องประกาศ skip บน build นี้
@@ -543,9 +547,44 @@ directory ที่ตั้งใจ serve และต้องไม่มี
 จึงไม่ต้องพึ่ง host process และตรวจผลด้วย `check_layout` ได้ตรง ๆ; รายละเอียดอยู่ที่ §9. (d) หลาย agent ต่อ host ไม่ขัด §8 เพราะ Atlas เห็น host เป็น daemon URL เดียว (`base_url` ห้าม `?`)
 จึงถึง agent default ตัวเดียว และ Atlas ไม่ต้องแก้โค้ด. (e) host deployment สำหรับ package ที่มีเฉพาะ `prompt_json`/`assistant_json` เป็นข้อเสนอ (PLAN M16) ที่ต้องพิสูจน์บน Mac
 ก่อน: `/agent/run` ผ่าน host ด้วย `workspace_dir` = bot dir ครบ golden cases, ติดตั้งมือ (ข้อ 12), Atlas poll เห็น host online; export ต้องปฏิเสธ package ที่มี file handoff/`files.globs`
-สำหรับ layout นั้น. (f) cloud build ของ thClaws เป็น CLI-only (ไม่มี GTK/WebKit) จึงไม่มี `--serve` (ข้อ 13): ทดสอบ daemon, migration จริง, host process และ `thclaws bots` ไม่ได้;
+สำหรับ layout นั้น (พิสูจน์และ implement แล้วใน M16). (f) cloud build ของ thClaws เป็น CLI-only (ไม่มี GTK/WebKit) จึงไม่มี `--serve` (ข้อ 13): ทดสอบ daemon, migration จริง, host process และ `thclaws bots` ไม่ได้;
 gate M13 จำลองโครง v4 เอง (ย้าย `AGENT_ENTRIES` + เขียน host files ตาม `install_host_files`, ไม่จำลอง `agent_paths::fix`) และประกาศชัดว่าเป็น simulated layout;
 ส่วน daemon ทั้งหมดของ M13 และ M11 live เป็นงานบน desktop build ของ Mac และ gate ต้องตรวจว่า `--serve` ใช้ได้ก่อน มิฉะนั้น skip (exit 2) ไม่ใช่รายงานว่า daemon ตาย.
+
+### Host deployment ของ package prompt/assistant (M16, 2026-10-28, thClaws 0.138.0 `d452ece` + Atlas `daa0f49`)
+
+พิสูจน์การตัดสินใจ M13 (e) บน Mac ด้วย desktop build `d452ece` ก่อนแก้โค้ด (path ใต้ `crates/core/src/`; Atlas = worktree ที่ pin `daa0f49`; model `oai/gpt-5.4-mini`).
+วิธี: generate fixture → `forge audit --write` → `forge export` (archive จาก `thclaws agent pack`) → ติดตั้งมือ → `thclaws --serve` ที่ root ด้วย `isolated_env`:
+
+1. **ติดตั้งมือใช้ได้** (ปิดข้อ 12 ของ M13): root มีแค่ `.thclaws/settings.json` = `{"workspaceVersion": 4}` และ `.thclaws/bots.json` = `{"version": 1, "bots": [{"slug": "<name>"}]}`
+   แล้วแตก archive ลง `.thclaws/bots/<name>/`. `run_supervisor_on` (`server.rs:1067-1210`) เห็น `bots.json` จึงไม่ migrate และไม่ mint workspace ใหม่; `restore_shared_files`
+   ทำงานเฉพาะ host ที่ `workspaceVersion` = 3 (`bots/migrate.rs:938-989`) จึงไม่ย้ายไฟล์ของ bot. ชื่อ package (`$defs/slug` = `^[a-z0-9][a-z0-9_-]{0,63}$`) อยู่ในกฎ slug ของ
+   thClaws เสมอ (`bots/mod.rs::validate_slug`: ขึ้นต้น alnum, `[A-Za-z0-9_-]`, ≤64). host ใส่ `THCLAWS_SUPERVISED=1` + `THCLAWS_WORKSPACE_ROOT=<root>` ให้ child และ child สืบทอด env
+   อื่นของ host (token, provider key, env ของ pack) ตามข้อ 3 ของ M13; `THCLAWS_PROJECT_ROOT` บน host จึงพา config ไปที่อื่นเหมือน daemon เดี่ยว (fail-open ตาม M15 ข้อ 6).
+2. **host ซ่อม bot ทุกครั้งที่เปิด** (`server.rs:1150` → `bots/agent_paths.rs::repair_stale`, `bots/migrate.rs:565-609`): bot ที่ไม่มีไฟล์ใดใต้ `.thclaws/{scripts,skills,workflows,
+   agent_workflow,gui-shell}` กล่าวถึง `THCLAWS_AGENT_DIR` ถูกนับเป็น stale → คัดลอก AGENTS.md และไฟล์ bundled ไป `.thclaws/state/pre-agent-dir/` (เฉพาะเมื่อยังไม่มี) แล้ว `fix` เขียนทับ
+   `python3|node|bash|sh .thclaws/...` และ `Path(".thclaws/...")`/`open(".thclaws/...")` ใน AGENTS.md/CLAUDE.md และ `.md/.js/.py` ใต้ bundled dirs. Template ของ generator
+   และ asset ของทุก pack ใน repo ไม่มีข้อความรูปนี้ (scan ใน gate M16) → binary: หลัง host เปิด + golden cases ไฟล์นอก `.thclaws/state/` ของ bot ไม่เปลี่ยนทุก byte และไม่มีไฟล์ใหม่ที่ root
+   นอก `.thclaws/`. pack ภายนอกที่ asset มีข้อความรูปนั้นจะถูกเขียนทับ (drift ต่อ audit) — `forge export --layout host` ปฏิเสธ.
+3. **`/agent/run` ผ่าน host ด้วย `workspace_dir` = bot dir ผ่าน golden cases ครบ**: `echo-reader` (fixture `fixtures/packs/echo`, T0 + MCP) 4/4 เรียก `echo__reverse`, `publisher`
+   (T2 + MCP + env ของ fixture) 4/4 เรียก `publisher-email-sftp__send_email` แบบ dry run. `/v1/agent/info` ผ่าน host: `workspace_dir` = bot dir, skills ของ package, MCP inventory ตรง pack.
+   stdio MCP spawn ด้วย `Command::new` ไม่ตั้ง `current_dir` (`mcp.rs:640`) → cwd = bot dir จึงใช้ `args` relative ของ `.thclaws/mcp.json` ได้; child log
+   `[config] main agent allowed_tools applied: …` และ gate M16 (stub provider) ยืนยันว่า tool list ที่ส่ง model = `allowedTools` ∪ Skill ทั้งสาม และ forced `Bash` ได้ `unknown tool`
+   — claim M15 ถือต่อเพราะ child เป็น `--serve` ที่ cwd = package. (skills `extract-and-save`/`gui-shell` ใน `/v1/agent/info` เป็น built-in ที่ compile ใน binary ทุก daemon,
+   `skills.rs::seed_builtins`, ไม่เกี่ยวกับ host.)
+4. **Atlas `daa0f49`**: worker `base_url` = URL ของ host (ไม่มี `?bot=` จึงถึง `bots.json[0]` เท่านั้น — หนึ่ง package ที่ Atlas route ได้ต่อหนึ่ง host), `POST /api/workers/<id>/poll`
+   ได้ `online` และ `agent_info.agent.mcp_servers` ตรง `deployment.mcp_servers`; workspace ลงทะเบียน `workspace_dir` = bot dir; workflow (node template ของ export, `execution_mode: test`)
+   ของ `echo-reader` จบ `succeeded` และ artifact `echo_result` = `{"operation": "reverse", "text": "olleh"}` → Atlas ส่ง `/agent/run` ผ่าน proxy ของ host พร้อม `workspace_dir` ที่ลงทะเบียนได้จริง.
+5. ใต้ host path relative ของ file tools ไปที่ root (ข้อ 4 ของ M13): Read/Grep/Glob ของ bot อ่านทั้ง root (รวม bot อื่นบน shelf) และ `output/**` ของ T1 ลงที่ root ไม่ใช่ใน package
+   (ไม่มี claim ใดเปลี่ยน: T1 บน `/agent/run` เป็น Declared และไม่มี `collect_files`) → host หนึ่งตัวต่อหนึ่ง package และ root ไม่มีไฟล์อื่น.
+
+**การตัดสินใจ (M16)**: (a) `forge export --layout host --host-root <abs>` (default `--layout single-agent` คง output เดิมทุก byte): รับเฉพาะ package ที่ทุก input เป็น `prompt_json` และทุก output
+เป็น `assistant_json` — ปฏิเสธ `atlas_file_handoff` (ข้อ 11 ของ M13), `collect_files`/`files.globs` และ `local_workspace` (ข้อ 4–5) — และ asset ที่ host จะเขียนทับ (ข้อ 2); `workspace_dir` =
+`<host-root>/.thclaws/bots/<name>`, `deployment.layout = host`, `daemon_cwd` = host root, `deployment.host_files` = สองไฟล์ของข้อ 1 และ registration step แบบ host. (b) build report และ
+guarantee matrix ของ package ไม่เปลี่ยน: basis ของ `tool_allowlist`/`no_shell` ("daemon started with CWD=package") ตรงกับ child ของ host อยู่แล้ว; §6 ระบุ host ใน "บังคับด้วย". `deployment_verified`
+ยัง `false`. (c) gate `check_m16_host_deploy.py`: offline (refusals, determinism, default export ไม่เปลี่ยน, scan ข้อ 2) + native บน desktop build (ติดตั้งจาก export จริง, stub provider: tool list/`unknown tool`,
+identity มาเมื่อ `workspace_dir` = bot dir และไม่มาเมื่อ = root, tree ไม่เปลี่ยน, Atlas poll + workflow run) + provider golden cases ผ่าน host. ข้อจำกัด: ไม่รองรับไฟล์เข้า/ออก, ไม่ใช่ isolation
+ระหว่าง bot, ไม่ครอบ build CLI-only (ไม่มี `--serve`) และ `builder/` ยังใช้ M13 (c).
 
 ### M9 compatibility follow-up (2026-09-16, thClaws 0.129.0 `7a27129`)
 

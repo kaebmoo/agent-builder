@@ -2,7 +2,7 @@
 
 จุดประสงค์: ปิดส่วนที่ cloud session ทำไม่ได้ เพราะไม่มี provider key, ไม่มี checkout ของ AI/Atlas และไม่ใช่ macOS
 งานทั้งหมดอยู่บน `main` (branch งานเดิมรวมถึง `claude/adoring-feynman-kqs8us` merge แล้ว). อ่าน `AGENTS.md`, `CLAUDE.md`, `docs/PLAN.md`
-ย่อหน้า "M13 เสร็จ (Mac)", "M14 เสร็จ (Mac)", "M6/M7a live (Mac)", "M15 ทำ (Mac)" และ "M15 merge เข้า main", DESIGN §4 "Host + bots layout",
+ย่อหน้า "M13 เสร็จ (Mac)", "M14 เสร็จ (Mac)", "M6/M7a live (Mac)", "M15 ทำ (Mac)", "M15 merge เข้า main" และ "M16 ทำ (Mac)", DESIGN §4 "Host + bots layout",
 "Standalone T1 rollout" และ "Tool allowlist บน `/agent/run`" ก่อนเริ่ม. สิ่งที่ cloud ทำไม่ได้คือทุกอย่างที่ต้องมี daemon (binary CLI-only ไม่มี `--serve`),
 provider key, checkout ของ AI/Atlas ที่ pin และ macOS
 
@@ -15,12 +15,13 @@ provider key, checkout ของ AI/Atlas ที่ pin และ macOS
 | # | สิ่งที่ตรวจ | ทำไมต้องทำบน local | ผลที่คาด |
 |---|---|---|---|
 | 1 | gate ทุกตัวในโหมด CI (ไม่มี `thclaws` ใน PATH) | ยืนยัน checkout ตรงกับ cloud และยืนยัน fix macOS ของ M10 (เกิดในส่วน offline) | M0–M3 exit 0, ที่เหลือ 2; `check_m10_pack_authoring.py` ต้องเป็น 2 ไม่ใช่ 1; M6/M7a/M8 = 1 ได้เฉพาะเมื่อ `../AI`/`../atlas-control-plane` อยู่คนละ revision กับ pin (ใช้ข้อ 7) |
-| 2 | gate ทุกตัวแบบ native ด้วย binary ของเครื่อง | ยืนยันผล M12 บน macOS (cloud ตรวจบน Linux build จาก commit เดียวกัน) | M0–M5, M7b, M10, M12, M13 exit 0; M9/M11/M14/M15 exit 2 (native ผ่านแล้ว skip provider เพราะไม่มี key); M6/M7a/M8 exit 2 ถ้าไม่มี checkout ข้างเคียง หรือ 1 ถ้าอยู่คนละ revision |
+| 2 | gate ทุกตัวแบบ native ด้วย binary ของเครื่อง | ยืนยันผล M12 บน macOS (cloud ตรวจบน Linux build จาก commit เดียวกัน) | M0–M5, M7b, M10, M12, M13 exit 0; M9/M11/M14/M15/M16 exit 2 (native ผ่านแล้ว skip provider เพราะไม่มี key หรือ M16 ไม่พบ Atlas); M6/M7a/M8 exit 2 ถ้าไม่มี checkout ข้างเคียง หรือ 1 ถ้าอยู่คนละ revision |
 | 3 | `check_m13_host_layout.py` native (desktop build) | cloud build CLI-only ไม่มี host/migration จึงตรวจ control case และการเปิด `builder/` เป็น host ไม่ได้ | exit 0; ถ้า "changed files outside runtime state" ให้วางรายการไฟล์แล้วหยุด (DESIGN ต้องแก้ก่อน ไม่เพิ่ม ignore) |
 | 4 | `check_m11_builder_agent.py` live `--rounds 3` (ต้องมี key) | ผ่าน 3/3 แล้ว 2026-10-28; รันซ้ำ 3 รอบทุกครั้งที่ prompt/skill ของ `builder/` เปลี่ยน (gate เป็นสองเทิร์น) | exit 0; evidence `out/m11-live/round-<n>-<ts>.json` ครบ 3 ไฟล์ |
 | 5 | `check_m7b_packs.py --live` 3 รอบ (ต้องมี key) | ครั้งก่อนผ่านด้วย launcher นอก repo; ต้องยืนยันว่า harness เองตั้ง `THCLAWS_AUTO_MIGRATE=0` แล้วพอ | exit 0 ทั้ง 3 รอบ |
 | 6 | `check_m9_standalone.py` live (ต้องมี key) — ผ่านแล้ว 2026-10-27 ไม่ต้องรันซ้ำเว้นแต่ checkout เปลี่ยน | evidence provider เดิมเป็นของ 0.116.0 | exit 0 |
 | 6b | `check_m15_tool_allowlist.py` native + provider (desktop build, key) | ต้องมี daemon `--serve`; cloud build CLI-only ไม่มี | exit 0 (probe บน package จริง + golden cases 4/4); M7b `--live` 3 รอบซ้ำเพราะ tool list ของ publisher เปลี่ยน |
+| 6c | `check_m16_host_deploy.py` native + Atlas + provider (desktop build, `ATLAS_ROOT` ที่ pin `daa0f49`, key) | host ต้องมี `--serve` ของ desktop build; cloud build CLI-only ไม่มี | exit 0 (ติดตั้ง bot จาก export จริง, probe ผ่าน host, Atlas poll + workflow run, golden cases 4/4 ผ่าน host) |
 | 7 | (optional) M7a/M6 จากโฟลเดอร์คู่ worktree `AI`@`d95dc28` + `agent-builder` ด้วย venv `.[sql-pack]` (`mcp>=1.26,<2`), M8 กับ `ATLAS_ROOT` worktree ที่ pin `daa0f49` | M6/M7a ผ่านบน `d452ece` แล้ว 2026-10-28 (รันซ้ำเมื่อ pack/generator/baseline เปลี่ยน); `fixture/setup.py` หา AI ที่ sibling เท่านั้น; M8 default `../atlas-control-plane` อยู่คนละ revision | exit 0 หรือ skip 2 พร้อมเหตุผล |
 
 ## เตรียมเครื่อง
@@ -68,6 +69,10 @@ PATH="$THCLAWS_PATH:$PATH" python3 scripts/check_m9_standalone.py --write-bounda
 # 6b. M15 (allowedTools บน /agent/run) native + provider live; tool list ของทุก package Atlas เปลี่ยน จึงรัน M7b live ข้อ 5 ซ้ำด้วย
 PATH="$THCLAWS_PATH:$PATH" python3 scripts/check_m15_tool_allowlist.py --model oai/gpt-5.4-mini --provider-key-env OPENAI_COMPAT_API_KEY
 
+# 6c. M16 (host deployment ของ package prompt/assistant) native + Atlas ที่ pin + provider live
+ATLAS_ROOT="$HOME/Documents/GitHub/atlas-control-plane-daa0f49" PATH="$THCLAWS_PATH:$PATH" python3 scripts/check_m16_host_deploy.py \
+  --model oai/gpt-5.4-mini --provider-key-env OPENAI_COMPAT_API_KEY
+
 # 7. optional
 # M6/M7a: packs/sql-readonly/fixture/setup.py หา AI ที่ `<โฟลเดอร์แม่ของ agent-builder>/AI` เท่านั้น (ไม่มี env override) จึงใช้ worktree ของ AI
 # ที่อื่นตรง ๆ ไม่ได้ และห้ามแก้ fixture: สร้างโฟลเดอร์คู่ที่มี AI@d95dc28 กับ agent-builder@HEAD วางข้างกัน แล้วรัน gate จาก agent-builder ในนั้น
@@ -101,13 +106,14 @@ ATLAS_ROOT="$HOME/Documents/GitHub/atlas-control-plane-daa0f49" PATH="$THCLAWS_P
 
 ```
 checkout: <git rev-parse --short HEAD>   thclaws: <version> revision <rev> (desktop build: thclaws --help มี bots)   model: <id>
-CI mode:     m0=0 m1=0 ... m15=2
-native mode: m0=0 ... m13=0 m14=<n> m15=<n>
+CI mode:     m0=0 m1=0 ... m16=2
+native mode: m0=0 ... m13=0 m14=<n> m15=<n> m16=<n>
 M13 native: exit=<n>  (control migration เกิด bots.json: yes|no; host เปิด builder/ แล้วไฟล์ที่ track เปลี่ยน: none|<รายการ>)
 M11 live:   exit=<n>  rounds passed=<k>/3  evidence: out/m11-live/round-*.json  (ต่อรอบ: turn1 หยุดถาม yes|no, turn2 build.py yes|no, detail)
 M7b live:   exit=<n> x3
 M9 live:    exit=<n>   write-boundary: exit=<n>   (ถ้ารันซ้ำ)
 M14 provider: exit=<n> cases=<k>/4   M15 native+provider: exit=<n> cases=<k>/4
+M16 native+Atlas+provider: exit=<n>
 optional:   m7a=<n> m6=<n> m8=<n> (ATLAS_ROOT = worktree ที่ pin)
 สิ่งที่ fail และ output เต็ม: ...
 ```
@@ -119,7 +125,7 @@ git checkout main && git pull --ff-only origin main
 อ่าน docs/local-test-plan.md แล้วทำตามลำดับทั้งหมดบนเครื่องนี้ด้วย binary thclaws 0.138.0/d452ece (desktop build) ของเครื่อง
 ห้ามแก้ gate/pin/เกณฑ์ audit/golden cases เพื่อให้ผ่าน และห้าม thclaws bots migrate/unmigrate กับ builder/
 ลำดับ: 1 CI mode ทุก gate → 2 native ทุก gate → 3 check_m13_host_layout.py → 4 check_m11_builder_agent.py --rounds 3
-→ 5 check_m7b_packs.py --live x3 → 6 M14/M9 live → 6b check_m15_tool_allowlist.py → 7 optional (M8 กับ ATLAS_ROOT ที่ pin daa0f49, M6/M7a จากโฟลเดอร์คู่ worktree AI@d95dc28 + agent-builder ตามข้อ 7)
+→ 5 check_m7b_packs.py --live x3 → 6 M14/M9 live → 6b check_m15_tool_allowlist.py → 6c check_m16_host_deploy.py (ATLAS_ROOT ที่ pin) → 7 optional (M8 กับ ATLAS_ROOT ที่ pin daa0f49, M6/M7a จากโฟลเดอร์คู่ worktree AI@d95dc28 + agent-builder ตามข้อ 7)
 ถ้า step ใด fail ให้วาง output เต็ม (M11: detail และ final_text ของแต่ละ turn จาก out/m11-live/round-<n>-<ts>.json หลัง redact) หยุด แล้วถามก่อนแก้
 ใช้ key จาก .env ตาม mapping ในแผนโดยไม่พิมพ์ค่าออกมา และตรวจว่า log ที่วางไม่มีค่า key
 เมื่อผ่านครบ บันทึกผลลง docs/PLAN.md (ย่อหน้าผล Mac ใหม่) และ CHANGELOG.md ตามรูปแบบรายงานผล แล้ว commit บน main

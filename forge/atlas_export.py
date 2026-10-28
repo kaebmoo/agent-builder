@@ -42,11 +42,27 @@ FILES_DIR_LINE = "\nHandoff files directory: {files_dir}"
 ARCHIVE_REWRITTEN = ("manifest.json", ".thclaws/settings.json")
 NOT_VERIFIED = ("These checks prove reachability and MCP inventory only. Daemon isolation, egress control and the "
                 "approval path are verified by the operator outside this file; the builder never sets deployment_verified.")
+LAYOUTS = ("single-agent", "host")
+# Host workspace files for a hand-installed bot (DESIGN §4 "Host deployment ของ package prompt/assistant" 1, d452ece).
+HOST_WORKSPACE_VERSION = 4
+# What a host rewrites in a bot that never mentions THCLAWS_AGENT_DIR (bots/agent_paths.rs::fix at d452ece, DESIGN §4 M16 2).
+HOST_REWRITE_DIRS = ("scripts", "skills", "workflows", "agent_workflow", "gui-shell", "agents", "commands", "templates")
+HOST_REWRITE_SHELL = re.compile(r"""\b(python3?|node|bash|sh) (\.thclaws/[^\s"'`)]+)""")
+HOST_REWRITE_PY = re.compile(r"""(Path|open)\((["'])(\.thclaws/[^"']*)["']""")
 
 
-def bind(spec: dict[str, Any], *, base_url: str, workspace_dir: str, worker_id: str | None = None,
-         workspace_id: str | None = None, workspace_key: str | None = None) -> dict[str, str]:
-    """Validate operator-supplied deployment-time values (DESIGN §3). None of them is a secret."""
+def bind(spec: dict[str, Any], *, base_url: str, workspace_dir: str | None = None, worker_id: str | None = None,
+         workspace_id: str | None = None, workspace_key: str | None = None, layout: str = "single-agent",
+         host_root: str | None = None) -> dict[str, str]:
+    """Validate operator-supplied deployment-time values (DESIGN §3). None of them is a secret.
+
+    `layout="host"` takes `host_root` instead of `workspace_dir`: the bot dir under it is the workspace (DESIGN §8)."""
+    if layout not in LAYOUTS:
+        raise ValueError(f"layout must be one of {LAYOUTS}: {layout!r}")
+    if (layout == "host") != (host_root is not None) or (layout == "host") == (workspace_dir is not None):
+        raise ValueError("layout single-agent takes workspace_dir; layout host takes host_root instead")
+    if layout == "host":
+        workspace_dir = f"{host_root.rstrip('/')}/.thclaws/bots/{spec['identity']['name']}"
     base_url = base_url.strip()
     parts = urlsplit(base_url)
     try:
@@ -69,7 +85,29 @@ def bind(spec: dict[str, Any], *, base_url: str, workspace_dir: str, worker_id: 
     for key in ("worker_id", "workspace_id", "workspace_key"):
         if not ID_PATTERN.fullmatch(binding[key]):
             raise ValueError(f"{key} must match {ID_PATTERN.pattern}: {binding[key]!r}")
+    if layout == "host":
+        binding["host_root"] = str(PurePosixPath(host_root))
     return binding
+
+
+def host_refusals(spec: dict[str, Any], files: dict[str, bytes]) -> list[str]:
+    """Why this package cannot be a host bot (DESIGN §4 M16): file transports, or text the host would rewrite."""
+    reasons = [f"input {item['name']} uses {item['transport']}" for item in spec["inputs"]
+               if item["transport"] != "prompt_json"]
+    reasons += [f"output {item['name']} uses {item['transport']}" for item in spec["outputs"]
+                if item["transport"] != "assistant_json"]
+    for path, content in sorted(files.items()):
+        parts = PurePosixPath(path).parts
+        bundled = len(parts) > 2 and parts[0] == ".thclaws" and parts[1] in HOST_REWRITE_DIRS
+        if not (path in ("AGENTS.md", "CLAUDE.md") or bundled) or parts[-1].startswith("."):
+            continue
+        suffix = PurePosixPath(path.removesuffix(".tmpl")).suffix
+        if suffix not in (".md", ".js", ".py"):
+            continue
+        text = content.decode("utf-8", errors="replace")
+        if HOST_REWRITE_SHELL.search(text) or (suffix == ".py" and HOST_REWRITE_PY.search(text)):
+            reasons.append(f"{path} has a relative .thclaws/ path the host rewrites on start")
+    return reasons
 
 
 def handoff_inputs(spec: dict[str, Any]) -> bool:
@@ -183,6 +221,19 @@ def render_export(spec: dict[str, Any], report: dict[str, Any], binding: dict[st
              "build report and export never promotes it."),
         ],
     }
+    if "host_root" in binding:  # DESIGN §4 "Host deployment ของ package prompt/assistant", §8
+        slug = identity["name"]
+        register["deployment"].update(
+            layout="host", host_root=binding["host_root"], daemon_cwd=binding["host_root"], bot_slug=slug,
+            host_files={".thclaws/settings.json": {"workspaceVersion": HOST_WORKSPACE_VERSION},
+                        ".thclaws/bots.json": {"version": 1, "bots": [{"slug": slug}]}})
+        register["registration"][0] = (
+            "Create deployment.host_root holding only deployment.host_files, unpack the archive at "
+            "deployment.package_root (the bot dir) and check its sha256; start thclaws --serve (desktop/gui build) from "
+            "deployment.host_root with THCLAWS_API_TOKEN, THCLAWS_AUTO_MIGRATE=0 and the deployment.env names set. The "
+            "host spawns the agent with CWD=package, which is what the daemon hint means here. One package per host: "
+            "Atlas reaches only the first bots.json entry. Check GET /v1/agent/info workspace_dir equals "
+            "deployment.package_root and that the bot's files outside .thclaws/state/ still equal the archive.")
     files = {REGISTER: json_text(register).encode("utf-8")}
     if flow:
         files[WORKFLOW] = json_text(flow).encode("utf-8")
@@ -252,6 +303,9 @@ def export(package: Path, out: Path, *, packs_dir: Path | None = None, **binding
         raise ValueError(f"builder-build-report.json records audit.static={report['audit']['static']} "
                          f"audit.manifest={report['audit']['manifest']}; run forge audit --write first")
     binding = bind(spec, **binding_values)
+    if "host_root" in binding and (reasons := host_refusals(spec, {path: (package / path).read_bytes()
+                                                                   for path in report["generated_files"]})):
+        raise ValueError("layout host supports prompt_json/assistant_json packages only: " + "; ".join(reasons))
     binary = shutil.which(os.environ.get("THCLAWS_BIN", "thclaws"))
     if binary and report["audit"]["manifest"] != "passed":
         validate = thclaws_validate(package)  # the recorded audit ran without the binary; never pack unvalidated
@@ -278,8 +332,13 @@ def configure(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--out", required=True, type=Path,
                         help="new export directory outside the package; existing paths are refused")
     parser.add_argument("--base-url", required=True, help="daemon URL that Atlas will call")
-    parser.add_argument("--workspace-dir", required=True,
-                        help="absolute package directory on the worker host; the daemon must start there")
+    parser.add_argument("--workspace-dir",
+                        help="absolute package directory on the worker host; the daemon must start there "
+                             "(layout single-agent)")
+    parser.add_argument("--layout", choices=LAYOUTS, default="single-agent",
+                        help="host: install the package as the only bot of a thClaws host workspace (prompt_json/"
+                             "assistant_json packages only)")
+    parser.add_argument("--host-root", help="absolute host workspace root on the worker host (layout host)")
     parser.add_argument("--worker-id", help="Atlas worker id (default wrk_<name>)")
     parser.add_argument("--workspace-id", help="Atlas workspace id (default wsp_<name>)")
     parser.add_argument("--workspace-key", help="Atlas workspace key (default <name>)")
@@ -289,7 +348,7 @@ def command(args: argparse.Namespace) -> int:
     try:
         register, code = export(args.package, args.out, base_url=args.base_url, workspace_dir=args.workspace_dir,
                                 worker_id=args.worker_id, workspace_id=args.workspace_id,
-                                workspace_key=args.workspace_key)
+                                workspace_key=args.workspace_key, layout=args.layout, host_root=args.host_root)
     except (OSError, ValueError, TypeError, KeyError, subprocess.SubprocessError, ValidationError) as exc:
         print(f"export FAIL: {exc}")
         return 1

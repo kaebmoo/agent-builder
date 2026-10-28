@@ -27,7 +27,7 @@ User goal → Discovery (7 questions) → AgentSpec (SSOT)
 ## เอกสาร
 
 - [docs/DESIGN.md](docs/DESIGN.md) — design baseline (AgentSpec, target/pattern matrix, guarantee matrix, audit 2 ชั้น)
-- [docs/PLAN.md](docs/PLAN.md) — milestones M0–M15 พร้อม definition of done และ check script ต่อ milestone
+- [docs/PLAN.md](docs/PLAN.md) — milestones M0–M16 พร้อม definition of done และ check script ต่อ milestone
 - [AGENTS.md](AGENTS.md) — กติกาสำหรับ coding agent ที่ทำงานใน repo นี้
 - [docs/generator.md](docs/generator.md) — M4 generator, CLI, build report และข้อจำกัด
 - [docs/audit.md](docs/audit.md) — M5 static audit: กฎ, สถานะ, wrappers และ gate
@@ -50,6 +50,8 @@ M11 (builder-agent) offline/native เสร็จ 2026-10-26: workspace `builde
 `.thclaws/scripts/build.py` ที่บังคับ `confirmed_by` และรายงานผลจาก forge เท่านั้น; ส่วน live (ต้องมี provider key) ผ่าน 3/3 รอบ 2026-10-28 ดู [builder/README.md](builder/README.md).
 M13 (2026-10-27): รองรับ host + bots layout ของ thClaws 0.138.0 — `builder/` เป็น host workspace (agent ที่ `.thclaws/bots/main/`), harness ตั้ง
 `THCLAWS_AUTO_MIGRATE=0` และตรวจ layout จริงทุกครั้งที่สตาร์ท `--serve`, ส่วน package ที่ deploy กับ Atlas คง single-agent layout (DESIGN §4/§8).
+M16 (2026-10-28): package ที่มีเฉพาะ `prompt_json`/`assistant_json` deploy เป็น bot ตัวเดียวของ thClaws host ได้ด้วย `forge export --layout host`
+(พิสูจน์บน desktop build + Atlas `daa0f49`; package และ archive ยัง single-agent) ดู [docs/export.md](docs/export.md).
 M12 (2026-10-27) ย้าย baseline thClaws ไป 0.138.0/`d452ece` หลังตรวจ DESIGN §4 ซ้ำกับ source จริง; native gate ทุกตัวผ่านบน binary นี้ และ `--write-boundary` ของ T1 ผ่านครบแต่ T1 ยังปิดรอ review.
 M15 (2026-10-28): package ที่ deploy กับ Atlas ประกาศ `allowedTools` = `permissions.tools` ใน `.thclaws/settings.json` และ pin `browserEnabled`/`halEnabled`/`imageToolsEnabled` = false
 จึงบังคับ allowlist ของ built-in บน `/agent/run` ได้จริงบน thClaws 0.138.0/`d452ece` (`tool_allowlist` และ `no_shell` เมื่อ `shell: none` เป็น Enforced; Skill และ MCP tools
@@ -63,6 +65,7 @@ python3 scripts/check_m11_builder_agent.py
 python3 scripts/check_m13_host_layout.py
 python3 scripts/check_m14_standalone_t1.py
 python3 scripts/check_m15_tool_allowlist.py
+python3 scripts/check_m16_host_deploy.py
 python3 scripts/check_m12_baseline.py
 ```
 
