@@ -50,17 +50,10 @@ def offline(base, spec):
         assert metadata['tools'].split(', ') == tools
         assert tools and set(tools) <= set(spec['permissions']['tools'])
         assert 'Bash' not in tools and 'Write' not in tools and 'writePaths' not in metadata
+    # T1 is M14's scope (check_m14_standalone_t1.py); here only the T0 contract must not leak into a T1 spec:
+    # a package generated as T0 whose agentspec is rewritten to T1 drifts (worker role, matrix) and cannot pass audit.
     worker = copy.deepcopy(spec)
     worker['permissions'].update(tier='T1', tools=['Read', 'Write', 'Edit'], write_scope='output')
-    rejected = base / 'rejected-t1'
-    try:
-        generate(worker, rejected)
-    except ValueError as exc:
-        assert 'T1 is disabled' in str(exc)
-    else:
-        raise AssertionError('standalone T1 must be blocked')
-    assert not rejected.exists(), 'T1 rejection left a partial package'
-    # A previously generated T1 package cannot regain draft/candidate through audit.
     legacy = base / 'legacy-t1'
     shutil.copytree(package, legacy)
     (legacy / 'agentspec.json').write_text(json.dumps(worker))
@@ -94,8 +87,8 @@ def offline(base, spec):
         invalid = copy.deepcopy(spec)
         invalid['package_pattern'] = pattern
         rejects(lambda invalid=invalid: render(invalid))
-    invalid = copy.deepcopy(worker)
-    invalid['permissions']['tools'] = ['Write']
+    invalid = copy.deepcopy(spec)
+    invalid['permissions']['tools'] = ['Write']  # T0 never admits a writer, whatever the spec claims
     rejects(lambda invalid=invalid: render(invalid))
     invalid = copy.deepcopy(spec)
     invalid['outputs'] *= 2
@@ -275,8 +268,8 @@ def native(base, spec, binary, *, write_boundary=False):
                                    or 'not found' in str(r).lower() for r in replies), replies
                     print(f'M9 native PASS: {role} {tool} {path}: {"allowed" if allowed else "denied"}')
                 if write_boundary:
-                    print('M9 T1 write-boundary ' + ('FAIL (release blocked)' if boundary_failed else
-                                                   'PASS (diagnostic only; T1 remains disabled pending review)'))
+                    print('M9 T1 write-boundary ' + ('FAIL (this binary must not certify T1)' if boundary_failed else
+                                                   'PASS (diagnostic only; T1 certification is check_m14_standalone_t1.py)'))
                     return 1 if boundary_failed else 0
                 Provider.action = None
         finally:
@@ -289,7 +282,8 @@ def native(base, spec, binary, *, write_boundary=False):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--write-boundary', action='store_true', help='T1 upstream diagnostic only; bypass = fail exit 1, does not enable T1')
+    parser.add_argument('--write-boundary', action='store_true',
+                        help='upstream writePaths diagnostic on a hand-edited role (for assessing a new binary); the shipped T1 gate is check_m14_standalone_t1.py')
     parser.add_argument('--model', help='explicit provider model for the live fixture; source fixture remains unchanged')
     parser.add_argument('--provider-key-env', default='OPENAI_API_KEY')
     parser.add_argument('--timeout', type=float, default=180)
@@ -305,7 +299,7 @@ def main():
                     return 2
                 return native(base, spec, binary, write_boundary=True)
             package = offline(base, spec)
-            print('M9 scope: T0 only. T1 DISABLED; run --write-boundary to inspect the upstream blocker.')
+            print('M9 scope: standalone T0. T1 is certified by check_m14_standalone_t1.py; --write-boundary stays an upstream diagnostic.')
             if not binary:
                 print('M9 SKIP: thclaws absent; native validation/runtime and provider live checks not run (exit 2)')
                 return 2

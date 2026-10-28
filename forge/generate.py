@@ -28,6 +28,17 @@ STANDALONE_THCLAWS_COMPATIBILITY = {
     "0.129.0": frozenset({"7a27129"}),
     THCLAWS_BASELINE: frozenset({"d452ece"}),
 }
+# Standalone T1 (M14, DESIGN §4 "Standalone T1 rollout") rides on native writePaths whose traversal and symlink
+# bypasses were only closed at d452ece; the older T0 pairs stay T0-only.
+STANDALONE_T1_THCLAWS_COMPATIBILITY = {THCLAWS_BASELINE: frozenset({"d452ece"})}
+# The only writers M14 admits into a T1 worker; every other WRITE_BUILTIN_TOOLS member is rejected explicitly.
+T1_WRITE_TOOLS = frozenset({"Write", "Edit"})
+T1_WRITE_PATHS = ("output/**",)
+
+
+def standalone_compatibility(tier: str) -> dict[str, frozenset[str]]:
+    """Version/revision pairs that may certify a standalone package of this tier."""
+    return STANDALONE_T1_THCLAWS_COMPATIBILITY if tier == "T1" else STANDALONE_THCLAWS_COMPATIBILITY
 # Thin runners copied verbatim into every package; the audit rules live in forge.audit only.
 WRAPPERS = ("audit.py", "studio.py")
 
@@ -131,12 +142,17 @@ def pack_assets(spec: dict[str, Any], packs_dir: Path) -> tuple[dict[str, bytes]
 
 
 def standalone_roles(spec: dict[str, Any], packs_dir: Path) -> dict[str, list[str]]:
-    """Nonempty native allowlists; only pack-declared nonmutating MCP tools reach read roles."""
+    """Nonempty native allowlists per role (DESIGN §8).
+
+    T0: every role gets the declared Read/Grep/Glob and pack-declared nonmutating MCP tools.
+    T1 (M14): planner and verifier stay T0; the worker additionally gets the declared Write/Edit and is scoped by
+    `writePaths: output/**` (see `standalone_write_paths`). Any other writer is rejected rather than dropped.
+    """
     from forge.packs import read_pack
 
-    if spec["permissions"]["tier"] != "T0":
-        raise ValueError("M9 standalone currently supports T0 only; T1 is disabled until upstream "
-                         "writePaths rejects traversal and every symlink escape")
+    tier = spec["permissions"]["tier"]
+    if tier not in ("T0", "T1"):
+        raise ValueError("standalone generation supports T0 and T1 only")
     readonly = {"Read", "Grep", "Glob"}
     for capability in spec["capabilities"]:
         folder = packs_dir / capability["pack"]
@@ -146,14 +162,23 @@ def standalone_roles(spec: dict[str, Any], packs_dir: Path) -> dict[str, list[st
                 readonly.update(f"{server['name']}__{tool}" for tool in server["tools"]
                                 if tool not in server["mutating"])
     declared = set(spec["permissions"]["tools"])
-    unsupported = declared - readonly
+    writers = declared & T1_WRITE_TOOLS if tier == "T1" else set()
+    unsupported = declared - readonly - writers
     if unsupported:
-        raise ValueError("M9 T0 tools must be Read/Grep/Glob or pack-declared nonmutating MCP tools; "
-                         "unsupported: " + ", ".join(sorted(unsupported)))
-    roles = {role: sorted(declared) for role in ("planner", "worker", "verifier")}
+        allowed = "Read/Grep/Glob, pack-declared nonmutating MCP tools" + (" or Write/Edit" if tier == "T1" else "")
+        raise ValueError(f"standalone {tier} tools must be {allowed}; unsupported: " + ", ".join(sorted(unsupported)))
+    if tier == "T1" and not writers:
+        raise ValueError("standalone T1 must declare Write or Edit; a T1 spec without a writer is a mis-declared T0")
+    read_roles = sorted(declared - writers)
+    roles = {"planner": read_roles, "worker": sorted(declared), "verifier": read_roles}
     if any(not tools for tools in roles.values()):
         raise ValueError("standalone roles require nonempty tool subsets; empty tools would inherit all tools")
     return roles
+
+
+def standalone_write_paths(spec: dict[str, Any], role: str) -> list[str]:
+    """Native writePaths for a role: only the T1 worker is scoped; an empty list means the key is omitted."""
+    return list(T1_WRITE_PATHS) if spec["permissions"]["tier"] == "T1" and role == "worker" else []
 
 
 def guarantee_matrix(spec: dict[str, Any]) -> list[dict[str, str]]:
@@ -178,11 +203,15 @@ def guarantee_matrix(spec: dict[str, Any]) -> list[dict[str, str]]:
         ("skill_mcp_calls", "No evidence", "No live run or SSE tool/skill evidence has been collected."),
     ]
     if spec["target"] == "thclaws-standalone":
+        t1 = permissions["tier"] == "T1"
+        t1_scope_basis = ("Native writePaths output/** on the worker confines Write/Edit to resolved destinations under output/ "
+                          "(thClaws 0.138.0 d452ece); planner/verifier have no write tools and no role has Bash. MCP tools and "
+                          "runtime state are outside this boundary; live audit fails any case that writes elsewhere.")
         replacements = {
             "tool_allowlist": ("Enforced", "Native named subagents intersect their tool registry with nonempty role tools; orchestration itself is outside this claim."),
-            "no_file_writes": ("Not guaranteed", "All three T0 roles exclude built-in write tools and Bash. Pack declarations and runtime state are not filesystem isolation."),
-            "output_write_scope": ("Declared" if permissions["write_scope"] == "output" else "Not applicable",
-                                   "Native writePaths scopes supported file-write tools, but T1 remains disabled until traversal and every symlink escape are blocked; Bash/MCP are outside this boundary."),
+            "no_file_writes": (("Not applicable", "T1 writes under output/** by design; see output_write_scope.") if t1 else
+                               ("Not guaranteed", "All three T0 roles exclude built-in write tools and Bash. Pack declarations and runtime state are not filesystem isolation.")),
+            "output_write_scope": ("Enforced", t1_scope_basis) if t1 else ("Not applicable", "T0 declares no file writes."),
             "no_shell": ("Enforced" if permissions["shell"] == "none" else "Not applicable",
                          "Bash is absent from every role when shell=none; planner/verifier always exclude Bash."),
             "collect_files": ("Not applicable", "agent run does not provide the /agent/run collect_files snapshot contract."),
@@ -317,7 +346,7 @@ def render(spec: dict[str, Any], packs_dir: Path | None = None) -> tuple[dict[st
         add_json(".thclaws/schemas/branch.json", {"oneOf": [spec["outputs"][0]["schema"], spec["refusal"]["schema"]]})
         for role, tools in roles.items():
             files[f".thclaws/agents/{role}.md"] = templates.get_template("role.md.j2").render(
-                spec=spec, role=role, tools=tools,
+                spec=spec, role=role, tools=tools, write_paths=standalone_write_paths(spec, role),
                 contract=files["AGENTS.md"].decode(),
             ).encode()
         files[".thclaws/agent_workflow/run.js"] = templates.get_template("run.js.j2").render().encode()

@@ -22,6 +22,8 @@ REQUIRED_KINDS = {"normal", "missing_input", "refusal", "malformed"}
 REQUIRED_FIXTURES = {
     "invoice-reviewer": {"transport": "atlas_file_handoff", "pack": None},
     "sql-reader": {"transport": "prompt_json", "pack": "sql-readonly"},
+    # M14: the standalone T1 fixture (write_scope output); every other required fixture targets atlas-worker.
+    "note-writer-standalone": {"transport": "prompt_json", "pack": None, "target": "thclaws-standalone"},
 }
 
 
@@ -170,8 +172,9 @@ def main() -> int:
         if not isinstance(identity, dict) or identity.get("name") != name:
             findings.append(f"{path.relative_to(ROOT)}: identity.name must be {name}")
         if expectation is not None:
-            if spec.get("target") != "atlas-worker":
-                findings.append(f"{path.relative_to(ROOT)}: target must be atlas-worker")
+            target = expectation.get("target", "atlas-worker")
+            if spec.get("target") != target:
+                findings.append(f"{path.relative_to(ROOT)}: target must be {target}")
 
             inputs = spec.get("inputs", [])
             if not isinstance(inputs, list):

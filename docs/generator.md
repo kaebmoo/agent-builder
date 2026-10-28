@@ -89,20 +89,22 @@ forge live-test out/text-reviewer-standalone --write
 ต้อง provision provider key ของ model ที่ pin ไว้ก่อนรัน. Package เพิ่ม `.thclaws/agents/{planner,worker,verifier}.md`,
 `.thclaws/agent_workflow/run.js` และ schema `branch.json` (`oneOf` result/refusal จาก spec).
 Pinned model ถูกเขียนทั้ง settings และ role definitions; model policy สืบทอด model ของ operator และยังทำ live audit ไม่ได้.
-ไม่มี routing หรือ Atlas export. M9 เปิดเฉพาะ T0 และรับ output เดียวแบบ `assistant_json` เท่านั้น.
-Standalone T1 ถูก generator ปฏิเสธก่อนเขียนไฟล์; static/live audit ปฏิเสธ package T1 ที่สร้างไว้ก่อนหน้านี้ด้วย.
+ไม่มี routing หรือ Atlas export. Standalone รับ output เดียวแบบ `assistant_json` เท่านั้น และรองรับ T0 (M9) กับ T1 (M14).
 
-ทุก role ได้เฉพาะ Read/Grep/Glob และ qualified MCP tools ที่ pack ประกาศว่าไม่ mutating ตาม spec.
+T0: ทุก role ได้เฉพาะ Read/Grep/Glob และ qualified MCP tools ที่ pack ประกาศว่าไม่ mutating ตาม spec.
 Tools อื่น (รวม KMS/Memory writers, Task/WorkflowRun และ unknown tools) ถูก reject โดยไม่ตัดสิทธิ์เงียบ ๆ.
 ทุก role ต้องมี tools ไม่ว่าง; generator reject แทน inherit-all และไม่สร้าง writePaths สำหรับ T0.
 Role definitions และ workflow เป็นไฟล์ deterministic ที่แก้เองแล้ว static audit fail ด้วย drift.
 
-Tool subset ถูก runtime บังคับ แต่ writePaths ของ thClaws 0.116.0 `75edc48` ตรวจ raw glob:
-`outside.txt` ถูกปฏิเสธ ขณะที่ `output/../traversal.txt` เขียนนอก output ได้.
-T0 ที่ส่งมอบมี `output_write_scope: Not applicable` และ `no_file_writes: Not guaranteed`: ไม่มี write tools ใน role
-แต่ runtime state/MCP ไม่ใช่ filesystem isolation. T1 ปิดการใช้งานจนตรวจ upstream fix ผ่านและ review ก่อนปลดล็อก.
-บน thClaws 0.129.0 `7a27129` การ traversal และ symlink ที่มี target ถูกปฏิเสธแล้ว แต่ final dangling symlink
-ยัง bypass `output/**` ได้; บน 0.138.0 `d452ece` diagnostic ปฏิเสธครบทั้ง 5 กรณี (DESIGN §4 M12) แต่ T1 ยังไม่เปิดจนกว่าจะ review ใน milestone แยก.
+T1 (M14, DESIGN §4 "Standalone T1 rollout", fixture `fixtures/note-writer-standalone/`): `permissions.write_scope: output` กับ tools ที่เพิ่มได้เฉพาะ
+`Write`/`Edit` (ต้องมีอย่างน้อยหนึ่ง; Docx/Pptx/Xlsx/Pdf/Epub/NotebookEdit/FetchImages ถูก reject ชัดว่ายังไม่รองรับ). planner/verifier ยังเป็น T0 (read-only)
+ส่วน `worker.md` ได้ Write/Edit พร้อม `writePaths: output/**` ซึ่ง thClaws บังคับที่ runtime โดย resolve ปลายทางผ่าน sandbox (traversal, symlink และ dangling symlink
+ถูกปฏิเสธบน 0.138.0 `d452ece`). Package ไม่ ship `output/` (Write สร้าง parent เอง) และ static audit ถือ `output/**` เป็น runtime output เฉพาะ package T1.
+Guarantee matrix ของ T1: `output_write_scope: Enforced` (ครอบเฉพาะ Write/Edit ของ worker; Bash ไม่มีในทุก role; MCP tools และ runtime state อยู่นอก boundary),
+`no_file_writes: Not applicable`. T1 รับรองเฉพาะคู่ runtime `0.138.0/d452ece` (`STANDALONE_T1_THCLAWS_COMPATIBILITY`) เพราะ writePaths ของ 0.116.0 `75edc48`
+ตรวจ raw glob (`output/../traversal.txt` หลุด) และ 0.129.0 `7a27129` ยังหลุดกรณี dangling symlink; คู่เก่ายังรับรอง T0 เท่านั้น.
+Live audit ของ standalone ทุก tier ทำ tree diff ของ case directory: ไฟล์นอก `output/` (ยกเว้น `.thclaws/state/`, `.thclaws/sessions/`) ทำให้ case fail และ T0 ต้องไม่เขียนไฟล์ใดเลย.
+T0 ที่ส่งมอบยังมี `output_write_scope: Not applicable` และ `no_file_writes: Not guaranteed`: ไม่มี write tools ใน role แต่ runtime state/MCP ไม่ใช่ filesystem isolation.
 ดูหลักฐานและขอบเขตใน [DESIGN](DESIGN.md).
 
 

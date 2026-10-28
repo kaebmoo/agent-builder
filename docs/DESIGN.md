@@ -106,6 +106,36 @@ Report `thclaws_baseline` ยังหมายถึง template/catalog baseli
 `static_audit.thclaws_validate.version`. รุ่นอื่นยัง fail จนตรวจใหม่. ข้อจำกัด writePaths พบแล้วบน
 0.116.0 `75edc48` และ 0.121.0 `35ccf16`; gate แยกตรวจ binary ใหม่ได้โดยไม่อ้างว่า T1 รองรับ.
 
+### Standalone T1 rollout (M14, 2026-10-28, thClaws 0.138.0 `d452ece`)
+
+Review ขอบเขต `writePaths` ตามกติกาของ T0 rollout ("diagnostic ผ่านไม่ปลดอัตโนมัติ") ด้วย source `d452ece` (path ใต้ `crates/core/src/`):
+
+1. `writePaths` ครอบเฉพาะ `WRITE_TOOL_NAMES` = `Write`, `Edit`, `DocxCreate/DocxEdit`, `PptxCreate/PptxEdit`, `XlsxCreate/XlsxEdit`, `PdfCreate`, `EpubCreate`, `NotebookEdit`;
+   path ของ call อ่านจาก key `path`/`file_path`/`notebook_path`/`out`/`output_path`; wrapper (`PathScopedWriteTool`) ตรวจก่อน inner tool และ sandbox ยังตรวจซ้ำ (`subagent.rs:26-42,63-105,503-522`).
+2. ปลายทางที่ตรวจ = `resolve_landing(cwd.join(raw))` เทียบ cwd ที่ canonicalize แล้ว → `output/../x`, symlink directory และ dangling symlink ถูกจับ (`subagent.rs:59-61,83-95`,
+   `sandbox.rs:283-330`; upstream issues #204/#219) — ตรงกับ diagnostic 5/5 บน Linux build และ Mac desktop build (M12/M13).
+3. `writePaths: []` = inherit ไม่จำกัด; **ไม่ครอบ `Bash`** และ **ไม่ครอบ MCP tools** (`agent_defs.rs:80-87`, `subagent.rs:507-509`).
+4. `thclaws agent validate` ตรวจว่า glob compile ได้ และ **warn** (ไม่ error) เมื่อ role มี writePaths พร้อม Bash (`cloud/agent_cli.rs:165-185`).
+5. frontmatter `writePaths:` รับ list คั่น comma แบบเดียวกับ `tools:` (`agent_defs.rs:390-394`).
+6. `Write` สร้าง parent directory เอง (`tools/write.rs:93`) → package ไม่ต้อง ship `output/`.
+7. `thclaws agent run` ไม่มี `collect_files` snapshot และไม่ migrate layout (M13 ข้อ 7) → ผลลัพธ์ของ T1 standalone คือ JSON `assistant_json` เดียว + ไฟล์ใต้ `output/**` ซึ่ง live audit
+   ตรวจด้วย tree diff ของ case directory.
+8. **ยังไม่ยืนยันด้วย binary**: `Edit` ภายใต้ wrapper (diagnostic เดิมตรวจเฉพาะ `Write`) และ office writers → gate M14 native เป็นตัวพิสูจน์ `Edit`; office writers อยู่นอก scope.
+
+**การตัดสินใจ (M14)**:
+(a) T1 เปิดเฉพาะ `thclaws-standalone` + `static-pipeline` และรับรองเฉพาะคู่ runtime `0.138.0/d452ece` (`STANDALONE_T1_THCLAWS_COMPATIBILITY` แยกจากตาราง T0;
+คู่ 0.116.0/0.121.0/0.129.0 ยังเป็น T0 เท่านั้นเพราะมี bypass ที่บันทึกไว้). (b) `worker` ได้ `permissions.tools` ∩ ({Read, Grep, Glob, Write, Edit} ∪ MCP nonmutating ที่ pack ประกาศ)
+และต้องมี `Write` หรือ `Edit` อย่างน้อยหนึ่ง (T1 ที่ไม่มี writer คือ T0 ที่ประกาศผิด → reject); writer อื่นใน `WRITE_BUILTIN_TOOLS` (Docx*/Pptx*/Xlsx*/PdfCreate/EpubCreate/NotebookEdit/FetchImages)
+ถูก generator reject ชัดว่า unsupported ใน M14; `planner`/`verifier` คงเป็น T0 (read-only, ไม่มี writePaths). (c) `worker.md` มี `writePaths: output/**`; ไม่ ship `output/`.
+(d) static audit: inventory ถือ `output/**` เป็น runtime output **เฉพาะเมื่อ `agentspec.json` เป็น T1** (ไฟล์นอก `output/` และ `output/` ใน T0/T2 ยังเป็น finding); `thclaws_validate`
+ใช้ตารางคู่ตาม tier ของ package. (e) live audit (`run_standalone`) snapshot tree ของ case directory ก่อน/หลัง run: ไฟล์ใหม่หรือเปลี่ยนที่ไม่อยู่ใต้ `output/` และไม่ใช่ `.thclaws/state/`,
+`.thclaws/sessions/` → case fail ทุก tier (T0 จึงต้องไม่เขียนไฟล์ใดเลย) และบันทึกรายการไฟล์ที่เขียนเป็น evidence. (f) guarantee matrix ของ standalone T1: `output_write_scope` = **Enforced**
+โดย basis ระบุว่าครอบเฉพาะ `Write`/`Edit` ของ worker ผ่าน native writePaths ที่ resolve ปลายทางผ่าน sandbox, Bash ไม่มีในทุก role, MCP tools และ runtime state อยู่นอก boundary, พิสูจน์ด้วย
+gate M14 บน `d452ece`; `no_file_writes` = Not applicable (T1 เขียนโดยออกแบบ). T0 คงเดิม. (g) `check_m9_standalone.py --write-boundary` คงเป็น diagnostic สำหรับประเมิน binary รุ่นใหม่
+(role ที่ gate เขียนเอง) ส่วน gate M14 พิสูจน์บน package ที่ generator สร้างจริง: positive control Write/Edit ใต้ `output/`, ปฏิเสธ direct/traversal/symlink/dangling/Edit นอก output,
+worker Bash และ planner/verifier Write/Edit/Bash ถูกปฏิเสธ, pipeline 4 golden cases ผ่าน fake provider ที่เขียน `output/note.md` จริง. ข้อจำกัดที่คงอยู่: writePaths ไม่ใช่ filesystem
+isolation ของ MCP หรือ runtime state และไม่ใช่ claim ของ `/agent/run` (ตาราง §6 แถว T1 ยัง Declared สำหรับ Atlas).
+
 ## 5. Capability pack
 
 pack คือความสามารถสำเร็จรูปที่ประกอบเข้า package ได้ อยู่ใน `packs/<name>/pack.yaml` ประกาศ: MCP servers / skills / scripts ที่เพิ่ม, env ที่ต้องการ (ชื่อ), tier ต่ำสุดที่ต้องใช้, fixture สำหรับ live audit ที่รันได้โดยไม่ต้องมีข้อมูลจริง
@@ -192,7 +222,7 @@ Worker และ policy pin worker/workspace เป็น placeholder ที่ 
 |---|---|---|
 | ใช้ tool ตาม allowlist | Declared | prompt / package เท่านั้น |
 | ห้ามเขียนไฟล์ | Enforced เฉพาะกรณี | daemon แยก + ไม่มี write MCP + sandbox (Write/Edit ยังมี) |
-| T1 เขียนได้เฉพาะ `output/**` | Declared | `permissions.write_scope=output`; runtime ยังไม่บังคับ path ใน M1 |
+| T1 เขียนได้เฉพาะ `output/**` | Declared บน `/agent/run`; **Enforced** บน standalone `static-pipeline` ตั้งแต่ M14 (เฉพาะ `Write`/`Edit` ของ worker บน 0.138.0/`d452ece`) | `/agent/run`: `permissions.write_scope=output` เท่านั้น; standalone: native `writePaths: output/**` ของ worker + tree diff ใน live audit (§4 "Standalone T1 rollout") |
 | `collect_files` เป็นผลลัพธ์ | Enforced เป็น snapshot | thClaws copy ไฟล์ที่มีอยู่หลัง run; ไม่ยืนยันว่า agent เขียนไฟล์นั้น |
 | ห้าม shell | Not guaranteed | runtime register Bash เสมอ |
 | `network: none` ไม่มี web built-in ใน declaration | Static check | reject `WebFetch`, `WebSearch`, `WebScrape`, `FetchImages`, `YouTubeTranscript`; runtime egress ยังไม่ถูกบังคับ |
@@ -248,12 +278,12 @@ Atlas registration contract (M8, ตรวจ source `atlas-control-plane` ref `
 
 ขอบเขต generator M4: สร้าง `single-worker` สำหรับ `atlas-worker` และ `atlas-workflow` ตาม fixture ทั้งสอง; standalone pattern ยังเป็น compatibility intent และ generator ต้อง reject จนกว่าจะมี template orchestration ที่ตรวจแล้ว ห้ามสร้าง package ว่างแล้วอ้างว่ารองรับ pattern นั้น
 
-ขอบเขต standalone generator M9 (เพิ่ม 2026-09-07): เริ่มจาก `static-pipeline` ตามโครงสร้างที่ `thclaws agent new --pattern static-pipeline` v0.116.0 สร้าง คือ `.thclaws/agents/{planner,worker,verifier}.md` + `.thclaws/agent_workflow/run.js` และ AGENTS.md ที่สั่งให้ orchestrator เรียก `WorkflowRun`; ไม่มี `routing` และไม่มี `atlas-register.json`. บน surface นี้ agent defs, hooks และ `allowed_tools` ทำงานจริง guarantee matrix อ้าง tool restriction ต่อ role ได้; writePaths มีข้อจำกัด raw path ตามหลักฐาน M9 ด้านล่าง จึงยังไม่ใช่ write boundary ที่รับรองได้. `batch-fanout` และ `dynamic` ยัง reject จนกว่าจะมี fixture และ template ของตัวเอง
+ขอบเขต standalone generator M9 (เพิ่ม 2026-09-07): เริ่มจาก `static-pipeline` ตามโครงสร้างที่ `thclaws agent new --pattern static-pipeline` v0.116.0 สร้าง คือ `.thclaws/agents/{planner,worker,verifier}.md` + `.thclaws/agent_workflow/run.js` และ AGENTS.md ที่สั่งให้ orchestrator เรียก `WorkflowRun`; ไม่มี `routing` และไม่มี `atlas-register.json`. บน surface นี้ agent defs, hooks และ `allowed_tools` ทำงานจริง guarantee matrix อ้าง tool restriction ต่อ role ได้; writePaths มีข้อจำกัด raw path บน 0.116.0–0.129.0 ตามหลักฐาน M9 ด้านล่าง และหมดไปบน 0.138.0 `d452ece` (M12 ข้อ 3) จึงรับรอง write boundary ของ `Write`/`Edit` ได้ตั้งแต่ M14 (§4 "Standalone T1 rollout"). `batch-fanout` และ `dynamic` ยัง reject จนกว่าจะมี fixture และ template ของตัวเอง
 
 Permission ต่อ role ใน standalone: spec ยังมี `permissions` ชุดเดียว (ห้ามให้ spec โต) และ generator map ลง role คงที่แบบ deterministic โดยยึดพฤติกรรมของ `subagent.rs` v0.116.0 ที่ `tools: []` หมายถึง **สืบทอด tool ทั้งหมดของ parent** และ `writePaths: []` หมายถึง **ไม่จำกัดการเขียน** ดังนั้น
 - ทุก role ต้องมี `tools` ที่ไม่ว่างและเป็น subset ของ `permissions.tools` ใน spec; generator ต้อง reject ถ้า intersection ว่าง ห้ามปล่อยรายการว่างให้กลายเป็น inherit-all
 - `planner` และ `verifier` เป็น T0 เสมอ ได้เฉพาะ read-only tools จาก spec (Read, Grep, Glob และ MCP read-only ที่ spec ประกาศ) ไม่มี Bash แม้ `shell: sandboxed` เพราะขัดกฎ T0 และ writePaths ไม่ scope Bash; ไม่มี `writePaths`
-- `worker` ในขอบเขต M9 T0 ใช้กฎเดียวกับ planner/verifier: tools ต้องอยู่ในชุด nonmutating ที่รองรับ, shell/network/write_scope เป็น none และไม่มี writePaths. ไม่ตัด tool ที่ไม่รองรับเงียบ ๆ แต่ reject spec ที่ generator. T1 output mapping ของแผนเดิมเลื่อนไปหลัง upstream write boundary fix; T2 standalone ยังถูก schema/semantic checks ปฏิเสธตามเดิม.
+- `worker` ใน T0 ใช้กฎเดียวกับ planner/verifier: tools ต้องอยู่ในชุด nonmutating ที่รองรับ, shell/network/write_scope เป็น none และไม่มี writePaths. ไม่ตัด tool ที่ไม่รองรับเงียบ ๆ แต่ reject spec ที่ generator. ใน T1 (M14, §4 "Standalone T1 rollout") worker ได้เพิ่มเฉพาะ `Write`/`Edit` ที่ spec ประกาศ พร้อม `writePaths: output/**` และต้องมี writer อย่างน้อยหนึ่ง; writer อื่นถูก reject; planner/verifier ยังเป็น T0. T2 standalone ยังถูก schema/semantic checks ปฏิเสธตามเดิม.
 - Standalone role files ฝัง snapshot ของ `AGENTS.md` ที่ generate แล้ว ดังนั้น `AGENTS.md` ไม่ใช่ editable prose สำหรับ target นี้; การ harden contract ต้องแก้ spec/template แล้ว generate ใหม่ ไม่เช่นนั้น audit ต้องจับเป็น drift.
 - Gate M9 T0 ต้องบังคับเรียก Write/Edit/Bash กับทั้งสาม role บน thClaws จริงแล้วถูกปฏิเสธ. แยก `--write-boundary` สำหรับ T1 ที่ยังปิด: ต้อง fail เมื่อพบ traversal/symlink bypass ไม่ถือการพบ bug เป็น pass. ไม่ใช่ตรวจแค่เนื้อหา `agents/*.md`
 - ถ้าใช้จริงแล้ว 3 role คงที่ไม่พอ ค่อยพิจารณาเพิ่ม `roles[]` ใน schema เป็น milestone แยก ไม่แก้ในระหว่าง M9
@@ -370,7 +400,7 @@ env literal สำหรับ stdio, `${VAR}` เฉพาะ headers, allowlis
    canonicalize, ตาม symlink รวม dangling symlink ทีละ component จน `MAX_SYMLINK_HOPS`) และ canonicalize cwd ก่อน match glob
    (upstream issues #204/#219). Native diagnostic `check_m9_standalone.py --write-boundary` บน `d452ece` ปฏิเสธครบ:
    `outside.txt`, `output/../traversal.txt`, `output/link/escaped.txt`, `output/dangling` และยอมรับ positive control. blocker ของ T1
-   ที่บันทึกไว้สำหรับ 0.116.0–0.129.0 จึงไม่พบบน baseline นี้; **T1 ยังปิด** ตามกติกา "diagnostic ผ่านไม่ปลดอัตโนมัติ" ต้อง review
+   ที่บันทึกไว้สำหรับ 0.116.0–0.129.0 จึงไม่พบบน baseline นี้; **T1 ยังปิดใน M12** ตามกติกา "diagnostic ผ่านไม่ปลดอัตโนมัติ" (ปลดใน M14 หลัง review — §4 "Standalone T1 rollout") ต้อง review
    ขอบเขต (Bash/MCP นอก wrapper, runtime state) และแก้ generator/matrix/audit ใน milestone แยก. `writePaths` ยังครอบเฉพาะ
    Write/Edit/Docx*/Pptx*/Xlsx*/PdfCreate/EpubCreate/NotebookEdit.
 4. `cloud/pack.rs` strip เพิ่ม prefix `.thclaws/bots/`, `.home/`, `.playwright-mcp/` และ exact `.thclaws/media-jobs.jsonl`;

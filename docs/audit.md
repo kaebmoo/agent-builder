@@ -53,7 +53,7 @@ Exit code: `0` = package เป็น `draft`, `1` = มี error (กฎ static
 - MCP ถูกติดตั้งบน daemon จริงหรือไม่ และ agent เรียก skill/MCP จริงหรือไม่ (live audit M6)
 - permission ถูกบังคับที่ runtime: guarantee matrix ไม่เปลี่ยนจาก M4 เพราะ `/agent/run` ยังไม่ enforce (DESIGN §4, §6)
 - `sql-reader` ผ่าน static audit ได้ด้วย SQL pack v2 ของ M7a; การมี descriptor ไม่ยืนยันว่า runtime ถูกติดตั้ง ต้องใช้ `forge pack test` และ live audit ตามลำดับ
-- standalone package: M9 รองรับ static-pipeline T0 เท่านั้น; T1 เก่าถูก block โดย render; role/workflow drift เป็น error และ AGENTS.md ต้องระบุ WorkflowRun กับ path ที่ generate
+- standalone package: static-pipeline T0 (M9) และ T1 (M14); role/workflow drift เป็น error (รวม `writePaths` ของ worker ใน T1) และ AGENTS.md ต้องระบุ WorkflowRun กับ path ที่ generate; สำหรับ package T1 inventory ถือ `output/**` เป็น runtime output ไม่ใช่ไฟล์ undeclared (ยังเป็น finding ใน T0/T2) และ `thclaws agent validate` ถูกรับรองตามคู่ version+revision ของ tier (T1 เฉพาะ `0.138.0/d452ece`)
 
 ## Gate
 
@@ -132,8 +132,11 @@ python3 scripts/check_m7b_packs.py --live --model oai/gpt-5.4-mini --provider-ke
 ต้องมีอย่างน้อยสาม subagent turns; evidence เก็บ `workflow_result` พร้อมค่า JSON, turn count และ stderr ที่ redact แล้ว.
 ไม่ใช้ verifier.ok เป็น audit verdict และไม่สร้าง SSE หรือ MCP inventory ปลอม; skill_mcp_calls ยัง No evidence.
 
+Live audit ของ standalone ทุก tier snapshot tree ของ case directory ก่อน/หลังรัน (ยกเว้น `.thclaws/state/`, `.thclaws/sessions/`): ไฟล์ใหม่หรือเปลี่ยนนอก `output/`
+ทำให้ case fail, T0 ต้องไม่เขียนไฟล์ใดเลย และ evidence มี event `files_written` ต่อ case (M14).
+
 `python3 scripts/check_m9_standalone.py` เป็น gate ของ **T0 ที่ส่งมอบ**: ตรวจ deterministic output,
-T1 generation/legacy audit rejection, safe tool subsets, role drift, native agent new/validate,
+legacy T1 audit rejection (package T0 ที่ agentspec ถูกเขียนเป็น T1 ต้อง drift), safe tool subsets, role drift, native agent new/validate,
 pipeline และ wrong-branch rejection ผ่าน HTTP provider จำลองบน localhost รวมถึงบังคับ Write/Edit/Bash
 กับทุก role แล้วต้องถูกปฏิเสธ. จากนั้นรัน provider จริงเมื่อมี key; ไม่มี binary หรือ key = exit 2.
 `--model oai/gpt-5.4-mini --provider-key-env OPENAI_COMPAT_API_KEY` ใช้ model override โดยไม่แก้ fixture ต้นฉบับ.
@@ -143,12 +146,18 @@ Native synthetic results ไม่ใช่หลักฐานว่า model 
 # Gate ของ T0 ที่เปิดใช้งาน
 python3 scripts/check_m9_standalone.py
 
-# Security regression ของ T1 ที่ยังปิด: ไม่มี binary = 2, พบ bypass = 1, ปฏิเสธครบ = 0
+# Upstream writePaths diagnostic บน role ที่ gate เขียนเอง (ใช้ประเมิน binary รุ่นใหม่): ไม่มี binary = 2, พบ bypass = 1, ปฏิเสธครบ = 0
 python3 scripts/check_m9_standalone.py --write-boundary
+
+# Gate ของ T1 ที่ส่งมอบ (M14): package จริงจาก generator; ไม่มี binary หรือ key = 2, binary ที่ไม่ใช่คู่ T1 = 1
+python3 scripts/check_m14_standalone_t1.py
+python3 scripts/check_m14_standalone_t1.py --model oai/gpt-5.4-mini --provider-key-env OPENAI_COMPAT_API_KEY
 ```
 
 โหมด write-boundary ใช้ temporary native worker ที่เพิ่ม Write/writePaths ใน test เท่านั้น ไม่ bypass guard
-ของ generator และไม่เรียก audit เพื่อรับรอง package ทดลองนั้น. ตรวจ positive control, direct denial,
-`output/../traversal.txt` และ symlink ออกจาก output. ผล T1 เป็น BLOCKED/exit 1 หากมี bypass;
-ไม่รวมผลนี้เป็น PASS ของ T0 และไม่มีการปลดล็อก T1 อัตโนมัติแม้ binary ใหม่ผ่าน diagnostic.
-Default CI รัน gate T0; T1 diagnostic เป็นการตรวจแยกเมื่อจะประเมิน upstream fix ไม่ใช่ feature ที่ส่งมอบ.
+ของ generator และไม่เรียก audit เพื่อรับรอง package ทดลองนั้น; ผลของมันไม่ใช่การรับรอง T1 — การรับรองคือ `check_m14_standalone_t1.py`
+ซึ่ง offline ตรวจ deterministic T1 package, worker `writePaths: output/**`, planner/verifier read-only, matrix rows, การ reject writer ที่ไม่รองรับ,
+boundary drift, inventory `output/**` เฉพาะ T1 และตารางคู่ T1; native ตรวจ `thclaws agent validate` (ไม่มี warning writePaths), probe 14 รายการบน package จริง
+(worker Write/Edit ใต้ `output/` สำเร็จ; Write นอก output, `output/../traversal.txt`, symlink directory, dangling symlink, Edit ไฟล์นอก output และ Bash ถูกปฏิเสธ;
+planner/verifier Write/Edit/Bash ถูกปฏิเสธ) และ pipeline 4 golden cases ผ่าน provider จำลองที่ worker เขียน `output/note.md` จริง (tree diff ยืนยัน);
+provider จริงรัน golden cases ของ `note-writer-standalone` เมื่อมี key.

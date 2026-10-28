@@ -18,11 +18,11 @@ from jsonschema import Draft202012Validator
 from forge.generate import (
     REPORT_SCHEMA_PATH,
     ROOT,
-    STANDALONE_THCLAWS_COMPATIBILITY,
     THCLAWS_BASELINE,
     editable_files,
     json_text,
     render,
+    standalone_compatibility,
 )
 from forge.packs import conformance, mcp_tools, read_pack
 from forge.spec import ATLAS_TARGETS
@@ -121,11 +121,17 @@ def single_worker_findings(package: Path, text: str) -> list[Finding]:
     return findings
 
 
-def ignorable(path: str) -> bool:
-    """Runtime state, VCS and root bytecode/cache paths that thclaws agent pack strips."""
+def ignorable(path: str, spec: dict[str, Any] | None = None) -> bool:
+    """Runtime state, VCS and root bytecode/cache paths that thclaws agent pack strips.
+
+    For a standalone T1 package `output/**` is the agent's declared write scope (DESIGN §4 "Standalone T1 rollout"),
+    so files the agent wrote there are runtime output rather than undeclared package content.
+    """
     parts = path.split("/")
+    runtime_output = (spec is not None and spec.get("target") == "thclaws-standalone"
+                      and spec.get("permissions", {}).get("tier") == "T1" and path.startswith("output/"))
     return ((path.startswith(".thclaws/state/") and path.rsplit("/", 1)[-1].casefold() != "todos.md")
-            or path.startswith("__pycache__/") or ".git" in parts[:1] or path.endswith(".pyc"))
+            or path.startswith("__pycache__/") or ".git" in parts[:1] or path.endswith(".pyc") or runtime_output)
 
 
 def error(rule: str, message: str) -> Finding:
@@ -182,7 +188,7 @@ def static_findings(package: Path, packs_dir: Path | None = None) -> tuple[list[
         path = target.relative_to(package).as_posix()
         if target.is_symlink():
             findings.append(error("inventory", f"{path}: symlinks are not allowed in a package"))
-        elif target.is_file() and not ignorable(path) and path not in files:
+        elif target.is_file() and not ignorable(path, spec) and path not in files:
             findings.append(error("inventory", f"{path}: not generated from agentspec.json or a declared pack; "
                                   "remove it or declare it through the spec"))
 
@@ -202,8 +208,15 @@ def static_findings(package: Path, packs_dir: Path | None = None) -> tuple[list[
     return findings, report
 
 
-def thclaws_validate(package: Path, *, standalone_t0: bool = False) -> dict[str, Any]:
-    """Run `thclaws agent validate` without leaving bytecode in the package. Skips explicitly when absent."""
+def thclaws_validate(package: Path, *, standalone_t0: bool = False, standalone_tier: str | None = None) -> dict[str, Any]:
+    """Run `thclaws agent validate` without leaving bytecode in the package. Skips explicitly when absent.
+
+    Standalone packages are certified per version+revision pair and per tier: T0 pairs come from
+    STANDALONE_THCLAWS_COMPATIBILITY, T1 only from STANDALONE_T1_THCLAWS_COMPATIBILITY (DESIGN §4). `standalone_t0`
+    is the pre-M14 spelling of `standalone_tier="T0"`.
+    """
+    if standalone_t0 and standalone_tier is None:
+        standalone_tier = "T0"
     binary = shutil.which(os.environ.get("THCLAWS_BIN", "thclaws"))
     if binary is None:
         return {"status": "skipped", "version": None,
@@ -211,16 +224,16 @@ def thclaws_validate(package: Path, *, standalone_t0: bool = False) -> dict[str,
     lines = [line.strip() for line in subprocess.run([binary, "--version"], capture_output=True, text=True,
                                                      check=True, timeout=30).stdout.splitlines() if line.strip()]
     version = " ".join(lines[:2])
-    if standalone_t0:
+    if standalone_tier is not None:
+        pairs = standalone_compatibility(standalone_tier)
         runtime_version = lines[0].removeprefix("thclaws ") if lines else ""
         revision = next((line.split(":", 1)[1].strip().split()[0]
                          for line in lines[1:] if line.startswith("revision:") and ":" in line
                          and line.split(":", 1)[1].strip()), None)
-        supported_revisions = STANDALONE_THCLAWS_COMPATIBILITY.get(runtime_version, frozenset())
+        supported_revisions = pairs.get(runtime_version, frozenset())
         verified = revision in supported_revisions
-        expected = ", ".join(f"{runtime} ({', '.join(sorted(revisions))})"
-                             for runtime, revisions in STANDALONE_THCLAWS_COMPATIBILITY.items())
-        detail = (f"{version} revision {revision or '<missing>'} is not a verified runtime; "
+        expected = ", ".join(f"{runtime} ({', '.join(sorted(revisions))})" for runtime, revisions in pairs.items())
+        detail = (f"{version} revision {revision or '<missing>'} is not a verified runtime for standalone {standalone_tier}; "
                   f"expected one of {expected}; re-check DESIGN §4 first")
     else:
         verified = bool(lines) and lines[0] == f"thclaws {THCLAWS_BASELINE}"
@@ -250,8 +263,9 @@ def audit_package(package: Path, *, packs_dir: Path | None = None, strict: bool 
         if not isinstance(report, dict) or not isinstance(report.get("audit"), dict):
             raise ValueError("; ".join(f["message"] for f in findings) + " (no build report to record the failure)")
         report["audit"]["spec"] = "failed"
-    standalone_t0 = report.get("target") == "thclaws-standalone" and report.get("declared_permissions", {}).get("tier") == "T0"
-    validate = thclaws_validate(package, standalone_t0=standalone_t0) if thclaws else {
+    standalone_tier = (report.get("declared_permissions", {}).get("tier")
+                       if report.get("target") == "thclaws-standalone" else None)
+    validate = thclaws_validate(package, standalone_tier=standalone_tier) if thclaws else {
         "status": "skipped", "version": None, "detail": "thclaws validation disabled for this run"}
     errors = [f for f in findings if f["severity"] == "error" or strict]
     report["audit"].update(static="failed" if errors else "passed", manifest=validate["status"])

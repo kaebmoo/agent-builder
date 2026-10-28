@@ -2,6 +2,9 @@
 name: {{ role }}
 description: {{ role }} for the AgentSpec mission.
 tools: {{ tools | join(', ') }}
+{% if write_paths %}
+writePaths: {{ write_paths | join(', ') }}
+{% endif %}
 {% if spec.model.mode == 'pinned' %}
 model: {{ spec.model.id | json }}
 {% endif %}
@@ -21,5 +24,8 @@ Check the original input and worker response against the mission and contracts.
 Return the final corrected result or refusal JSON branch directly, never {ok, steps} or an audit verdict.
 {% endif %}
 Your runtime tool subset is: {{ tools | join(', ') }}.
+{% if write_paths %}
+Your file writes are confined to {{ write_paths | join(', ') }} by the runtime; a refused write is a boundary, not an error to work around.
+{% endif %}
 
 {{ contract }}

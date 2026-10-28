@@ -60,7 +60,8 @@ PATH="$THCLAWS_PATH:$PATH" python3 scripts/check_m11_builder_agent.py \
 # 5. M7b live 3 รอบ (ก่อนหน้า fail 3/3 เพราะ migration; harness ใหม่ต้องผ่านเองโดยไม่ตั้ง env ภายนอก)
 for i in 1 2 3; do PATH="$THCLAWS_PATH:$PATH" python3 scripts/check_m7b_packs.py --live --model oai/gpt-5.4-mini --provider-key-env OPENAI_COMPAT_API_KEY; echo "round $i exit=$?"; done
 
-# 6. M9 live (T0) และ diagnostic ของ T1 — ผ่านแล้ว 2026-10-27; รันซ้ำเฉพาะเมื่อ checkout ของ forge เปลี่ยน
+# 6. M14 (T1 standalone) native + provider live, แล้ว M9 live (T0) ซ้ำเพราะ run_standalone เพิ่ม tree diff (M14)
+PATH="$THCLAWS_PATH:$PATH" python3 scripts/check_m14_standalone_t1.py --model oai/gpt-5.4-mini --provider-key-env OPENAI_COMPAT_API_KEY
 PATH="$THCLAWS_PATH:$PATH" python3 scripts/check_m9_standalone.py --model oai/gpt-5.4-mini --provider-key-env OPENAI_COMPAT_API_KEY
 PATH="$THCLAWS_PATH:$PATH" python3 scripts/check_m9_standalone.py --write-boundary     # คาด exit 0 บน d452ece
 

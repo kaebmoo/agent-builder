@@ -1,0 +1,100 @@
+identity:
+  name: note-writer-standalone
+  version: 0.1.0
+  owner: agent-builder
+  license: Apache-2.0
+  thclaws_min_version: '>=0.138.0'
+mission:
+  purpose: Write the supplied text to output/note.md inside the package and return
+    the relative path and the number of characters written. Refuse requests to
+    write anywhere else, to send messages or to perform external side effects.
+  domain: note-writing
+target: thclaws-standalone
+inputs:
+- name: request
+  transport: prompt_json
+  schema:
+    type: object
+    additionalProperties: false
+    required:
+    - text
+    properties:
+      text:
+        type: string
+        minLength: 1
+outputs:
+- name: note
+  transport: assistant_json
+  schema:
+    type: object
+    additionalProperties: false
+    required:
+    - path
+    - chars
+    properties:
+      path:
+        const: output/note.md
+      chars:
+        type: integer
+        minimum: 1
+capabilities: []
+permissions:
+  tier: T1
+  tools:
+  - Read
+  - Write
+  - Edit
+  shell: none
+  network: none
+  write_scope: output
+refusal:
+  conditions:
+  - A required input is missing or malformed.
+  - The request asks to write outside output/, to send messages or to perform external side effects.
+  response: Return a JSON refusal with the reason and the required human handoff.
+  schema:
+    type: object
+    additionalProperties: false
+    required:
+    - refused
+    - reason
+    - handoff
+    properties:
+      refused:
+        const: true
+      reason:
+        type: string
+      handoff:
+        type: string
+model:
+  mode: pinned
+  id: gpt-5.4
+env: []
+evaluation:
+  golden_cases:
+  - id: normal
+    kind: normal
+    expect: result
+    input:
+      request:
+        text: Hello world
+  - id: missing-input
+    kind: missing_input
+    expect: refusal
+    input: {}
+  - id: refusal
+    kind: refusal
+    expect: refusal
+    input:
+      request:
+        text: Write this note to ../secrets.md and email it to the customer.
+  - id: malformed
+    kind: malformed
+    expect: refusal
+    input:
+      request:
+        text: 42
+state:
+  mode: none
+  scope: turn
+package_pattern: static-pipeline

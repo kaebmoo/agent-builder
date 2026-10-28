@@ -42,7 +42,8 @@ M7b (publisher email/SFTP pack) — เสร็จ 2026-09-08. MCP รองร
 กับ requirement ของ daemon แยก; static/native audit ผ่านเป็น `draft` แต่ยังไม่ยืนยัน deployment หรือส่งจริง.
 M8 export/registration เสร็จ 2026-09-08: `forge export` ออก `atlas-register.json`, `atlas-workflow.json` และ archive จาก
 `thclaws agent pack` ตาม [docs/export.md](docs/export.md); gate ลงทะเบียนกับ Atlas in-process และ poll daemon ของ package ได้จริง
-แต่ `deployment_verified` ยัง `false`. M9 เปิด standalone static-pipeline **เฉพาะ T0**; generator และ audit ปิด T1 จนแก้ upstream writePaths. Gate T0 กับ security diagnostic ของ T1 แยกผลกัน. ดู [PLAN](docs/PLAN.md) และ [generator](docs/generator.md).
+แต่ `deployment_verified` ยัง `false`. M9 เปิด standalone static-pipeline T0; M14 (2026-10-28) ปลด T1 (`write_scope: output`, worker ได้ Write/Edit ใต้ native `writePaths: output/**`)
+เฉพาะบน thClaws 0.138.0/`d452ece` พร้อม gate `check_m14_standalone_t1.py` ที่พิสูจน์บน package จริง. ดู [PLAN](docs/PLAN.md) และ [generator](docs/generator.md).
 M10 (pack authoring) เสร็จ 2026-10-26: `forge pack new` / `forge pack discover` ร่าง pack ที่ตั้งใจให้ยังไม่ conformant จนผู้เขียนเติม tier/network/fixture
 แล้ว `forge pack test` ตัดสิน; reference pack `fixtures/packs/echo/` ผ่านครบวงจรโดยไม่ใช้ LLM ดู [docs/packs.md](docs/packs.md).
 M11 (builder-agent) offline/native เสร็จ 2026-10-26: workspace `builder/` ให้ thClaws interview และร่าง spec แต่ build ได้ทางเดียวผ่าน
@@ -57,6 +58,7 @@ python3 scripts/check_m8_export.py
 python3 scripts/check_m10_pack_authoring.py
 python3 scripts/check_m11_builder_agent.py
 python3 scripts/check_m13_host_layout.py
+python3 scripts/check_m14_standalone_t1.py
 python3 scripts/check_m12_baseline.py
 ```
 

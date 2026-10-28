@@ -93,6 +93,31 @@ def copy_ignore(path, names):
 
 COPY_IGNORE = copy_ignore
 
+# Paths a thClaws run may touch inside a case directory without that counting as agent output (DESIGN §4 M14 (e)).
+RUN_STATE_PREFIXES = ('.thclaws/state/', '.thclaws/sessions/')
+
+
+def tree_snapshot(folder):
+    """Relative path -> bytes for every file (symlinks recorded as their target) outside runtime state and bytecode."""
+    files = {}
+    for path in sorted(Path(folder).rglob('*')):
+        rel = path.relative_to(folder).as_posix()
+        if any(rel.startswith(prefix) for prefix in RUN_STATE_PREFIXES) or '__pycache__/' in rel or rel.endswith('.pyc'):
+            continue
+        if path.is_symlink():
+            files[rel] = b'<symlink>' + os.readlink(path).encode()
+        elif path.is_file():
+            files[rel] = path.read_bytes()
+    return files
+
+
+def written_files(before, after, allowed_prefix='output/'):
+    """Files a run created, changed or removed, split into those under the declared write scope and those outside it."""
+    changed = sorted(k for k in set(before) | set(after) if before.get(k) != after.get(k))
+    inside = [k for k in changed if k.startswith(allowed_prefix)]
+    outside = [k for k in changed if not k.startswith(allowed_prefix)]
+    return inside, outside
+
 
 def validate_case(spec, case, events):
     text = ''
@@ -401,10 +426,18 @@ def run_standalone(package, spec, packs_dir, evidence, timeout, key_env):
             evidence['cases'].append(result)
             try:
                 trace = {}
+                before = tree_snapshot(work)
                 value = workflow_process(binary, work, env, case['input'], timeout, trace=trace)
-                result['events'] = [{'event': 'workflow_result', 'data': redact({'value': value, **trace}, hidden)}]
+                inside, outside = written_files(before, tree_snapshot(work))
+                result['events'] = [{'event': 'workflow_result', 'data': redact({'value': value, **trace}, hidden)},
+                                    {'event': 'files_written', 'data': {'output': inside, 'outside_output': outside}}]
                 if trace['subagent_turns'] < 3:
                     raise ValueError('standalone pipeline did not record all three role turns')
+                # Every tier: a run may only leave files under output/ (T0 must leave none at all) — DESIGN §4 M14 (e).
+                if outside:
+                    raise ValueError('run wrote outside output/: ' + ', '.join(outside[:10]))
+                if inside and spec['permissions']['tier'] == 'T0':
+                    raise ValueError('T0 run wrote files: ' + ', '.join(inside[:10]))
                 validate_value(spec, case, value)
                 result['status'] = 'passed'
             except (ValueError, OSError, subprocess.SubprocessError) as exc:

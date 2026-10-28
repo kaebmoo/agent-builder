@@ -49,7 +49,7 @@ resolver ตรวจ target/pattern และการมี/ไม่มี ro
 
 ตัวอย่างเช่น `/agent/run` ของ thClaws ปัจจุบัน register built-in tools รวมถึง Bash ดังนั้น `shell: none` ยังห้ามประกาศเป็น enforced หากไม่มี daemon boundary หรือ runtime policy อื่นมาบังคับ
 
-M1 ตรวจ tier boundary แบบ deterministic: T0 ต้องเป็น `shell: none`, `network: none`, `write_scope: none`; T1 ต้องเป็น `shell: none`, `network: none`, `write_scope: output`; T2 ต้องเป็น `write_scope: workspace` แต่ใน M1 ใช้ได้เฉพาะ `atlas-workflow` ที่มี owner สำหรับ `human_gate`. ทุก tier ที่เป็น `shell: none` ห้ามประกาศ `Bash`, `write_scope: none` ห้ามประกาศ built-in write tools และ `network: none` ห้ามประกาศ `WebFetch`, `WebSearch`, `WebScrape`, `FetchImages` หรือ `YouTubeTranscript`
+M1 ตรวจ tier boundary แบบ deterministic: T0 ต้องเป็น `shell: none`, `network: none`, `write_scope: none`; T1 ต้องเป็น `shell: none`, `network: none`, `write_scope: output` (generator รองรับ T1 เฉพาะ `thclaws-standalone` + `static-pipeline` ตั้งแต่ M14 โดย tools ที่เขียนได้คือ `Write`/`Edit` เท่านั้น — DESIGN §4 "Standalone T1 rollout"); T2 ต้องเป็น `write_scope: workspace` แต่ใน M1 ใช้ได้เฉพาะ `atlas-workflow` ที่มี owner สำหรับ `human_gate`. ทุก tier ที่เป็น `shell: none` ห้ามประกาศ `Bash`, `write_scope: none` ห้ามประกาศ built-in write tools และ `network: none` ห้ามประกาศ `WebFetch`, `WebSearch`, `WebScrape`, `FetchImages` หรือ `YouTubeTranscript`
 
 ## Model และ input transport
 

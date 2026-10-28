@@ -16,7 +16,11 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from forge.generate import STANDALONE_THCLAWS_COMPATIBILITY, THCLAWS_BASELINE
+from forge.generate import (
+    STANDALONE_T1_THCLAWS_COMPATIBILITY,
+    STANDALONE_THCLAWS_COMPATIBILITY,
+    THCLAWS_BASELINE,
+)
 
 PREVIOUS_CATALOG = ROOT / 'patterns/tools-0.116.0.json'
 ADDED_TOOLS = {'KmsEdit'}  # agent_runtime.rs registers KmsEditTool since the 0.116.0 baseline
@@ -28,6 +32,8 @@ def offline() -> None:
     assert revisions == frozenset({'d452ece'}), revisions
     for legacy in ('0.116.0', '0.121.0', '0.129.0'):
         assert legacy in STANDALONE_THCLAWS_COMPATIBILITY, f'historical pair {legacy} dropped without review'
+    # M14: T1 rides on the d452ece writePaths fix only; the historical pairs must never certify T1 silently.
+    assert STANDALONE_T1_THCLAWS_COMPATIBILITY == {THCLAWS_BASELINE: frozenset({'d452ece'})}, STANDALONE_T1_THCLAWS_COMPATIBILITY
     catalog_path = ROOT / f'patterns/tools-{THCLAWS_BASELINE}.json'
     catalog = json.loads(catalog_path.read_text(encoding='utf-8'))
     previous = json.loads(PREVIOUS_CATALOG.read_text(encoding='utf-8'))

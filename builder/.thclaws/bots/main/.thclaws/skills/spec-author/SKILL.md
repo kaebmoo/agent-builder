@@ -23,7 +23,9 @@ elsewhere. Draft `work/<name>/spec.yaml` with these sections and rules.
   but that does not exist is still declared by its intended name so the report says `missing`; never invent its tools.
 - `permissions`: `tier`, `tools`, `shell`, `network`, `write_scope`; every key except `tools` is a plain string, never an object.
   - `network` is `none`, `general-http` or `allowlist`. Hosts are never listed in the spec; they come from each pack's `hosts`.
-  - T0: `shell: none`, `network: none`, `write_scope: none`. T1: same but `write_scope: output` (standalone T1 is disabled).
+  - T0: `shell: none`, `network: none`, `write_scope: none`. T1: same but `write_scope: output`; T1 is available only for
+    `thclaws-standalone` with `static-pipeline`, and its extra tools are exactly `Write` and/or `Edit` (the worker writes under
+    `output/**`; other writers are rejected). Atlas targets stay T0 or T2.
   - T2: `write_scope: workspace`, only with `target: atlas-workflow` (Atlas `human_gate` owns approval).
   - Any `network` other than `none` therefore requires T2 and `atlas-workflow`; say so to the person. When they ask for
     Atlas with network access, or leave the target to these rules, draft `target: atlas-workflow` and `tier: T2` (the only
