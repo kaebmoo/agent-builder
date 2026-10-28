@@ -408,3 +408,17 @@ M14 ทำใน cloud 2026-10-28 (branch `claude/adoring-feynman-kqs8us`, ฐ�
 รวม `Edit` ภายใต้ wrapper ที่ไม่เคยตรวจมาก่อน; pipeline 4 cases เขียนเฉพาะ `output/note.md` ใน case normal และ package เป็น `candidate` ภายใต้ provider จำลอง) แล้ว skip provider;
 M9 native ผ่านพร้อม tree diff (T0 ไม่เขียนไฟล์ใด). **ค้างบน Mac**: `check_m14_standalone_t1.py --model oai/gpt-5.4-mini ...` provider live, M9 live ซ้ำ, และ M11 live `--rounds 3`
 (skill เปลี่ยน) — ตาม `docs/local-test-plan.md` ข้อ 4/6.
+
+M14 เสร็จ (Mac) 2026-10-28 (checkout `63e89d7` บน `main`; binary thclaws `0.138.0` revision `d452ece` desktop build — `thclaws --help` มี `bots`; model
+`oai/gpt-5.4-mini` ผ่าน MATCHA `OPENAI_COMPAT_*`; evidence อยู่ที่ `out/m14-evidence/{step1-ci,step2-native,step3-m14-provider,step4-m9-live,step5-m11-live,step6-m8-atlas}/`
+ซึ่ง gitignored; ตรวจแล้วว่า log/evidence ทั้งหมดไม่มีค่า key/URL จาก `.env`). ไม่แก้โค้ด, gate, pin, เกณฑ์ audit, golden cases หรือ fixture; ไฟล์ที่ track ไม่เปลี่ยนหลังรันครบ.
+CI mode: m0=0 m1=0 m2=0 m3=0 m4=2 m5=2 m6=1 m7a=1 m7b=2 m8=1 m9=2 m10=2 m11=2 m12=2 m13=2 m14=2
+native mode: m0=0 m1=0 m2=0 m3=0 m4=0 m5=0 m6=1 m7a=1 m7b=0 m8=1 m9=2 m10=0 m11=2 m12=0 m13=0 m14=2
+m6/m7a/m8=1 ทั้งสองโหมดด้วยเหตุเดิมของ M13 (pin ของ checkout ข้างเคียง: `../AI` ที่ `e79ee5f` ≠ `d95dc28`, `../atlas-control-plane` ที่ `375ac85` ≠ `daa0f49`) ไม่ใช่ regression.
+M14 native บน macOS (`/tmp` resolve เป็น `/private/tmp`) ตรงกับ cloud: probe 14/14 (worker Write/Edit `output/allowed.txt` allowed; Write นอก output, `output/../traversal.txt`,
+symlink directory, dangling symlink, Edit `outside-existing.txt`, worker Bash และ planner/verifier Write/Edit/Bash denied) และ "T1 pipeline wrote output/note.md for the normal case only".
+M14 provider: exit=0 cases=4/4 — normal `files={'output': ['output/note.md'], 'outside_output': []}`, missing-input/refusal/malformed `files` ว่าง.
+M9 live: exit=0 (provider 4/4, denial 9/9; tree diff ผ่านทุก case จึงยืนยันว่า T0 ไม่เขียนไฟล์ใด).
+M11 live: exit=0 rounds passed=3/3 (`--rounds 3` แบบ agent-dir เพราะ skill `spec-author` เปลี่ยน), evidence `out/m11-live/round-{1,2,3}-20261028T1834*.json`
+(สำเนาใน `out/m14-evidence/step5-m11-live/`); ต่อรอบ: turn1 หยุดถาม yes, turn2 build.py yes, draft `target: atlas-workflow`, รายงาน `google-weather` missing.
+optional: m8=0 (`ATLAS_ROOT` = worktree ที่ pin `daa0f49`); m6/m7a ไม่รัน (`../AI` ไม่อยู่ที่ `d95dc28`). ส่วน live ของ M14 ปิด.
