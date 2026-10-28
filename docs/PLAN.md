@@ -422,3 +422,14 @@ M9 live: exit=0 (provider 4/4, denial 9/9; tree diff ผ่านทุก case 
 M11 live: exit=0 rounds passed=3/3 (`--rounds 3` แบบ agent-dir เพราะ skill `spec-author` เปลี่ยน), evidence `out/m11-live/round-{1,2,3}-20261028T1834*.json`
 (สำเนาใน `out/m14-evidence/step5-m11-live/`); ต่อรอบ: turn1 หยุดถาม yes, turn2 build.py yes, draft `target: atlas-workflow`, รายงาน `google-weather` missing.
 optional: m8=0 (`ATLAS_ROOT` = worktree ที่ pin `daa0f49`); m6/m7a ไม่รัน (`../AI` ไม่อยู่ที่ `d95dc28`). ส่วน live ของ M14 ปิด.
+
+M6/M7a live (Mac) 2026-10-28 (checkout `dc8a2f3`; binary thclaws `0.138.0` revision `d452ece` desktop build; model `oai/gpt-5.4-mini` ผ่าน MATCHA
+`OPENAI_COMPAT_*`; evidence `out/m6-m7a-evidence/{m7a_native.log,m6_live.log,pack-conformance.json}` ซึ่ง gitignored และตรวจแล้วว่าไม่มีค่าจาก `.env`).
+พบสองเรื่องที่ทำให้ M6/M7a รันไม่ได้แม้มี AI ที่ `d95dc28`: (1) `packs/sql-readonly/fixture/setup.py` หา AI ที่ `parents[4]/'AI'` (sibling ของ checkout) เท่านั้น
+ไม่มี env override จึงใช้ worktree ของ AI ที่อื่นตรง ๆ ไม่ได้ — ไม่แก้ fixture แต่รัน gate จากโฟลเดอร์คู่ที่มี worktree `AI`@`d95dc28` กับ `agent-builder`@`dc8a2f3`
+วางข้างกัน (gate ใส่ ROOT ของตัวเองหน้า `sys.path`) แล้ว provenance `matched: True`; (2) `.venv` ได้ mcp 2.3.0 จาก extra `sql-pack = ["mcp>=1.0"]` ที่ไม่มีเพดาน
+ซึ่งลบ `mcp.server.fastmcp` ที่ทั้ง `server.py` ของ pack และ `nt_query_mcp.py` ของ AI ใช้ → server ตายก่อนตอบ ("MCP exited before replying");
+แก้ `pyproject.toml` เป็น `mcp>=1.26,<2` (ตาม `requirements.txt` ของ AI) และ `docs/local-test-plan.md` ข้อ 7 ให้สร้างโฟลเดอร์คู่ + venv `.[sql-pack]`.
+`SQL_READONLY_DSN` ไม่ต้องตั้ง: `setup.py` สร้าง SQLite สังเคราะห์ (invoice 3 แถว) ใน temp ของ harness เอง.
+ผล (venv แยกที่มี mcp 1.30.0): M7a native exit=0 (SQL conformance 11/11 cases, database ไม่เปลี่ยน, native validate และ `sql-reader` draft);
+M6 live exit=0 (`package_status=candidate`) — แทน evidence SQL `candidate` ของ 0.116.0; live audit ทุกตัวบน baseline `d452ece` จึงครบ (เหลือ pinned `gpt-5.4` ของ fixture ที่ MATCHA ไม่มี).

@@ -16,7 +16,8 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest>=8", "ruff>=0.5"]
-sql-pack = ["mcp>=1.0"]
+# AI d95dc28 and packs/sql-readonly/scripts/server.py use the v1 FastMCP API, removed in mcp 2.x
+sql-pack = ["mcp>=1.26,<2"]
 
 [project.scripts]
 forge = "forge.cli:main"

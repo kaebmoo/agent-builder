@@ -19,7 +19,7 @@
 | 4 | `check_m11_builder_agent.py` live `--rounds 3` (ต้องมี key) | DoD ส่วน live ของ M11 ยังไม่ผ่าน; gate เป็นสองเทิร์นและ prompt/skill เปลี่ยน จึงต้อง 3 รอบ | exit 0; evidence `out/m11-live/round-<n>-<ts>.json` ครบ 3 ไฟล์ |
 | 5 | `check_m7b_packs.py --live` 3 รอบ (ต้องมี key) | ครั้งก่อนผ่านด้วย launcher นอก repo; ต้องยืนยันว่า harness เองตั้ง `THCLAWS_AUTO_MIGRATE=0` แล้วพอ | exit 0 ทั้ง 3 รอบ |
 | 6 | `check_m9_standalone.py` live (ต้องมี key) — ผ่านแล้ว 2026-10-27 ไม่ต้องรันซ้ำเว้นแต่ checkout เปลี่ยน | evidence provider เดิมเป็นของ 0.116.0 | exit 0 |
-| 7 | (optional) M7a/M6 กับ `../AI`@`d95dc28` + `pip install mcp`, M8 กับ `ATLAS_ROOT` worktree ที่ pin `daa0f49` | evidence `candidate` ของ SQL ยังเป็นของ 0.116.0; M8 default `../atlas-control-plane` อยู่คนละ revision | exit 0 หรือ skip 2 พร้อมเหตุผล |
+| 7 | (optional) M7a/M6 จากโฟลเดอร์คู่ worktree `AI`@`d95dc28` + `agent-builder` ด้วย venv `.[sql-pack]` (`mcp>=1.26,<2`), M8 กับ `ATLAS_ROOT` worktree ที่ pin `daa0f49` | M6/M7a ผ่านบน `d452ece` แล้ว 2026-10-28 (รันซ้ำเมื่อ pack/generator/baseline เปลี่ยน); `fixture/setup.py` หา AI ที่ sibling เท่านั้น; M8 default `../atlas-control-plane` อยู่คนละ revision | exit 0 หรือ skip 2 พร้อมเหตุผล |
 
 ## เตรียมเครื่อง
 
@@ -65,9 +65,19 @@ PATH="$THCLAWS_PATH:$PATH" python3 scripts/check_m14_standalone_t1.py --model oa
 PATH="$THCLAWS_PATH:$PATH" python3 scripts/check_m9_standalone.py --model oai/gpt-5.4-mini --provider-key-env OPENAI_COMPAT_API_KEY
 PATH="$THCLAWS_PATH:$PATH" python3 scripts/check_m9_standalone.py --write-boundary     # คาด exit 0 บน d452ece
 
-# 7. optional (M6/M7a ต้อง `pip install mcp` ใน venv และ ../AI ที่ d95dc28; M8 ต้องใช้ worktree ของ Atlas ที่ pin daa0f49 ไม่ใช่ ../atlas-control-plane)
-PATH="$THCLAWS_PATH:$PATH" python3 scripts/check_m7a_sql_pack.py
-PATH="$THCLAWS_PATH:$PATH" python3 scripts/check_m6_live.py --model oai/gpt-5.4-mini --provider-key-env OPENAI_COMPAT_API_KEY
+# 7. optional
+# M6/M7a: packs/sql-readonly/fixture/setup.py หา AI ที่ `<โฟลเดอร์แม่ของ agent-builder>/AI` เท่านั้น (ไม่มี env override) จึงใช้ worktree ของ AI
+# ที่อื่นตรง ๆ ไม่ได้ และห้ามแก้ fixture: สร้างโฟลเดอร์คู่ที่มี AI@d95dc28 กับ agent-builder@HEAD วางข้างกัน แล้วรัน gate จาก agent-builder ในนั้น
+# (gate ใส่ ROOT ของตัวเองหน้า sys.path จึงใช้ forge ของ worktree). mcp ต้องเป็น v1 ตาม `.[sql-pack]` (mcp>=1.26,<2):
+# mcp 2.x ลบ `mcp.server.fastmcp` ทำให้ gate fail ที่ "MCP exited before replying". SQL_READONLY_DSN ไม่ต้องตั้ง: setup.py สร้าง SQLite สังเคราะห์เอง
+PAIR="$HOME/Documents/GitHub/sql-pin-d95dc28"    # ชื่อใดก็ได้ ขอให้ภายในมี AI/ และ agent-builder/ ข้างกัน
+git -C ~/Documents/GitHub/AI worktree add --detach "$PAIR/AI" d95dc28628673d7adef1d6f1958116922fea1946
+git worktree add --detach "$PAIR/agent-builder" HEAD
+python3 -m venv "$PAIR/venv" && "$PAIR/venv/bin/python3" -m pip install -e "$PAIR/agent-builder[sql-pack]"
+(cd "$PAIR/agent-builder" && . "$PAIR/venv/bin/activate" && PATH="$THCLAWS_PATH:$PATH" python3 scripts/check_m7a_sql_pack.py)
+(cd "$PAIR/agent-builder" && . "$PAIR/venv/bin/activate" && PATH="$THCLAWS_PATH:$PATH" python3 scripts/check_m6_live.py --model oai/gpt-5.4-mini --provider-key-env OPENAI_COMPAT_API_KEY)
+# เลิกใช้: git -C ~/Documents/GitHub/AI worktree remove "$PAIR/AI" && git worktree remove "$PAIR/agent-builder" && rm -rf "$PAIR/venv"
+# M8: ต้องใช้ worktree ของ Atlas ที่ pin daa0f49 ไม่ใช่ ../atlas-control-plane
 ATLAS_ROOT="$HOME/Documents/GitHub/atlas-control-plane-daa0f49" PATH="$THCLAWS_PATH:$PATH" python3 scripts/check_m8_export.py
 ```
 
@@ -105,7 +115,7 @@ git fetch origin claude/adoring-feynman-kqs8us && git checkout claude/adoring-fe
 อ่าน docs/local-test-plan.md แล้วทำตามลำดับทั้งหมดบนเครื่องนี้ด้วย binary thclaws 0.138.0/d452ece (desktop build) ของเครื่อง
 ห้ามแก้ gate/pin/เกณฑ์ audit/golden cases เพื่อให้ผ่าน และห้าม thclaws bots migrate/unmigrate กับ builder/
 ลำดับ: 1 CI mode ทุก gate → 2 native ทุก gate → 3 check_m13_host_layout.py → 4 check_m11_builder_agent.py --rounds 3
-→ 5 check_m7b_packs.py --live x3 → 7 optional (M8 กับ ATLAS_ROOT ที่ pin daa0f49, M6/M7a ถ้ามี mcp และ ../AI@d95dc28)
+→ 5 check_m7b_packs.py --live x3 → 7 optional (M8 กับ ATLAS_ROOT ที่ pin daa0f49, M6/M7a จากโฟลเดอร์คู่ worktree AI@d95dc28 + agent-builder ตามข้อ 7)
 ถ้า step ใด fail ให้วาง output เต็ม (M11: detail และ final_text ของแต่ละ turn จาก out/m11-live/round-<n>-<ts>.json หลัง redact) หยุด แล้วถามก่อนแก้
 ใช้ key จาก .env ตาม mapping ในแผนโดยไม่พิมพ์ค่าออกมา และตรวจว่า log ที่วางไม่มีค่า key
 เมื่อผ่านครบ บันทึกผลลง docs/PLAN.md (ย่อหน้า "M13 เสร็จ (Mac)" + "M11 live" + "M12 live") และ CHANGELOG.md ตามรูปแบบรายงานผล แล้ว commit/push
