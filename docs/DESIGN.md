@@ -234,7 +234,8 @@ M1 ตรวจว่า embedded schema เป็น JSON Schema ที่ถ�
   (agent อยู่ที่ root) เสมอ; daemon-per-package start ด้วย `THCLAWS_AUTO_MIGRATE=0` ตั้งชัดเจน เพราะ `thclaws --serve` ของ desktop build จะแปลง tree เป็น host workspace
   ในที่เดิมและเขียนทับ AGENTS.md/skills/scripts (drift ต่อ audit, `collect_files` กับ identity อ้างคนละ directory). ห้ามเปิด package ที่ audit แล้วใน desktop app
   หรือรัน `thclaws bots migrate` กับมัน; ถ้าเกิดขึ้นให้ deploy ใหม่จาก archive ไม่ใช่ `unmigrate` แล้วใช้ต่อ. `thclaws agent validate`/`pack` ชี้โฟลเดอร์ที่มี `manifest.json`
-  (ใน host workspace คือ `.thclaws/bots/<slug>/`). harness ของ builder ใช้ env จาก `forge/live_test.py::isolated_env` และตรวจ `check_layout` หลัง daemon พร้อม (M6/M7b/M8/M11);
+  (ใน host workspace คือ `.thclaws/bots/<slug>/`). `.thclaws/settings.json` ของทุก package ประกาศ `"workspaceVersion": 2` เพื่อให้ stamp ของ thClaws ตอนเปิด project
+  (§4 "Host + bots layout" ข้อ 14) ไม่เขียนทับไฟล์ที่ audit แล้ว. harness ของ builder ใช้ env จาก `forge/live_test.py::isolated_env` และตรวจ `check_layout` หลัง daemon พร้อม (M6/M7b/M8/M11);
   `deployment_verified` ยัง `false` และ operator ต้องตรวจ `/v1/agent/info.workspace_dir` เท่ากับ `deployment.package_root` ก่อนลงทะเบียน
 
 Atlas registration contract (M8, ตรวจ source `atlas-control-plane` ref `daa0f4966899327fb563501435f5d6180eeef9c3` 2026-09-08; schema pinned ไว้ที่ `patterns/atlas-workflow-definition.schema.json` และ gate M8 fail เมื่อไฟล์ต้นทางต่างจากที่ pin):
@@ -278,7 +279,9 @@ Implementation ของ M11 (2026-10-26): `builder/` เป็น thClaws agent
 และคืน exit code ของ audit (0 draft / 1 fail / 2 ไม่มี binary). `--replace` ลบได้เฉพาะ directory ที่มี `agentspec.json` + `builder-build-report.json`
 ที่ runner สร้างไว้; checkout ของ forge มาจาก `AGENT_BUILDER_ROOT` หรือ repo ที่ `builder/` อยู่ และ `AGENT_BUILDER_PACKS` ใช้ได้เฉพาะ gate.
 ข้อจำกัด: runner ตรวจได้เพียงว่ามี marker ถูกรูป ไม่พิสูจน์ว่าคนเป็นผู้ยืนยัน; AGENTS.md จึงห้าม model เติม marker โดยไม่มีคำยืนยัน และ gate live
-ตรวจว่า model เรียก build.py ผ่าน Bash จริง (SSE `tool_use_start` ที่ input มี `build.py`) ก่อนเชื่อสรุปของมัน. เพราะ schema บังคับ `network != none`
+ตรวจว่า model เรียก build.py ผ่าน Bash จริง (SSE `tool_use_start` ที่ input มี `build.py`) ก่อนเชื่อสรุปของมัน; การตรวจว่า model ไม่อ้าง
+`candidate`/`shippable`/`deploy-ready` สแกนเฉพาะคำของ model เอง โดยตัดบรรทัดที่คัดลอกทั้งบรรทัดจากผลของ build.py call นั้นออก เพราะ skill สั่งให้คัดลอก
+บรรทัดสรุปของ forge และ finding ของ forge เองมีคำว่า "blocks shippable" (พบใน M11 live บน Mac 2026-10-27). เพราะ schema บังคับ `network != none`
 → T2 → `atlas-workflow` (§5) spec พยากรณ์อากาศจาก Google Weather จึงเป็น T2 เสมอจนกว่าจะมี tier/target สำหรับ MCP ที่ออก network โดยไม่มี side effect
 
 Layout และ live gate ของ builder (M13, thClaws 0.138.0 `d452ece`; เหตุผลใน §4 "Host + bots layout"): `builder/` เป็น **host workspace v4** ใน git — root มี
@@ -290,7 +293,11 @@ Layout และ live gate ของ builder (M13, thClaws 0.138.0 `d452ece`; �
 (ปัจจัยที่ทำให้ M11 live ไม่ถึง build.py: workspace ของ live ไม่มี `packs/`). การยืนยันเป็น**เทิร์นแยก**: เมื่อผู้ใช้ตอบครบแต่ยังไม่ยืนยัน model ต้องแสดง block แล้วหยุด;
 เมื่อยืนยันในข้อความถัดไป model เติม `confirmed_by` และ build ในเทิร์นนั้น. Gate M11 live จึงสตาร์ท daemon จาก bot dir ด้วย `THCLAWS_WORKSPACE_ROOT=<copy root>`
 (หรือ `--via-host` บน desktop build), ส่งสองเทิร์นผ่าน `session_id` (SSE event `session`), เก็บ SSE events ทันทีที่มาถึง (ไม่หายเมื่อ timeout), มี idle timeout ตรวจ stall,
-บังคับระบุ `--model`, รองรับ `--rounds N` และเขียน evidence ต่อรอบ. การแก้ AGENTS.md/skill ครั้งนี้นับเป็นการแก้ prompt ต้องรัน live ซ้ำอย่างน้อย 3 รอบก่อนอ้างว่าแก้แล้ว.
+บังคับระบุ `--model`, รองรับ `--rounds N` และเขียน evidence ต่อรอบ.
+การสัมภาษณ์เป็นข้อความในคำตอบเท่านั้น: settings ของ agent ตั้ง `"disallowedTools": ["AskUserQuestion"]` เพราะ `/agent/run` ไม่มีใครตอบ tool แบบ interactive
+(M11 live บน Mac 2026-10-27: model เรียก `AskUserQuestion` ในเทิร์นแรกแล้วค้างจนหมดเวลา). `/agent/run` ของ `d452ece` กรอง built-in ด้วย `apply_filter` หลังลงทะเบียนครบ
+(`agent_runtime.rs:131-140`); ยืนยันด้วย binary ผ่าน stub provider ว่า tools ที่ส่งให้ model มี 42 ตัวไม่มี `AskUserQuestion` (ถ้าไม่ตั้งมี 43 ตัว). นี่เป็นการใช้
+`disallowedTools` กับ built-in ของ builder เท่านั้น ไม่ใช่การ adopt `allowedTools` เป็น guarantee ของ package (ยังเป็น M15). การแก้ AGENTS.md/skill ครั้งนี้นับเป็นการแก้ prompt ต้องรัน live ซ้ำอย่างน้อย 3 รอบก่อนอ้างว่าแก้แล้ว.
 
 ## 10. นอกขอบเขต MVP (future)
 
@@ -441,6 +448,15 @@ M11 (`thclaws agent validate` ของ `builder/`) ผ่าน; M6/M7a skip (�
     (`bin/app.rs:1356-1362`, ยืนยันด้วย binary ที่ build ใน cloud 2026-10-27). ดังนั้น native evidence บน cloud มีได้เฉพาะ `agent validate`, `agent pack`, `agent run` (M9)
     และ `--write-boundary`; ทุก check ที่ต้องมี daemon (`/agent/run`, `/v1/agent/info`, M6/M7b/M11 live, M8 daemon probe, M13 ส่วน layout จริง) ต้องประกาศ skip บน build นี้
     และรันบน desktop build ของ Mac. ข้อสันนิษฐานเดิมว่า "container ไม่ migrate" จึงไม่ใช่สาเหตุที่ cloud ไม่เจอปัญหา — cloud ไม่เคยสตาร์ท daemon จริงเลย.
+14. **stamp `workspaceVersion` ทุกครั้งที่เปิด project** (พบจาก gate M13 native บน Mac 2026-10-27, binary `d452ece` desktop build): `ProjectConfig::migrate_workspace_if_needed`
+    (`config.rs:1467-1545`, เรียกตอนเปิด project ที่ `bin/app.rs:1119` และ `bin/cli.rs:112`) เป็น migration ของ layout `.thclaws/state/` ไม่ใช่ host + bots และ**ไม่ขึ้นกับ**
+    `THCLAWS_AUTO_MIGRATE`: เมื่อ `.thclaws/settings.json` มีอยู่แต่ไม่ประกาศ `workspaceVersion` ≥ `CURRENT_WORKSPACE_VERSION` (= 2, `:1413`) จะเขียน key นี้ลงไฟล์
+    (`write_workspace_version` `:1549-1565`, คง key อื่นแต่ serialize ใหม่). ผลด้วย binary: package v2 ที่ serve ภายใต้ flag, agent ของ builder ที่ serve จาก bot dir และ
+    `builder/` ที่เปิดเป็น host ต่างได้ `"workspaceVersion": 2` ใน `.thclaws/settings.json` ของ agent (ไฟล์อื่นนอก runtime state ไม่เปลี่ยน) → tree ที่ serve drift จาก package
+    ที่ audit และ desktop ทำให้ไฟล์ที่ git track ใน `builder/` เปลี่ยน. scaffold ของ `thclaws agent new` (`cloud/agent_scaffold.rs`) ก็ไม่มี key นี้. ฟังก์ชันนี้มีตั้งแต่ `75edc48`
+    (0.116.0; อยู่ใน `b962abc` และ `7a27129` ด้วย) แต่ §4 ไม่เคยบันทึก. เมื่อประกาศ `"workspaceVersion": 2` ไว้แล้วฟังก์ชัน return ก่อนเขียน (สร้างเฉพาะ scaffold ใต้ `.thclaws/state/`):
+    ยืนยันด้วย binary ว่าทั้งสามกรณีข้างต้นไม่เปลี่ยน byte. **การตัดสินใจ**: generator เขียน `"workspaceVersion": 2` ใน `.thclaws/settings.json` ของทุก package และ agent ของ
+    `builder/` ประกาศเหมือนกัน; `agent pack` ตัดเฉพาะ block `agent` จึงคง key นี้ใน archive (gate M8 ตรวจ). ไม่เพิ่ม path ใดเป็น runtime state ใน gate M13.
 
 **การตัดสินใจ (M13, scoped adoption — ผู้ใช้เลือก 2026-10-27)**: (a) deployment contract และ package ที่ generate คง layout agent เดี่ยว (v2) เท่านั้น; host layout
 ไม่รองรับสำหรับ `/agent/run` ของ Atlas ตามข้อ 2, 4 และ 11 (กฎอยู่ที่ §8). (b) harness ทุกจุดที่สตาร์ท `--serve` ต้องตั้ง `THCLAWS_AUTO_MIGRATE=0` ผ่าน helper เดียว

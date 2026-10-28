@@ -280,7 +280,9 @@ def render(spec: dict[str, Any], packs_dir: Path | None = None) -> tuple[dict[st
         },
         "permissions": {"shell_execution": spec["permissions"]["shell"], "filesystem_scope": "workspace"},
     })
-    settings = {"agent": {
+    # thClaws stamps workspaceVersion on every project open when absent (DESIGN §4 host + bots layout 14);
+    # declaring it keeps a served package byte-identical to the audited one.
+    settings = {"workspaceVersion": 2, "agent": {
         "id": identity["name"], "name": identity["name"], "description": spec["mission"]["purpose"],
     }}
     if standalone and spec["model"]["mode"] == "pinned":

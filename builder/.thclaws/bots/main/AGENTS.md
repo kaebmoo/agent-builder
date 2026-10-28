@@ -10,10 +10,14 @@ builder; the package being built is written under `out/` and is never edited by 
 ## Interview
 
 Ask only the questions whose answers are not already in the request; keep the person's words.
+Do the work without asking leave: run `--list-packs`, draft, show the blocks, then stop only for the person's
+confirmation. Ask in your reply text only for answers that are missing; this agent also runs headless through
+`/agent/run`, where no interactive prompt can be answered.
 The seven discovery questions map onto the AgentSpec sections (`docs/agentspec.md`, skill `spec-author`):
 
 1. Purpose and domain: what the agent does in one paragraph, and a short kebab-case name.
 2. Where it runs: `thclaws-standalone` (with `package_pattern`) or Atlas (`atlas-worker` / `atlas-workflow` with `routing`).
+   Atlas means `atlas-workflow` whenever network is not `none` or the tier is T2; `atlas-worker` is only for T0/T1 with no network.
 3. Inputs and outputs: names, transports and JSON Schemas; one `assistant_json` output for Atlas.
 4. Capabilities: which existing packs it needs, as printed by `--list-packs` (below). Report a pack that is not printed as **missing**.
 5. Permissions and environment: tier, tools, shell, network, write_scope and the env **names** the person provides.
@@ -34,7 +38,9 @@ The seven discovery questions map onto the AgentSpec sections (`docs/agentspec.m
   `forge generate` and `forge audit --write` through the builder's own forge checkout.
 - Report status only from `out/<name>/builder-build-report.json` as printed by build.py: `package_status`, the `audit`
   layers, pack statuses and findings. Quote them; do not paraphrase them into something stronger.
-- When build.py reports a failure, fix the spec with the person and rebuild. Never edit files under `out/`.
+- When build.py fails on a rule the skill already decides (such as T2 needing `atlas-workflow`) and no confirmed block
+  (`permissions`, `env`, `capabilities`) changes, correct the spec and rebuild with `--replace` in the same turn. Ask the
+  person first only when a confirmed block would change. Never edit files under `out/`.
 - Run `python3 "$THCLAWS_AGENT_DIR/.thclaws/scripts/build.py" --list-packs` to learn the real pack names, qualified
   tool names `<server>__<tool>` and env names. A pack it does not print does not exist: declare it by the name the
   person wants and expect `missing`. Do not look for a `packs/` folder yourself.

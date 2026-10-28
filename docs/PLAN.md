@@ -360,3 +360,37 @@ gate ใหม่ `check_m13_host_layout.py`. Build thClaws CLI-only จาก b
 + validate ผ่าน, ส่วน daemon skip เพราะ `--serve` ไม่มีใน build นี้), M6/M7a/M8/M9 exit 2 ตามเหตุเดิม; Ruff และ `git diff --check` ผ่าน.
 **ค้างบน Mac (desktop build + key, session แยกตาม `docs/local-test-plan.md`)**: M13 native exit 0 (control migration, host เปิด `builder/`), M7b `--live` ×3,
 M11 live `--rounds 3`, M8 กับ `ATLAS_ROOT` ที่ pin, optional M6/M7a; เมื่อผ่านครบจึงบันทึก "M12 live"/"M11 live"/"M13 เสร็จ" และ CHANGELOG.
+
+M13 เสร็จ (Mac) 2026-10-28 (session บน Mac เริ่มที่ checkout `f5382ee`, branch `claude/adoring-feynman-kqs8us`; binary thclaws `0.138.0` revision `d452ece`
+desktop build — `thclaws --help` มี `bots`; model `oai/gpt-5.4-mini` ผ่าน MATCHA `OPENAI_COMPAT_*`; evidence redact แล้วอยู่ที่ `out/m13-evidence/` ซึ่ง gitignored;
+ตรวจแล้วว่า log/evidence ทั้งหมดไม่มีค่าจาก `.env`). ระหว่างรันพบห้าเรื่องและแก้ตามที่ผู้ใช้อนุมัติทีละข้อ (ไม่แตะ pin, เกณฑ์ audit, golden cases หรือ fixture):
+(1) M13 native exit 1 "serving a v2 package with THCLAWS_AUTO_MIGRATE=0 changed files outside runtime state: ['.thclaws/settings.json']" — thClaws stamp
+`workspaceVersion: 2` ทุกครั้งที่เปิด project (`ProjectConfig::migrate_workspace_if_needed`, ไม่ขึ้นกับ flag, มีตั้งแต่ 0.116.0); กรณี agent ของ builder และ host
+ได้ไฟล์เดียวกันที่ `.thclaws/bots/main/.thclaws/settings.json` → บันทึก DESIGN §4 "Host + bots layout" ข้อ 14 และ §8 ก่อนแก้โค้ด, generator เขียน
+`"workspaceVersion": 2` ใน `.thclaws/settings.json` ทุก package, agent ของ `builder/` ประกาศเหมือนกัน; ไม่เพิ่ม path ใดเป็น runtime state ใน gate.
+(2) M11 live: model เขียน `permissions.network` เป็น object และซ้อน `routing` ใต้ `target` → skill `spec-author` บอกชนิดและ top-level shape.
+(3) gate M11 นับ "blocks shippable" ใน finding ของ forge ที่ model คัดลอกตามที่ skill สั่งเป็นคำอ้าง → gate สแกน `FORBIDDEN_CLAIMS` เฉพาะคำของ model
+(`own_words`: ตัดบรรทัดที่คัดลอกทั้งบรรทัดจากผลของ build.py call) พร้อม offline self-check และ DESIGN §9. (4) model เรียก `AskUserQuestion` ในเทิร์นแรกแล้วค้างจน
+`case deadline exceeded` → settings ของ agent `"disallowedTools": ["AskUserQuestion"]` (ยืนยันด้วย stub provider: `/agent/run` ส่ง 42 tools ไม่มี
+`AskUserQuestion`, ไม่ตั้งได้ 43) และ DESIGN §9. (5) model หยุดขออนุญาตก่อนทำงาน และอ่าน "Target: Atlas" เป็น `atlas-worker` ทั้งที่ network ≠ none → AGENTS.md:
+ทำงานโดยไม่ขออนุญาตแล้วหยุดเฉพาะเพื่อรอคำยืนยัน, Q2 ระบุว่า Atlas + network/T2 = `atlas-workflow`, และเมื่อ build.py fail ด้วยกฎที่ skill กำหนดโดยไม่มี confirmed block
+เปลี่ยนให้แก้ spec แล้ว rebuild ในเทิร์นเดียวกัน.
+ผล (tree สุดท้ายของ commit นี้):
+CI mode: m0=0 m1=0 m2=0 m3=0 m4=2 m5=2 m6=1 m7a=1 m7b=2 m8=1 m9=2 m10=2 m11=2 m12=2 m13=2
+native mode: m0=0 m1=0 m2=0 m3=0 m4=0 m5=0 m6=1 m7a=1 m7b=0 m8=1 m9=2 m10=0 m11=2 m12=0 m13=0
+m6/m7a=1 ทั้งสองโหมดเพราะติดตั้ง `mcp` แล้ว gate ไม่ skip แต่ fail closed ที่ "SQL source revision differs from source.ref" (`../AI` อยู่ที่ `e79ee5f` ไม่ใช่ `d95dc28`);
+m8=1 เพราะ default `../atlas-control-plane` อยู่ที่ `375ac85` ไม่ใช่ `daa0f49` — ทั้งสามเป็น pin ของ checkout ข้างเคียงบนเครื่องนี้ ไม่ใช่ regression (ผู้ใช้รับทราบ).
+M13 native: exit=0 (control migration เกิด bots.json: yes; host เปิด builder/ แล้วไฟล์ที่ track เปลี่ยน: none หลังแก้ข้อ 1).
+M7b live: exit=0 x3 (`candidate`, 4/4 golden cases ต่อรอบ, harness ตั้ง `THCLAWS_AUTO_MIGRATE=0` เองโดยไม่ใช้ launcher นอก repo), evidence `out/m13-evidence/m7b-live/`.
+M9 live: exit=0 write-boundary: exit=0 (รันซ้ำเพราะ generator เปลี่ยน), evidence `out/m13-evidence/m9/`.
+optional: m7a/m6 ไม่รัน (`../AI` ไม่อยู่ที่ `d95dc28`), m8=0 (`ATLAS_ROOT` = worktree ที่ pin `daa0f49`), M11 `--via-host` 1 รอบ exit=0
+(`out/m13-evidence/m11-via-host/round-1-20261028T073041.json`). Ruff และ `git diff --check` ผ่าน.
+
+M11 live 2026-10-28: exit=0 rounds passed=3/3 (`oai/gpt-5.4-mini`, binary `0.138.0`/`d452ece`, `--rounds 3` แบบ agent-dir), evidence
+`out/m13-evidence/m11-live-6/round-{1,2,3}-20261028T0728*.json`; ต่อรอบ: turn1 หยุดถาม yes, turn2 build.py yes (หนึ่งครั้ง), draft `target: atlas-workflow` ตั้งแต่แรก,
+รายงาน `unverified` และ `google-weather: missing` ตาม report. ก่อนผ่านมี 5 run ที่ fail ตามลำดับ (evidence `out/m13-evidence/m11-live*/`): spec shape, gate false positive,
+`AskUserQuestion` ค้าง, 2/3 (รอบ 3 หยุดขออนุญาต), 1/3 (รอบ 2 `atlas-worker` + T2 แล้วหยุดหลัง build fail) — แก้ตามข้อ 2–5 ข้างบน. ข้อสังเกต: ทั้งสามรอบที่ผ่านไม่ได้รัน
+`--list-packs` (gate ไม่ตรวจ; pack ที่ขาดถูกประกาศเป็น `missing` ถูกต้อง). DoD ส่วน live ของ M11 ปิด.
+
+M12 live 2026-10-28: live audit บน baseline `0.138.0`/`d452ece` ด้วย `oai/gpt-5.4-mini` — M7b publisher `candidate` 3/3, M9 provider 4/4 + denial 9/9 + write-boundary 5/5,
+M11 interview 3/3; ค้างเฉพาะ M6 SQL live (ต้อง `../AI` ที่ `d95dc28`) ซึ่ง evidence `candidate` ยังเป็นของ 0.116.0. pinned `gpt-5.4` ของ fixture ยังไม่ได้ทดสอบ (MATCHA ไม่มี).

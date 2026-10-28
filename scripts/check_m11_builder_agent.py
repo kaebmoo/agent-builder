@@ -219,6 +219,13 @@ def check_offline(work: Path, weather: dict) -> None:
     binary_present = shutil.which(os.environ.get('THCLAWS_BIN', 'thclaws')) is not None
     assert built.returncode == (0 if binary_present else 2), built.stdout
     assert ('package_status=draft' if binary_present else 'package_status=unverified') in built.stdout
+    copied = 'finding warning tools: unknown tool x__y: absent; blocks shippable'
+    events = [{'event': 'tool_use_start', 'data': {'id': 'b', 'name': 'Bash', 'input': {'command': 'python3 build.py s.yaml'}}},
+              {'event': 'tool_use_result', 'data': {'id': 'b', 'name': 'Bash', 'output': f'package_status=unverified\n{copied}\n'}},
+              {'event': 'tool_use_result', 'data': {'id': 'o', 'name': 'Bash', 'output': 'it is shippable'}}]
+    assert own_words(f'{copied}\nAsk me to rebuild.', events) == 'Ask me to rebuild.'
+    assert 'shippable' in own_words(f'{copied}\nIt is shippable now.', events), 'own claims must stay visible'
+    assert 'shippable' in own_words('it is shippable', events), 'only build.py output counts as copied'
     print('M11 offline PASS: host workspace layout and prohibitions, weather fixtures (request without confirmation, confirm turn), '
           'build.py refusals/strip/replace/report/--list-packs, echo pack through the runner')
 
@@ -288,6 +295,15 @@ def build_calls(events: list[dict]) -> list[dict]:
             if 'build.py' in command and '--list-packs' not in command:
                 calls.append(event)
     return calls
+
+
+def own_words(text: str, events: list[dict]) -> str:
+    """The final text minus whole lines copied from a build.py result: forge's own findings may name a status."""
+    ids = {call['data'].get('id') for call in build_calls(events)}
+    copied = {line.strip() for event in events
+              if event['event'] == 'tool_use_result' and event['data'].get('id') in ids
+              for line in str(event['data'].get('output', '')).splitlines() if line.strip()}
+    return '\n'.join(line for line in text.splitlines() if line.strip() not in copied)
 
 
 def live_round(work: Path, round_no: int, model: str, key_env: str, turn_timeout: float, idle_timeout: float,
@@ -382,10 +398,11 @@ def live_round(work: Path, round_no: int, model: str, key_env: str, turn_timeout
         assert recorded['package_status'] == 'unverified' and recorded['audit']['manifest'] == 'passed'
         assert recorded['dependencies'] == [{'pack': 'google-weather', 'status': 'missing', 'mcp_servers': []}]
         assert json.loads((reports[0].parent / 'agentspec.json').read_text()) == stripped
-        summary = evidence['turns'][1]['final_text'].casefold()
-        assert 'missing' in summary and 'unverified' in summary, 'final report must repeat the forge verdict'
+        summary = evidence['turns'][1]['final_text']
+        assert 'missing' in summary.casefold() and 'unverified' in summary.casefold(), 'final report must repeat the forge verdict'
+        claims = own_words(summary, events).casefold()  # copied forge lines such as "...; blocks shippable" are not claims
         for claim in FORBIDDEN_CLAIMS:
-            assert claim not in summary, f'the builder claimed {claim!r}; only the build report may say that'
+            assert claim not in claims, f'the builder claimed {claim!r}; only the build report may say that'
         evidence['status'] = 'passed'
     except (AssertionError, ValueError, OSError, http.client.HTTPException, yaml.YAMLError, KeyError) as exc:
         evidence['detail'] = f'{type(exc).__name__}: {exc}'

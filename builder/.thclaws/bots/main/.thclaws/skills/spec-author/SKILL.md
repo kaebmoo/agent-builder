@@ -13,17 +13,21 @@ elsewhere. Draft `work/<name>/spec.yaml` with these sections and rules.
 
 - `identity`: `name` kebab-case, `version` semver, `owner`, `license`, `thclaws_min_version` (default `">=0.116.0"`).
 - `mission`: one `purpose` paragraph and a `domain`.
-- `target`: `thclaws-standalone` needs `package_pattern` (`static-pipeline` only is implemented, T0 only) and no
-  `routing`; `atlas-worker` / `atlas-workflow` need `routing: {role, tags}` and no `package_pattern`.
+- `target`: a plain string. `thclaws-standalone` needs `package_pattern` (`static-pipeline` only is implemented, T0 only)
+  and no `routing`; `atlas-worker` / `atlas-workflow` need `routing: {role, tags}` and no `package_pattern`.
+  `package_pattern` and `routing` are top-level sections beside `target`, never nested under it.
 - `inputs`: `{name, transport, schema}` with transport `prompt_json`, `atlas_file_handoff` or `local_workspace`.
   Atlas input names match `[A-Za-z_][A-Za-z0-9_]*` and schemas are `type: object` (or array).
 - `outputs`: Atlas has exactly one output; `assistant_json` needs `schema`, `collect_files` needs `files.globs`.
 - `capabilities`: `[{pack: <name>, params: {}}]` using only names printed by `build.py --list-packs`. A pack the person needs
   but that does not exist is still declared by its intended name so the report says `missing`; never invent its tools.
-- `permissions`: `tier`, `tools`, `shell`, `network`, `write_scope`.
+- `permissions`: `tier`, `tools`, `shell`, `network`, `write_scope`; every key except `tools` is a plain string, never an object.
+  - `network` is `none`, `general-http` or `allowlist`. Hosts are never listed in the spec; they come from each pack's `hosts`.
   - T0: `shell: none`, `network: none`, `write_scope: none`. T1: same but `write_scope: output` (standalone T1 is disabled).
   - T2: `write_scope: workspace`, only with `target: atlas-workflow` (Atlas `human_gate` owns approval).
-  - Any `network` other than `none` therefore requires T2 and `atlas-workflow`; say so to the person.
+  - Any `network` other than `none` therefore requires T2 and `atlas-workflow`; say so to the person. When they ask for
+    Atlas with network access, or leave the target to these rules, draft `target: atlas-workflow` and `tier: T2` (the only
+    legal pair) and point that out with the blocks you show for confirmation; do not stop to ask first.
   - `tools` are runtime names: built-ins (`Read`, `Grep`, `Glob`, ...) or qualified MCP tools `<server>__<tool>` copied
     from the pack's `pack.yaml`; a spec must declare every tool the pack's server advertises.
   - `shell: none` forbids `Bash`; `write_scope: none` forbids `Write`/`Edit`; `network: none` forbids web built-ins.
@@ -33,6 +37,30 @@ elsewhere. Draft `work/<name>/spec.yaml` with these sections and rules.
 - `evaluation.golden_cases`: four cases with `id`, `kind` (`normal`, `missing_input`, `refusal`, `malformed`),
   `expect` (`result` or `refusal`) and `input` (the envelope keyed by input name).
 - `state`: `{mode: none, scope: turn}` for Atlas; standalone may use `session/session`.
+
+Top-level shape (`<a|b>` = pick one plain string; the only other top-level keys are `package_pattern` for standalone
+and `confirmed_by`):
+
+```yaml
+identity: {name: <kebab-name>, version: <semver>, owner: <person>, license: <spdx>, thclaws_min_version: ">=0.116.0"}
+mission: {purpose: <paragraph>, domain: <word>}
+target: <thclaws-standalone|atlas-worker|atlas-workflow>
+routing: {role: <role>, tags: [<tag>]}          # Atlas targets only; standalone uses package_pattern instead
+inputs: [{name: <name>, transport: <transport>, schema: {type: object}}]
+outputs: [{name: <name>, transport: <transport>, schema: {type: object}}]
+capabilities: [{pack: <pack>, params: {}}]
+permissions:
+  tier: <T0|T1|T2>
+  tools: [<runtime tool name>]
+  shell: <none|sandboxed>
+  network: <none|general-http|allowlist>
+  write_scope: <none|output|workspace>
+refusal: {conditions: [<condition>], response: <sentence>, schema: {type: object}}
+model: {mode: pinned, id: <model id>}
+env: [<ENV_NAME>]
+evaluation: {golden_cases: [{id: <id>, kind: <kind>, expect: <result|refusal>, input: {}}]}
+state: {mode: none, scope: turn}
+```
 
 ## Confirmation marker
 
