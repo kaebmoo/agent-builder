@@ -50,6 +50,8 @@ M11 (builder-agent) offline/native เสร็จ 2026-10-26: workspace `builde
 `.thclaws/scripts/build.py` ที่บังคับ `confirmed_by` และรายงานผลจาก forge เท่านั้น; ส่วน live (ต้องมี provider key) ยังไม่ผ่าน ดู [builder/README.md](builder/README.md).
 M13 (2026-10-27): รองรับ host + bots layout ของ thClaws 0.138.0 — `builder/` เป็น host workspace (agent ที่ `.thclaws/bots/main/`), harness ตั้ง
 `THCLAWS_AUTO_MIGRATE=0` และตรวจ layout จริงทุกครั้งที่สตาร์ท `--serve`, ส่วน package ที่ deploy กับ Atlas คง single-agent layout (DESIGN §4/§8).
+M16 (2026-10-28): package ที่มีเฉพาะ `prompt_json`/`assistant_json` deploy เป็น bot ตัวเดียวของ thClaws host ได้ด้วย `forge export --layout host`
+(พิสูจน์บน desktop build + Atlas `daa0f49`; package และ archive ยัง single-agent) ดู [docs/export.md](docs/export.md).
 M12 (2026-10-27) ย้าย baseline thClaws ไป 0.138.0/`d452ece` หลังตรวจ DESIGN §4 ซ้ำกับ source จริง; native gate ทุกตัวผ่านบน binary นี้ และ `--write-boundary` ของ T1 ผ่านครบแต่ T1 ยังปิดรอ review.
 
 ```bash

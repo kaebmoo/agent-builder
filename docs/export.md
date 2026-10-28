@@ -70,6 +70,33 @@ guarantee matrix ใน build report คือคำรับรองเดี�
 5. `deployment.reachability_checks`: `POST /api/workers/<id>/poll` ต้องได้ `status: online` และ `agent_info.agent.mcp_servers`
    ตรงกับ `deployment.mcp_servers`. นี่พิสูจน์แค่ว่า Atlas เข้าถึง daemon และเห็น MCP inventory
 
+## Host layout (M16)
+
+ทางเลือกสำหรับเครื่องที่ใช้ desktop build ของ thClaws 0.138.0 เป็น host (DESIGN §4 "Host deployment ของ package prompt/assistant"):
+
+```bash
+forge export out/echo-reader --out out/echo-reader-host --layout host \
+  --base-url http://echo-host.internal:4317 --host-root /srv/thclaws/echo-host
+```
+
+- รับเฉพาะ package ที่ทุก input เป็น `prompt_json` และทุก output เป็น `assistant_json`; `atlas_file_handoff`, `local_workspace` และ `collect_files`
+  ถูกปฏิเสธ เพราะใต้ host file tools ทำงานที่ host root แต่ `/v1/inputs` และ `collect_files` ใช้ bot dir. asset ที่มี `python3 .thclaws/...` หรือ
+  `Path(".thclaws/...")` ใน AGENTS.md/skills/scripts ก็ถูกปฏิเสธ เพราะ host เขียนทับทุกครั้งที่เปิด
+- `--host-root` แทน `--workspace-dir`: `workspace_dir` = `deployment.package_root` = `<host-root>/.thclaws/bots/<name>`, `deployment.daemon_cwd` = host root,
+  `deployment.host_files` คือ `.thclaws/settings.json` (`{"workspaceVersion": 4}`) กับ `.thclaws/bots.json` (bot เดียว slug = ชื่อ package); archive เหมือน single-agent ทุก byte
+- ติดตั้ง: สร้าง host root ที่มีเฉพาะ `host_files`, แตก archive ที่ `package_root`, start `thclaws --serve` ที่ host root พร้อม `THCLAWS_API_TOKEN`,
+  `THCLAWS_AUTO_MIGRATE=0` และ env ตาม `deployment.env` (host ส่งต่อให้ agent process ที่ spawn ด้วย cwd = bot dir). Atlas ถึงเฉพาะ bot แรกใน `bots.json`
+  (`base_url` ห้าม `?bot=`) จึงหนึ่ง package ต่อหนึ่ง host. ตรวจ `/v1/agent/info.workspace_dir` = `package_root` และไฟล์ของ bot นอก `.thclaws/state/` เท่ากับ archive
+- ลำดับลงทะเบียน Atlas ข้อ 2–5 เหมือนเดิม; `deployment_verified` ยัง `false`
+
+Gate: `check_m16_host_deploy.py` (offline: refusal/determinism/default export ไม่เปลี่ยน; desktop build: ติดตั้งจาก export จริง, stub provider, Atlas poll + workflow run
+ผ่าน host เมื่อมี `ATLAS_ROOT` ที่ pin; provider golden cases เมื่อมี key)
+
+```bash
+ATLAS_ROOT=/path/to/atlas-control-plane-daa0f49 PATH="/path/to/thClaws/target/debug:$PATH" \
+  python3 scripts/check_m16_host_deploy.py --model oai/gpt-5.4-mini --provider-key-env OPENAI_COMPAT_API_KEY
+```
+
 สถานะยังเป็นของ build report: `draft`/`candidate` ไม่ใช่ shippable. `deployment_verified` เป็น `false` เสมอและ builder ไม่เคยตั้งเป็น
 true; operator ต้องยืนยัน daemon isolation, egress และ approval path ของ deployment เองนอกไฟล์นี้
 
