@@ -476,3 +476,11 @@ native mode: m0=0 m1=0 m2=0 m3=0 m4=0 m5=0 m6=2 m7a=2 m7b=0 m8=2 m9=2 m10=0 m11=
 M16 native + Atlas + provider (`ATLAS_ROOT` = worktree `daa0f49`): **exit 0** — tool list ผ่าน host = `echo__echo`, `echo__reverse` + Skill ทั้งสาม, forced Bash ได้ `unknown tool`, identity โหลดเมื่อ
 `workspace_dir` = bot dir ไม่โหลดเมื่อ = root, Atlas poll + workflow run `succeeded`, tree ไม่เปลี่ยน, golden cases 4/4 (`called=['echo__reverse']`). M8 กับ `ATLAS_ROOT` ที่ pin: exit=0.
 Ruff และ `git diff --check` ผ่าน. ไม่ได้รัน: M6/M7a (ต้องโฟลเดอร์คู่ `AI`@`d95dc28`; โค้ด SQL/generator ไม่เปลี่ยน) และ live ของ M7b/M9/M11/M14/M15 (โค้ดที่ทดสอบไม่เปลี่ยน).
+
+M16 merge เข้า main 2026-10-29 (`3d0b830` + `a815115`; merge อัตโนมัติไม่มี conflict; เติม M16 ใน README (M0–M16, gate list) และ local-test-plan (รายการอ่าน,
+ผลที่คาด, รูปแบบรายงาน, ลำดับใน prompt) ที่ `a815115` เขียนหลังฐานของ M16): รัน gate ซ้ำบน tree ที่ merge (binary `0.138.0`/`d452ece` desktop build, `oai/gpt-5.4-mini`;
+evidence `out/m16-merge-evidence/` ตรวจแล้วไม่มีค่าจาก `.env`).
+CI mode: m0=0 m1=0 m2=0 m3=0 m4=2 m5=2 m6=1 m7a=1 m7b=2 m8=1 m9=2 m10=2 m11=2 m12=2 m13=2 m14=2 m15=2 m16=2
+native mode: m0=0 m1=0 m2=0 m3=0 m4=0 m5=0 m6=1 m7a=1 m7b=0 m8=1 m9=2 m10=0 m11=2 m12=0 m13=0 m14=2 m15=2 m16=1
+(m6/m7a/m8/m16=1 เพราะ pin ของ checkout ข้างเคียงเท่านั้น; m16 ผ่านส่วน host ก่อนถึง "Atlas checkout 375ac85 is not the pinned daa0f49").
+กับ `ATLAS_ROOT` = worktree `daa0f49`: M16 native + Atlas + provider exit=0 (golden cases 4/4 ผ่าน host, `called=['echo__reverse']`), M8 exit=0. Ruff ผ่าน.
