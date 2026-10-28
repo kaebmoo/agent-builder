@@ -19,6 +19,7 @@ forge generate fixtures/sql-reader/spec.yaml --out out/sql-reader
 ## ไฟล์ที่ได้
 
 - `manifest.json` และ `.thclaws/settings.json`: identity/catalog fields ตาม thClaws v0.116.0 (ไม่เปลี่ยนถึง 0.138.0/`d452ece`, M12). ส่งต่อให้ `thclaws agent validate` ตรวจ ไม่สร้าง manifest validator อีกชุด
+- `.thclaws/settings.json` ของ target Atlas (M15) มี `allowedTools` = `permissions.tools` เรียงตามชื่อ และ `browserEnabled`/`halEnabled`/`imageToolsEnabled` = `false`: daemon ที่ start ด้วย CWD=package ถอด built-in อื่นทั้งหมดก่อนส่ง tool list ให้ model; Skill/SkillList/SkillSearch และ MCP tools ไม่ถูกกรอง (DESIGN §4 "Tool allowlist บน `/agent/run`"). Spec Atlas ที่ประกาศ HAL/media tools (`WebScrape`, `YouTubeTranscript`, `TextToImage` ฯลฯ) ถูก reject เพราะกลุ่มนี้ลงทะเบียนหลัง filter และถูก pin ปิด. Standalone ไม่มี key เหล่านี้
 - `AGENTS.md` และ `.thclaws/skills/<identity.name>/SKILL.md`: mission, permission declarations, refusal และ output จาก spec
 - `agentspec.json`: source contract ที่ serialize แบบ canonical JSON
 - `.thclaws/schemas/inputs--<name>.json`, `outputs--<name>.json`, `refusal.json`: schema ตาม spec. collect_files ที่ไม่มี schema จะไม่สร้าง schema สมมติ

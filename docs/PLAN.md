@@ -3,7 +3,7 @@
 กติกาเดียวกับ Atlas: **หนึ่ง milestone = หนึ่ง check script** ใน `scripts/check_<milestone>.py` ที่ fail เมื่อพฤติกรรมพัง
 ห้าม tick milestone ก่อน check ผ่าน commit ต่อ milestone เมื่อ gate เขียว
 
-ลำดับตาม baseline ที่ตกลง: schema → fixtures → matrix → generator → thclaws validate → static audit → SQL pack ขั้นต่ำ (M7a) → live audit → publisher pack (M7b) → export → standalone generator (M9, เพิ่ม 2026-09-07 ต่อท้าย MVP เพื่อไม่เลื่อนสาย Atlas) → pack authoring workflow (M10) → builder-agent (M11) (เพิ่ม 2026-09-07 หลัง MVP; M7a ขยายเป็น pack contract ในวันเดียวกัน) → baseline 0.138.0 (M12, เพิ่ม 2026-10-27 เพราะ binary ที่ผู้ดูแลใช้จริงไม่ใช่ 0.116.0 อีกแล้ว) → host + bots layout (M13, เพิ่ม 2026-10-27 หลัง M7b/M11 live บน Mac fail เพราะ `--serve` ของ desktop build แปลง package ในที่เดิม; ประเด็นใน `docs/thclaws-host-bots-brief.md`)
+ลำดับตาม baseline ที่ตกลง: schema → fixtures → matrix → generator → thclaws validate → static audit → SQL pack ขั้นต่ำ (M7a) → live audit → publisher pack (M7b) → export → standalone generator (M9, เพิ่ม 2026-09-07 ต่อท้าย MVP เพื่อไม่เลื่อนสาย Atlas) → pack authoring workflow (M10) → builder-agent (M11) (เพิ่ม 2026-09-07 หลัง MVP; M7a ขยายเป็น pack contract ในวันเดียวกัน) → baseline 0.138.0 (M12, เพิ่ม 2026-10-27 เพราะ binary ที่ผู้ดูแลใช้จริงไม่ใช่ 0.116.0 อีกแล้ว) → host + bots layout (M13, เพิ่ม 2026-10-27 หลัง M7b/M11 live บน Mac fail เพราะ `--serve` ของ desktop build แปลง package ในที่เดิม; ประเด็นใน `docs/thclaws-host-bots-brief.md`) → ปลด T1 standalone (M14) → `allowedTools` บน `/agent/run` (M15, เพิ่ม 2026-10-28)
 
 | M | ชื่อ | ผลลัพธ์ | Definition of done | check |
 |---|---|---|---|---|
@@ -23,6 +23,7 @@
 | M12 | thClaws baseline 0.138.0 (เพิ่ม 2026-10-27) | ตรวจ DESIGN §4 ซ้ำกับ source `d452ece` (branch `baseline-0.138.0-d452ece`), `patterns/tools-0.138.0.json`, `THCLAWS_BASELINE` + คู่ standalone `0.138.0/d452ece`, docs | ทุก claim ใน §4 มีสถานะ ไม่เปลี่ยน/เปลี่ยน พร้อมผลต่อ builder; native gate M4–M11 ผ่านบน binary จาก `d452ece`; `--write-boundary` บันทึกผล; T1/allowedTools ยังไม่เปิด | `check_m12_baseline.py` (ไม่มี binary → exit 2; binary ไม่ตรงคู่ → exit 1) |
 | M14 | ปลด T1 standalone (เพิ่ม 2026-10-28) | DESIGN §4 "Standalone T1 rollout" (review writePaths ของ `d452ece`: ครอบ Write/Edit/office writers ไม่ครอบ Bash/MCP, resolve ปลายทางผ่าน sandbox) + §6/§8; generator สร้าง T1 `static-pipeline` ที่ worker ได้ `Write`/`Edit` พร้อม `writePaths: output/**` และ planner/verifier คง T0; `STANDALONE_T1_THCLAWS_COMPATIBILITY` เฉพาะ `0.138.0/d452ece`; static audit ถือ `output/**` เป็น runtime output เฉพาะ T1 และ validate ตามคู่ของ tier; live audit standalone ทุก tier ทำ tree diff ต่อ case; fixture `note-writer-standalone`; matrix T1 `output_write_scope: Enforced` (เฉพาะ Write/Edit ของ worker), `no_file_writes: Not applicable`; skill `spec-author` บอกขอบเขต T1 | package T1 deterministic ผ่าน validate; writer อื่น/T1 ไม่มี writer/pattern อื่น/T2 ถูก reject; boundary drift และไฟล์นอก output/ เป็น finding; บน binary คู่ T1: probe 14 รายการบน package จริง (Write/Edit ใต้ output ผ่าน, direct/traversal/symlink/dangling/Edit นอก output/Bash และ planner/verifier Write/Edit/Bash ถูกปฏิเสธ), pipeline 4 cases ผ่าน provider จำลองโดยเขียนเฉพาะ `output/note.md`; provider จริงผ่าน golden cases; M9/M11 live ไม่ถดถอย (M11 3 รอบเพราะแก้ skill); ไม่อ้าง filesystem isolation ของ MCP/runtime state | `check_m14_standalone_t1.py` (ไม่มี binary/key → 2; binary ไม่ใช่คู่ T1 → 1) |
 | M13 | thClaws host + bots layout, scoped adoption (เพิ่ม 2026-10-27) | DESIGN §4 "Host + bots layout" (ข้อเท็จจริง `d452ece` + Atlas `daa0f49`) และกฎ deployment ใน §8/§9; `forge/live_test.py::isolated_env` (`THCLAWS_AUTO_MIGRATE=0`) + `check_layout` ทุกจุดที่สตาร์ท `--serve` (M6/M7b/M8/M11) และ `request()` ที่เก็บ events ทันที/ตรวจ stall; `builder/` เป็น host workspace v4 (agent ที่ `.thclaws/bots/main/`, runner ผ่าน `"$THCLAWS_AGENT_DIR/.thclaws/scripts/build.py"`, `build.py` หา checkout เอง + `--list-packs`); export registration, deployment hints, docs บอก operator ตั้ง env และห้ามเปิด package ใน desktop; gate M11 live เป็นสองเทิร์น (`weather-request.md` ไม่ยืนยัน → `weather-confirm.md` ใน `session_id` เดิม), `--model` บังคับ, `--rounds`, evidence ต่อรอบ | deployment contract และ output ของ generator คง single-agent layout (ไม่มี claim ใหม่ใน guarantee matrix); harness fail ชัดเมื่อ tree ถูกแปลง (negative case ใน M6, control case บน desktop build); `thclaws agent validate` ผ่านที่ agent dir; daemon ที่สตาร์ทจาก bot dir ด้วย `THCLAWS_WORKSPACE_ROOT` รายงาน `.thclaws/bots/main` พร้อม skills ครบ (ทุก build) และ desktop build เปิด `builder/` เป็น host แล้วไฟล์ที่ track ไม่เปลี่ยน; M7b `--live` ผ่าน 3 รอบบน harness ใหม่; M0–M12 ไม่ถดถอย | `check_m13_host_layout.py` (ไม่มี binary → exit 2; binary CLI-only ไม่มี `thclaws bots` → ส่วน host skip exit 2; desktop build → 0) |
+| M15 | `allowedTools` บน `/agent/run` (เพิ่ม 2026-10-28) | DESIGN §4 "Tool allowlist บน `/agent/run`" (review `apply_filter` ของ `d452ece`: อ่าน config ทุก request, กรอง built-in ก่อน Skill/MCP/HAL/media, call ที่ถูกถอดได้ `unknown tool`, fail-open เมื่อ settings หาย/เสียหรือมี `THCLAWS_PROJECT_ROOT`) + §6/§8; generator เขียน `allowedTools` = `permissions.tools` และ pin `browserEnabled`/`halEnabled`/`imageToolsEnabled` = false ใน `.thclaws/settings.json` ของ target Atlas, reject HAL/media tools บน Atlas; matrix Atlas `tool_allowlist: Enforced` (built-in เท่านั้น; Skill/MCP นอก claim), `no_shell: Enforced` เมื่อ `shell: none`; deployment hint ห้าม `THCLAWS_PROJECT_ROOT` | settings deterministic ทุก fixture Atlas และ standalone ไม่เปลี่ยน; drift ของ allowlist/pin เป็น error; บน desktop build: daemon จาก package จริงส่ง tool list = allowlist ∪ Skill ทั้งสาม, forced Bash/Write/WebScrape/TextToImage ได้ `unknown tool` ไม่มีไฟล์เกิด, Read/MCP ทำงาน, diagnostic ยืนยันว่า Skill/MCP/HAL/media ไม่ถูกกรอง, control ไม่มี allowlist → Bash รัน; provider จริงผ่าน golden cases; M7b live 3 รอบไม่ถดถอย | `check_m15_tool_allowlist.py` (ไม่มี binary/ไม่มี `--serve`/ไม่มี key → 2; binary ไม่ใช่ 0.138.0 → 1) |
 
 ## นอกแผน (ทำหลัง MVP เมื่อมีเหตุผล)
 
@@ -30,7 +31,7 @@
 - pack `google-weather` (MCP เรียก Google Weather API, `network: allowlist`) เป็น pack แรกที่ทดสอบ network requirement จริง ทำเมื่อมีคนเขียน MCP ตาม contract M7a/M10; builder ไม่เขียน MCP ให้
 - LLM meta-audit
 - pack `report-pipeline` (NT-Report)
-- patch `agent_runtime.rs` (allowed/disallowed tools, hooks, MCP allowlist) → upstream
+- patch `agent_runtime.rs` (hooks, MCP/Skill allowlist; built-in allowed/disallowed tools upstream ทำแล้วใน 0.136.0 และ adopt ใน M15) → upstream
 - auto-deploy `/v1/deploy` + bundle version ต่อ worker (ผูกกับ Atlas M4)
 
 ## ความเสี่ยงที่รู้แล้ว
@@ -338,7 +339,7 @@ gate M6 ใช้ baseline จาก forge แทน literal, comments/docs. ผ
 ค้าง: live audit ทุกตัวบน baseline ใหม่ (M6 SQL, M7b publisher 3 รอบ, M9 provider, M11 interview) ต้องรันบน Mac ด้วย key —
 evidence `candidate` เดิมเป็นของ 0.116.0 ทั้งหมด; `docs/local-test-plan.md` ปรับให้ใช้ binary 0.138.0 ของเครื่องแล้ว.
 ข้อเสนอ milestone ถัดไป (เลขเลื่อนเมื่อเพิ่ม M13): M14 ปลด T1 standalone (ทำแล้ว 2026-10-28 ดูย่อหน้า "M14 ทำใน cloud"),
-M15 adopt `allowedTools` ใน `.thclaws/settings.json` เพื่อยก `tool_allowlist` บน `/agent/run` จาก Declared เป็น Enforced พร้อม native proof
+M15 adopt `allowedTools` ใน `.thclaws/settings.json` เพื่อยก `tool_allowlist` บน `/agent/run` จาก Declared เป็น Enforced พร้อม native proof (ทำแล้ว 2026-10-28 ดูย่อหน้า "M15 ทำ (Mac)")
 (ต้องรับข้อค้นพบ M13 ว่า `apply_filter` ถูกเรียกก่อนลงทะเบียน Skill/MCP tools จึงไม่กรองสองกลุ่มนั้น), และ M16 (มีเงื่อนไข) host deployment สำหรับ
 package ที่มีเฉพาะ `prompt_json`/`assistant_json` หลังพิสูจน์บน Mac ตาม DESIGN §4 การตัดสินใจ (e).
 
@@ -422,3 +423,19 @@ M9 live: exit=0 (provider 4/4, denial 9/9; tree diff ผ่านทุก case 
 M11 live: exit=0 rounds passed=3/3 (`--rounds 3` แบบ agent-dir เพราะ skill `spec-author` เปลี่ยน), evidence `out/m11-live/round-{1,2,3}-20261028T1834*.json`
 (สำเนาใน `out/m14-evidence/step5-m11-live/`); ต่อรอบ: turn1 หยุดถาม yes, turn2 build.py yes, draft `target: atlas-workflow`, รายงาน `google-weather` missing.
 optional: m8=0 (`ATLAS_ROOT` = worktree ที่ pin `daa0f49`); m6/m7a ไม่รัน (`../AI` ไม่อยู่ที่ `d95dc28`). ส่วน live ของ M14 ปิด.
+
+M15 ทำ (Mac) 2026-10-28 (worktree `claude/sharp-goodall-d0102a` ฐาน `dc8a2f3`; binary thclaws `0.138.0` revision `d452ece` desktop build; model `oai/gpt-5.4-mini` ผ่าน MATCHA
+`OPENAI_COMPAT_*`; ตรวจแล้วว่า log ไม่มีค่า key/URL): review source แล้วบันทึก DESIGN §4 "Tool allowlist บน `/agent/run`" (8 ข้อเท็จจริง + การตัดสินใจ (a)–(e)) **ก่อน**แก้โค้ด และแก้ §4 ต้นบท,
+§5, §6 (แถว allowlist/ห้ามเขียนไฟล์/ห้าม shell), §8, M12 ข้อ 1, §10. ข้อค้นพบระหว่างทำที่ไม่ได้คาด (แก้ DESIGN ข้อ 4 ตามผล binary): `ProjectConfig` เป็น `#[serde(default)]` ที่ default
+`halEnabled`/`imageToolsEnabled` = `Some(false)` → user layer ของ operator เปิดสองกลุ่มนี้ไม่ได้เมื่อ package มี settings file และ `gateway_on` บังคับ `hal_enabled = true` หลังทุก layer
+(package ปิดไม่ได้ จึงอยู่ใน basis); `browserEnabled` default `None` จึงต้อง pin. โค้ด: `forge/generate.py` (`allowedTools` + pin สาม flag เฉพาะ Atlas, `LATE_BUILTIN_TOOLS` reject,
+matrix Atlas `tool_allowlist`/`no_shell` Enforced, `no_file_writes` basis, deployment hint ห้าม `THCLAWS_PROJECT_ROOT`), gate ใหม่ `check_m15_tool_allowlist.py`, assertion ของ M4/M7b ตามแถว
+`no_shell` ใหม่, docs (`audit.md`, `generator.md`, `local-test-plan.md`). package Atlas ที่ generate ก่อน M15 จะ drift ที่ `.thclaws/settings.json` ต้อง generate ใหม่.
+CI mode: m0=0 m1=0 m2=0 m3=0 m4=2 m5=2 m6=2 m7a=2 m7b=2 m8=2 m9=2 m10=2 m11=2 m12=2 m13=2 m14=2 m15=2
+native mode: m0=0 m1=0 m2=0 m3=0 m4=0 m5=0 m6=2 m7a=2 m7b=0 m8=2 m9=2 m10=0 m11=2 m12=0 m13=0 m14=2 m15=2
+(m6/m7a = 2 เพราะ python3 ของ sweep ไม่มี `mcp` → SQL fixture runtime unavailable ไม่ใช่ 1 แบบ sibling pin; m8 = 2 เพราะไม่ตั้ง `ATLAS_ROOT` และ `ATLAS_ROOT` = worktree `daa0f49` → 0
+พร้อม archive ที่คง `allowedTools`; m9/m11/m14/m15 = 2 เพราะไม่มี key ใน sweep). M15 native + provider: **exit 0** — tool list ที่ส่ง model = `Read`, `echo__echo`, `echo__reverse` +
+`Skill`/`SkillList`/`SkillSearch`; forced `Bash`/`Write`/`WebScrape`/`TextToImage` ได้ `unknown tool` โดยไม่มีไฟล์เกิดแม้ user layer เปิด HAL/media; `Read`/`echo__echo` ทำงาน;
+diagnostic `allowedTools: ["Read"]` + package เปิด HAL/media ยังเห็น Skill ทั้งสาม, MCP ทั้งสองและ HAL/media ครบ 9; control ไม่มี allowlist → 45 tools และ Bash รัน; คืน settings แล้ว
+Bash ถูกปฏิเสธบน daemon เดิม; provider golden cases 4/4 (`called=['echo__reverse']`). M7b `--live` 3 รอบ exit 0 ทั้งสาม (publisher เหลือ tool list เฉพาะ MCP + Skill). Ruff และ
+`git diff --check` ผ่าน. ไม่ได้รัน: M6 live (`sql-reader` ต้องมี `../AI`@`d95dc28` และ venv ที่มี `mcp>=1.26,<2`) และ M11 live (prompt ไม่เปลี่ยน). ยังไม่ commit.

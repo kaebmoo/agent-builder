@@ -60,7 +60,9 @@ def check(temporary: Path) -> int:
             "tool_allowlist", "no_file_writes", "output_write_scope", "collect_files", "no_shell",
             "no_network_builtins", "network_hosts", "human_approval", "output_schema", "skill_mcp_calls",
         }
-        assert rows["no_shell"] == rows["no_file_writes"] == rows["network_hosts"] == "Not guaranteed"
+        assert rows["no_file_writes"] == rows["network_hosts"] == "Not guaranteed"
+        # M15: allowedTools in .thclaws/settings.json makes the built-in allowlist and shell=none enforced on /agent/run.
+        assert rows["tool_allowlist"] == rows["no_shell"] == "Enforced"
         assert rows["output_schema"] == "Not verified" and rows["skill_mcp_calls"] == "No evidence"
         assert rows["no_network_builtins"] == "Static check"
         for section in ("inputs", "outputs"):

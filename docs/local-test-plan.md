@@ -19,6 +19,7 @@
 | 4 | `check_m11_builder_agent.py` live `--rounds 3` (ต้องมี key) | DoD ส่วน live ของ M11 ยังไม่ผ่าน; gate เป็นสองเทิร์นและ prompt/skill เปลี่ยน จึงต้อง 3 รอบ | exit 0; evidence `out/m11-live/round-<n>-<ts>.json` ครบ 3 ไฟล์ |
 | 5 | `check_m7b_packs.py --live` 3 รอบ (ต้องมี key) | ครั้งก่อนผ่านด้วย launcher นอก repo; ต้องยืนยันว่า harness เองตั้ง `THCLAWS_AUTO_MIGRATE=0` แล้วพอ | exit 0 ทั้ง 3 รอบ |
 | 6 | `check_m9_standalone.py` live (ต้องมี key) — ผ่านแล้ว 2026-10-27 ไม่ต้องรันซ้ำเว้นแต่ checkout เปลี่ยน | evidence provider เดิมเป็นของ 0.116.0 | exit 0 |
+| 6b | `check_m15_tool_allowlist.py` native + provider (desktop build, key) | ต้องมี daemon `--serve`; cloud build CLI-only ไม่มี | exit 0 (probe บน package จริง + golden cases 4/4); M7b `--live` 3 รอบซ้ำเพราะ tool list ของ publisher เปลี่ยน |
 | 7 | (optional) M7a/M6 กับ `../AI`@`d95dc28` + `pip install mcp`, M8 กับ `ATLAS_ROOT` worktree ที่ pin `daa0f49` | evidence `candidate` ของ SQL ยังเป็นของ 0.116.0; M8 default `../atlas-control-plane` อยู่คนละ revision | exit 0 หรือ skip 2 พร้อมเหตุผล |
 
 ## เตรียมเครื่อง
@@ -64,6 +65,9 @@ for i in 1 2 3; do PATH="$THCLAWS_PATH:$PATH" python3 scripts/check_m7b_packs.py
 PATH="$THCLAWS_PATH:$PATH" python3 scripts/check_m14_standalone_t1.py --model oai/gpt-5.4-mini --provider-key-env OPENAI_COMPAT_API_KEY
 PATH="$THCLAWS_PATH:$PATH" python3 scripts/check_m9_standalone.py --model oai/gpt-5.4-mini --provider-key-env OPENAI_COMPAT_API_KEY
 PATH="$THCLAWS_PATH:$PATH" python3 scripts/check_m9_standalone.py --write-boundary     # คาด exit 0 บน d452ece
+
+# 6b. M15 (allowedTools บน /agent/run) native + provider live; tool list ของทุก package Atlas เปลี่ยน จึงรัน M7b live ข้อ 5 ซ้ำด้วย
+PATH="$THCLAWS_PATH:$PATH" python3 scripts/check_m15_tool_allowlist.py --model oai/gpt-5.4-mini --provider-key-env OPENAI_COMPAT_API_KEY
 
 # 7. optional (M6/M7a ต้อง `pip install mcp` ใน venv และ ../AI ที่ d95dc28; M8 ต้องใช้ worktree ของ Atlas ที่ pin daa0f49 ไม่ใช่ ../atlas-control-plane)
 PATH="$THCLAWS_PATH:$PATH" python3 scripts/check_m7a_sql_pack.py
