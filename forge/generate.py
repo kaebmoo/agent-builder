@@ -34,6 +34,10 @@ STANDALONE_T1_THCLAWS_COMPATIBILITY = {THCLAWS_BASELINE: frozenset({"d452ece"})}
 # The only writers M14 admits into a T1 worker; every other WRITE_BUILTIN_TOOLS member is rejected explicitly.
 T1_WRITE_TOOLS = frozenset({"Write", "Edit"})
 T1_WRITE_PATHS = ("output/**",)
+# Built-ins /agent/run registers after its allowedTools filter (DESIGN §4 "Tool allowlist", M15). Atlas packages pin
+# their flags off, so declaring one is rejected instead of shipping a tool that silently never appears.
+LATE_BUILTIN_TOOLS = frozenset({"WebScrape", "YouTubeTranscript", "TextToImage", "ImageToImage", "TextToSpeech",
+                                "RenderSlides", "TextToVideo", "ImageToVideo", "MediaJobStatus"})
 
 
 def standalone_compatibility(tier: str) -> dict[str, frozenset[str]]:
@@ -185,13 +189,24 @@ def guarantee_matrix(spec: dict[str, Any]) -> list[dict[str, str]]:
     permissions = spec["permissions"]
     collects = any(item["transport"] == "collect_files" for item in spec["outputs"])
     rows = [
-        ("tool_allowlist", "Declared", "AGENTS.md declares tools; /agent/run does not enforce per-role tool lists."),
-        ("no_file_writes", "Not guaranteed", "Write/Edit remain available. Daemon isolation and sandbox restrictions are not verified."),
+        ("tool_allowlist", "Enforced",
+         (".thclaws/settings.json allowedTools lists the declared tools; /agent/run on a daemon started with CWD=package drops "
+         "every other built-in before the model sees its tool list and answers a call to a dropped name with unknown tool "
+         "(thClaws 0.138.0, M15 gate). Skill/SkillList/SkillSearch and MCP tools register after that filter and are outside "
+         "this claim; the browser/HAL/media groups are pinned off, but an active thClaws gateway still adds "
+         "WebScrape/YouTubeTranscript. A missing or invalid settings file, or THCLAWS_PROJECT_ROOT on the daemon, "
+         "disables the list.")),
+        ("no_file_writes", "Not guaranteed",
+         ("allowedTools drops undeclared built-in writers; declared writers, MCP tools and runtime state can still write. "
+         "Daemon isolation and sandbox restrictions are not verified.")),
         ("output_write_scope", "Declared" if permissions["write_scope"] == "output" else "Not applicable",
          "T1 declares output/**; /agent/run does not enforce that path boundary."),
         ("collect_files", "Enforced" if collects else "Not applicable",
          "thClaws snapshots matching files after a run; pre-existing files may be included. This is not authorship evidence."),
-        ("no_shell", "Not guaranteed", "/agent/run registers Bash regardless of the package declaration."),
+        ("no_shell", "Enforced" if permissions["shell"] == "none" else "Not applicable",
+         "Bash is absent from allowedTools, so /agent/run drops it (M15 gate: a forced call returns unknown tool); "
+         "MCP servers that spawn processes are outside this claim." if permissions["shell"] == "none"
+         else "The package declares a shell."),
         ("no_network_builtins", "Static check" if permissions["network"] == "none" else "Not applicable",
          "AgentSpec validation rejects declared web built-ins for network=none; this does not enforce runtime egress."),
         ("network_hosts", "Not guaranteed", "Host egress controls must be provisioned and verified outside the package."),
@@ -287,6 +302,9 @@ def render(spec: dict[str, Any], packs_dir: Path | None = None) -> tuple[dict[st
     if compatibility["package_pattern"] not in {"single-worker", "static-pipeline"}:
         raise ValueError("standalone generation is not implemented for this pattern; use static-pipeline")
     roles = standalone_roles(spec, packs_dir or ROOT / "packs") if standalone else {}
+    if not standalone and (late := LATE_BUILTIN_TOOLS & set(spec["permissions"]["tools"])):
+        raise ValueError("Atlas packages pin the tool groups registered after allowedTools off; unsupported: "
+                         + ", ".join(sorted(late)))
     if standalone and (len(spec["outputs"]) != 1 or spec["outputs"][0]["transport"] != "assistant_json"):
         raise ValueError("M9 requires one sole assistant_json output")
     files, dependencies, problems = pack_assets(spec, (packs_dir or ROOT / "packs").resolve())
@@ -316,6 +334,12 @@ def render(spec: dict[str, Any], packs_dir: Path | None = None) -> tuple[dict[st
     }}
     if standalone and spec["model"]["mode"] == "pinned":
         settings["model"] = spec["model"]["id"]
+    if not standalone:
+        # /agent/run filters built-ins by the daemon CWD's allowedTools; the flags switch off the groups registered after
+        # that filter regardless of the operator's user settings; an active gateway still forces HAL on (DESIGN §4
+        # "Tool allowlist", M15).
+        settings.update(allowedTools=sorted(spec["permissions"]["tools"]), browserEnabled=False, halEnabled=False,
+                        imageToolsEnabled=False)
     add_json(".thclaws/settings.json", settings)
     add_json(".thclaws/schemas/refusal.json", spec["refusal"]["schema"])
     for section in ("inputs", "outputs"):
@@ -364,9 +388,9 @@ def render(spec: dict[str, Any], packs_dir: Path | None = None) -> tuple[dict[st
         "dependencies": dependencies,
         "deployment_hints": [
             "Run thclaws agent validate, then static/live/security audits before promoting package status.",
-            ("Start the daemon with CWD=package and THCLAWS_AUTO_MIGRATE=0 to load .thclaws/mcp.json and "
-             ".thclaws/prompt/system.md; never open the package in the thClaws desktop app or run thclaws bots migrate "
-             "on it (a host layout moves the agent files and breaks the Atlas workspace_dir contract); "
+            ("Start the daemon with CWD=package, THCLAWS_AUTO_MIGRATE=0 and no THCLAWS_PROJECT_ROOT to load "
+             ".thclaws/mcp.json, .thclaws/prompt/system.md and the allowedTools of .thclaws/settings.json; "
+             "never open the package in the thClaws desktop app or run thclaws bots migrate on it (a host layout moves the agent files and breaks the Atlas workspace_dir contract); "
              "install external MCP runtimes separately."),
             "Provision model and environment variable names from agentspec.json at deployment time; no secret values are bundled.",
             "Manifest filesystem_scope=workspace is the packaging scope, not enforcement of the AgentSpec write_scope.",

@@ -61,9 +61,9 @@ planner → worker → verifier สำหรับ Atlas จึงต้อง�
 
 ใช้จริง: `AGENTS.md` (walk ขึ้นจาก `workspace_dir`), skills ใน `<workspace_dir>/.thclaws/skills/`, MCP servers จาก settings ของ **daemon** (ไม่ใช่ต่อ workspace), `model` / `max_tokens` / `system` (ต่อท้าย) / `session_id` / `collect_files`, Bash sandbox ระดับ OS
 
-ไม่ใช้: agent defs, hooks (`pre_tool_use`), `allowed_tools` / `disallowed_tools`, permission mode (ใช้ `AutoApprover`), workflow subagent
+ไม่ใช้: agent defs, hooks (`pre_tool_use`), `allowed_tools` / `disallowed_tools` (ใช้แล้วตั้งแต่ 0.136.0 → ดู M12 ข้อ 1 และ "Tool allowlist บน `/agent/run`" ด้านล่าง), permission mode (ใช้ `AutoApprover`), workflow subagent
 
-ผลที่ตามมา: การจำกัด tool/shell ต่อ role บน Atlas worker **ยังบังคับไม่ได้** สิ่งที่บังคับได้คือ MCP ที่ daemon มี/ไม่มี, daemon แยกต่อ tier, sandbox, Atlas `human_gate`, และ schema check ตอน audit
+ผลที่ตามมา (v0.116.0): การจำกัด tool/shell ต่อ role บน Atlas worker **ยังบังคับไม่ได้** สิ่งที่บังคับได้คือ MCP ที่ daemon มี/ไม่มี, daemon แยกต่อ tier, sandbox, Atlas `human_gate`, และ schema check ตอน audit. บน baseline 0.138.0 package Atlas บังคับ built-in tool allowlist ผ่าน `allowedTools` ได้ (M15) แต่ไม่ครอบ Skill/MCP tools
 
 `thclaws_min_version` คือ minimum version ที่อาจมี upper compatibility bound: clause เป็น `<`, `<=`, `==`, `>`, `>=` + numeric `x.y.z` และต่อด้วย comma เช่น `>=0.116.0,<0.120.0` หรือ `0.116.0`; ต้องมี minimum/exact clause, bare version ห้ามปนกับ clause อื่น และ semantic gate reject range ที่ไม่มีทาง satisfy ได้ ไม่รองรับ prerelease, `!=`, `~`, `^`
 
@@ -136,6 +136,51 @@ gate M14 บน `d452ece`; `no_file_writes` = Not applicable (T1 เขียน
 worker Bash และ planner/verifier Write/Edit/Bash ถูกปฏิเสธ, pipeline 4 golden cases ผ่าน fake provider ที่เขียน `output/note.md` จริง. ข้อจำกัดที่คงอยู่: writePaths ไม่ใช่ filesystem
 isolation ของ MCP หรือ runtime state และไม่ใช่ claim ของ `/agent/run` (ตาราง §6 แถว T1 ยัง Declared สำหรับ Atlas).
 
+### Tool allowlist บน `/agent/run` (M15, 2026-10-28, thClaws 0.138.0 `d452ece`)
+
+Review `allowedTools` ตามแบบ M14 ด้วย source `d452ece` (path ใต้ `crates/core/src/`) ก่อนแก้โค้ด:
+
+1. **อ่าน config ทุก request**: `/agent/run` ใช้ `effective_config` = `AppConfig::load().unwrap_or_default()` แล้ว override เฉพาะ `model`/`max_tokens` ของ request
+   (`api_v1/agent.rs:501-511`) → ผู้เรียกส่ง tool list เองไม่ได้ และ settings ของ package มีผลกับ request ถัดไปโดยไม่ต้อง restart daemon.
+2. **ที่มาของรายการ**: `AppConfig::load` (`config.rs:2229-2288`) ใช้ user layer ก่อน (`THCLAWS_CONFIG` หรือ `~/.config/thclaws/settings.json`) แล้ว `ProjectConfig::load`
+   อ่าน `.thclaws/settings.json` ใต้ `$THCLAWS_PROJECT_ROOT` หรือ cwd ของ process (`config.rs:1179-1206`; `.claude/settings.json` เป็น fallback เมื่อไม่มีไฟล์แรกเท่านั้น).
+   `apply_to` ตั้ง `allowed_tools` จาก `permissions.allow` (ตัด `(...)`) แล้วให้ flat `allowedTools`/`disallowedTools` ทับ (`config.rs:712-730,814-819,1706-1715,1751-1757`)
+   → รายการของ package ชนะ user layer ของ operator; org policy เติมได้เฉพาะ deny (§4 M12 ข้อ 5).
+3. **กรองที่ไหน**: `build_runtime_with_provider` ลงทะเบียน `with_builtins` + KMS/Memory/`SessionRename` + `WebSearch` override + task tools + `WorkflowRun` แล้วเรียก
+   `apply_filter(allowed, disallowed, keep = ∅)` (`agent_runtime.rs:83-139`). `apply_filter` (`tools/mod.rs:473-497`): `allowed = Some(list)` ลบทุกชื่อที่ลงทะเบียนแล้วแต่ไม่อยู่ใน list
+   (ชื่อใน list ที่ไม่มีใน registry ถูกละไว้; `Some([])` ลบทั้งหมด) แล้วลบชื่อใน `disallowed`.
+4. **ลงทะเบียนหลัง filter จึงไม่ถูกกรอง**: media tools เมื่อ `imageToolsEnabled` (`agent_runtime.rs:144-152`, ไม่มี `requires_env`), HAL `YouTubeTranscript`/`WebScrape` เมื่อ `halEnabled`
+   (`:154-157`; มองเห็นเมื่อมี `HAL_API_KEY` หรือ gateway, `tools/hal.rs:198,303`), **`Skill`/`SkillList`/`SkillSearch`** เมื่อ `workspace_dir` มี skill (`:171-185`) และ **MCP tools**
+   ของทุก server ที่โหลด (`:189-197`) รวม Playwright MCP `browser` ที่ `AppConfig::load` ฉีดเมื่อ `browserEnabled` และพบ `npx` (`config.rs:2323-2331`). Package ที่ generate มี
+   `.thclaws/skills/<name>/SKILL.md` เสมอ → Skill ทั้งสามมีทุก request. ใครเปิด flag ได้: `ProjectConfig` เป็น `#[serde(default)]` และ default ของ `halEnabled`/`imageToolsEnabled` คือ
+   `Some(false)` (`config.rs:757-759,1026,1051-1052`) → เมื่อ package มี settings file ค่า project ทับ user layer เสมอ (`apply_to`, `config.rs:1808-1813`) ผู้เปิดได้จึงมีแค่ package และ gateway:
+   `gateway_on` (gateway pod หรือ `gatewayProxy`) บังคับ `hal_enabled = true` หลังทุก layer และทำให้ HAL tools มองเห็นได้โดยไม่มี key (`config.rs:2378-2408`, `tools/mod.rs:305-311,346,359`).
+   ส่วน `browserEnabled` default เป็น `None` (`config.rs:1054`) → user layer หรือ default ของ `AppConfig` (เปิด) ตัดสิน เว้นแต่ package ตั้งเอง; การฉีด `browser` อ่านค่าหลัง project layer.
+   ยืนยันด้วย binary (gate M15): user layer ที่เปิด HAL/media ไม่ทำให้ tool โผล่, package ที่เปิดเองทำให้ทั้งสองกลุ่มโผล่ครบแม้ `allowedTools: ["Read"]`.
+5. **ผลต่อ model และการเรียก**: tool list ที่ส่ง provider = `ToolRegistry::tool_defs()` ของ registry ที่กรองแล้ว (`tools/mod.rs:514-528`); call ชื่อที่ไม่อยู่ใน registry ได้ tool result
+   `unknown tool: <name>` แบบ `is_error` และไม่รัน (`agent.rs:1962-1978`) → SSE `tool_use_result` `status: "error"` ไม่ใช่ `tool_use_denied` (`api_v1/agent.rs:241-271`).
+6. **fail-open**: ไม่มี `.thclaws/settings.json` ที่ project root, JSON เสีย (`parse_or_warn` คืน None, `config.rs:1159-1170`) หรือ user layer parse ไม่ได้ (`AppConfig::load` error →
+   `unwrap_or_default`) = ไม่มี allowlist; `THCLAWS_PROJECT_ROOT` บน daemon ชี้ settings ไปที่อื่น. allowlist จึงผูกกับ daemon-per-package ที่ start ด้วย CWD=package
+   (เงื่อนไขเดียวกับ `mcp.json`/`system.md`) ไม่ใช่กับ `workspace_dir` ของ request.
+7. `thclaws agent pack` ตัดเฉพาะ key `agent` ของ settings (`cloud/pack.rs:147-164,222-234`) → archive คง `allowedTools` และ flag (gate M8 เทียบ settings ของ archive กับ package ลบ `agent`);
+   `thclaws agent validate` ไม่อ่าน `allowedTools` (`cloud/agent_cli.rs`).
+8. ไฟล์ทั้งหมดข้างบนไม่ต่างระหว่าง release `v0.138.0` (`e614db6`) กับ `d452ece`; filter บน `/agent/run` เข้ามาใน `v0.136.0` (`3b5b4b9`, upstream #221) → claim ตาม version
+   baseline `0.138.0` ของ Atlas (§4 "Revision provenance") ไม่ต้อง pin revision เพิ่ม.
+
+**การตัดสินใจ (M15)**:
+(a) เฉพาะ target Atlas (`atlas-worker`, `atlas-workflow`): `.thclaws/settings.json` มี `allowedTools` = `permissions.tools` เรียงตามชื่อ (built-in + qualified MCP; ชื่อ MCP ไม่มีผลบน `d452ece`
+แต่คงความหมายถ้า upstream ย้าย filter ไปหลัง MCP) และ pin `"browserEnabled": false` (จำเป็น: default ไม่ปิด), `"halEnabled": false`, `"imageToolsEnabled": false` (เท่ากับ default โดยนัยบน `d452ece` แต่เขียนชัดให้ drift audit เห็นและไม่พึ่ง
+default ของ upstream) เพื่อปิดกลุ่มในข้อ 4 ที่ package ปิดได้; ไม่ pin `gatewayProxy` เพราะเป็นการเลือก provider routing ของ operator → daemon ที่เปิด gateway ยังได้ HAL tools. standalone ไม่เปลี่ยน (CLI path, orchestrator ต้องใช้ `WorkflowRun`, role tools Enforced ตาม M9). (b) generator reject spec Atlas ที่ประกาศ tool กลุ่ม HAL/media
+(`LATE_BUILTIN_TOOLS`) เพราะถูก pin ปิด ไม่ตัดทิ้งเงียบ ๆ; จะเปิดได้ต้อง review ใหม่เพราะทั้งกลุ่มโผล่โดยไม่ถูกกรอง. (c) static audit: `.thclaws/settings.json` อยู่ใต้ rule `drift` อยู่แล้ว;
+gate M15 พิสูจน์ว่าการถอด/ขยาย `allowedTools` หรือเปิด flag กลับเป็น error. (d) guarantee matrix ของ Atlas: `tool_allowlist` = **Enforced** โดย basis ระบุว่าครอบเฉพาะ built-in ที่ลงทะเบียน
+ก่อน filter — **`Skill`/`SkillList`/`SkillSearch` และ MCP tools อยู่นอก claim** (inventory ของ MCP มาจาก pack + daemon ซึ่ง live audit ตรวจผ่าน `/v1/agent/info`), ต้อง start daemon ด้วย
+CWD=package โดยไม่มี `THCLAWS_PROJECT_ROOT`, settings หาย/เสีย = fail-open, gateway ที่เปิดอยู่เพิ่ม `WebScrape`/`YouTubeTranscript`. `no_shell` = **Enforced** เมื่อ `shell: none` (Bash ไม่อยู่ใน allowlist; MCP server ที่ spawn process เองอยู่นอก claim)
+และ `Not applicable` เมื่อประกาศ shell. `no_file_writes` คง `Not guaranteed`: built-in writer ที่ไม่ประกาศถูกถอด แต่ writer ที่ประกาศ, MCP และ runtime state ยังเขียนได้. (e) gate
+`check_m15_tool_allowlist.py`: offline (determinism, settings, rejection, drift, matrix) + native บน desktop build (daemon `--serve` จาก package ที่ generate จริง + stub provider): tool list
+ที่ส่ง model = allowlist ∪ Skill ทั้งสาม, forced `Bash`/`Write`/`WebScrape`/`TextToImage` ได้ `unknown tool` โดยไม่มีไฟล์เกิด แม้ user layer เปิด HAL/media, `Read` และ MCP ทำงาน; diagnostic
+`allowedTools: ["Read"]` + package เปิด HAL/media เห็น Skill, MCP และ HAL/media ครบ (ยืนยันข้อ 4 ด้วย binary); control ที่ถอด allowlist ทำให้ Bash รันได้; คืนไฟล์เดิมแล้ว Bash ถูกปฏิเสธอีกบน daemon เดิม (ข้อ 1); provider จริงผ่าน golden cases ของ package
+เดียวกัน (ไม่มี key → 2). ข้อจำกัดที่คงอยู่: allowlist ไม่ใช่ sandbox ของ MCP server, ไม่กรอง MCP tool ที่ server advertise, ไม่ครอบ daemon ที่ start จาก CWD อื่น และไม่ใช่ claim ของ standalone.
+
 ## 5. Capability pack
 
 pack คือความสามารถสำเร็จรูปที่ประกอบเข้า package ได้ อยู่ใน `packs/<name>/pack.yaml` ประกาศ: MCP servers / skills / scripts ที่เพิ่ม, env ที่ต้องการ (ชื่อ), tier ต่ำสุดที่ต้องใช้, fixture สำหรับ live audit ที่รันได้โดยไม่ต้องมีข้อมูลจริง
@@ -193,7 +238,7 @@ Lifecycle ของความสามารถหนึ่งตัว (ต�
 5. live audit (M6) start daemon isolated จาก package พร้อม env ของ fixture → golden cases ต้องผ่าน และ SSE ต้องมี tool event `google-weather__forecast` → `candidate`; ไม่มี key = คง `draft`
 6. deploy: operator ติดตั้ง runtime ของ MCP บน daemon ของ tier นั้น, ตั้ง env ตามชื่อใน report, ตั้ง egress ตาม `hosts`; `atlas-register.json` (M8) แนบรายการนี้ และ `/v1/agent/info` ใช้ยืนยันว่า daemon เห็น server หลัง deploy
 
-สถานะของ pack เป็นผลของ harness ไม่ใช่ field ที่เขียนเอง: ไม่มี descriptor = `missing`, มี descriptor และ asset ถูก bundle = `assets_bundled`, `forge pack test` ผ่านล่าสุด = `conformant` (บันทึกใน `pack-conformance.json` ของ pack และอ้างใน build report). guarantee ที่ pack ให้ได้จริงบน `/agent/run` มีสองอย่าง: daemon มี/ไม่มี server นี้ และ server ปฏิเสธ mutation เอง; การจำกัดว่า agent จะเรียก tool ไหนยังเป็น Declared ตาม §6
+สถานะของ pack เป็นผลของ harness ไม่ใช่ field ที่เขียนเอง: ไม่มี descriptor = `missing`, มี descriptor และ asset ถูก bundle = `assets_bundled`, `forge pack test` ผ่านล่าสุด = `conformant` (บันทึกใน `pack-conformance.json` ของ pack และอ้างใน build report). guarantee ที่ pack ให้ได้จริงบน `/agent/run` มีสองอย่าง: daemon มี/ไม่มี server นี้ และ server ปฏิเสธ mutation เอง; การจำกัดว่า agent จะเรียก tool ไหนบังคับได้เฉพาะ built-in ผ่าน `allowedTools` (M15, §6); MCP tools ทุกตัวที่ server advertise ยังถูกลงทะเบียน
 
 ## 6. Guarantee matrix (บังคับต้องมีในทุก build report)
 
@@ -220,11 +265,11 @@ Worker และ policy pin worker/workspace เป็น placeholder ที่ 
 
 | Claim | สถานะบน `/agent/run` วันนี้ | บังคับด้วย |
 |---|---|---|
-| ใช้ tool ตาม allowlist | Declared | prompt / package เท่านั้น |
-| ห้ามเขียนไฟล์ | Enforced เฉพาะกรณี | daemon แยก + ไม่มี write MCP + sandbox (Write/Edit ยังมี) |
+| ใช้ tool ตาม allowlist | **Enforced** สำหรับ built-in ตั้งแต่ M15 (0.138.0); Skill/SkillList/SkillSearch และ MCP tools อยู่นอก claim | `.thclaws/settings.json::allowedTools` = `permissions.tools` บน daemon ที่ start ด้วย CWD=package; flag browser/HAL/media pin ปิด; settings หาย/เสียหรือ `THCLAWS_PROJECT_ROOT` = fail-open (§4 "Tool allowlist บน `/agent/run`") |
+| ห้ามเขียนไฟล์ | Enforced เฉพาะกรณี | daemon แยก + ไม่มี write MCP + sandbox; built-in writer ที่ไม่ประกาศถูก `allowedTools` ถอด แต่ writer ที่ประกาศ, MCP และ runtime state ยังเขียนได้ |
 | T1 เขียนได้เฉพาะ `output/**` | Declared บน `/agent/run`; **Enforced** บน standalone `static-pipeline` ตั้งแต่ M14 (เฉพาะ `Write`/`Edit` ของ worker บน 0.138.0/`d452ece`) | `/agent/run`: `permissions.write_scope=output` เท่านั้น; standalone: native `writePaths: output/**` ของ worker + tree diff ใน live audit (§4 "Standalone T1 rollout") |
 | `collect_files` เป็นผลลัพธ์ | Enforced เป็น snapshot | thClaws copy ไฟล์ที่มีอยู่หลัง run; ไม่ยืนยันว่า agent เขียนไฟล์นั้น |
-| ห้าม shell | Not guaranteed | runtime register Bash เสมอ |
+| ห้าม shell | **Enforced** เมื่อ `shell: none` ตั้งแต่ M15 | Bash ไม่อยู่ใน `allowedTools` จึงถูกถอดก่อนส่ง tool list (gate M15: forced Bash ได้ `unknown tool`); MCP server ที่ spawn process เองอยู่นอก claim |
 | `network: none` ไม่มี web built-in ใน declaration | Static check | reject `WebFetch`, `WebSearch`, `WebScrape`, `FetchImages`, `YouTubeTranscript`; runtime egress ยังไม่ถูกบังคับ |
 | network เฉพาะ host | Not guaranteed | policy allowlist ครอบเฉพาะ URL ตอนติดตั้ง plugin/skill/MCP config; `net_guard` กันแค่ private IP ของ WebFetch/WebScrape/FetchImages → ต้องใช้ egress control ของเครื่อง |
 | ต้องมีคนอนุมัติก่อน side effect | Not verified สำหรับ package ที่ generate; Enforced เฉพาะ deployment ที่ตรวจแล้ว | ต้องผ่าน Atlas `human_gate` ก่อน worker และ operator bind worker/workspace กับ T2 daemon แยกที่ยืนยันแล้ว; การเรียก `/agent/run` โดยตรงสามารถข้าม gate นี้ได้ |
@@ -254,6 +299,7 @@ M1 ตรวจว่า embedded schema เป็น JSON Schema ที่ถ�
 ## 8. ผลลัพธ์ของ builder
 
 - package โฟลเดอร์ตาม format `thclaws agent new` (manifest.json, AGENTS.md, `.thclaws/{settings.json,skills/,schemas/,scripts/,agents/}`) — script ของ pack วางใน `.thclaws/scripts/` เพราะเป็นที่เดียวที่ `thclaws agent validate` syntax-check python
+- `.thclaws/settings.json` ของ target Atlas (M15) มี `allowedTools` = `permissions.tools` เรียงตามชื่อ และ `browserEnabled`/`halEnabled`/`imageToolsEnabled` = `false`; มีผลเฉพาะ daemon ที่ start ด้วย CWD=package (§4 "Tool allowlist บน `/agent/run`"); standalone ไม่มี key เหล่านี้
 - `.thclaws/mcp.json` เมื่อ pack ประกาศ MCP servers (M7a): generate `mcpServers` จาก command/args ของ pack เท่านั้น ไม่มีค่า secret; operator ตั้ง env และ start daemon โดยใช้ CWD=package ตาม §4
 - `.thclaws/prompt/system.md` (M7b, จาก `templates/system.md.j2`): mission-runner profile ที่แทน base prompt ของ coding assistant ตาม §4; ข้อความกลาง ไม่มีส่วนเฉพาะ pack และไม่มีวงเล็บปีกกา; โหลดเฉพาะเมื่อ daemon start จาก CWD=package เช่นเดียวกับ mcp.json
 - `builder-build-report.json` (schema: `builder-build-report.schema.json`, สร้างและตรวจใน M4): target, generated files, guarantee matrix, audit result, compatibility result, deployment hints
@@ -331,7 +377,7 @@ Layout และ live gate ของ builder (M13, thClaws 0.138.0 `d452ece`; �
 
 ## 10. นอกขอบเขต MVP (future)
 
-- patch `agent_runtime.rs` ให้ `/agent/run` เคารพ `allowed_tools` / `disallowed_tools` / MCP allowlist / write-path (ต้อง filter ทั้ง tool definitions และ invocation จริง) — ควร upstream
+- patch `agent_runtime.rs` ให้ `/agent/run` เคารพ MCP/Skill allowlist / write-path (ต้อง filter ทั้ง tool definitions และ invocation จริง) — ควร upstream; built-in `allowed_tools`/`disallowed_tools` upstream ทำแล้วใน 0.136.0 และ builder adopt ใน M15
 - `agent_profile` บน `/agent/run` + `profiles[]` ใน `/v1/agent/info`
 - auto-deploy ผ่าน `/v1/deploy` และ bundle version tracking (รวมกับ Atlas M4 Fleet)
 - semantic router, marketplace, runtime framework ใหม่ — ไม่ทำ
@@ -391,7 +437,7 @@ env literal สำหรับ stdio, `${VAR}` เฉพาะ headers, allowlis
    ซึ่ง `ProjectConfig` (`<cwd>/.thclaws/settings.json`) ตั้งได้ด้วย `allowedTools` / `disallowedTools` (รวม `permissions.allow/deny`
    แบบ Claude Code). ผลคือ `/agent/run` ของ daemon ที่ start จาก CWD=package **บังคับ tool allowlist ได้** เป็นครั้งแรก. M12 ยังไม่ใช้
    ช่องทางนี้: generator ไม่เขียน `allowedTools` และ guarantee matrix คง `tool_allowlist: Declared` จนกว่าจะมี milestone ที่ generate +
-   พิสูจน์ด้วย native gate (tool ที่ไม่อยู่ใน allowlist ต้องหายจาก registry/ถูกปฏิเสธจริง). `apply_filter` ไม่กรอง MCP tools ที่โหลดหลังจากนั้นหรือไม่ ต้องตรวจตอนทำ
+   พิสูจน์ด้วย native gate (tool ที่ไม่อยู่ใน allowlist ต้องหายจาก registry/ถูกปฏิเสธจริง) — adopt แล้วใน M15 ("Tool allowlist บน `/agent/run`"). `apply_filter` ไม่กรอง MCP tools ที่โหลดหลังจากนั้นหรือไม่ ต้องตรวจตอนทำ
    (ตรวจแล้วใน M13: **ไม่กรอง** ทั้ง MCP และ Skill tools เพราะถูกเรียกก่อนลงทะเบียนสองกลุ่มนั้น — ดู "Host + bots layout" ข้อ 10).
 2. `KmsEditTool` ถูกลงทะเบียนเพิ่มใน `/agent/run` → catalog `patterns/tools-0.138.0.json` มี 69 tools (= catalog 0.116.0 + `KmsEdit`;
    ตรวจแล้วว่าทุกชื่อใน catalog เดิมยังเป็น tool name ใน source). `KmsEdit` เป็น writer ใต้ `.thclaws/` → `WORKSPACE_STATE_TOOLS`

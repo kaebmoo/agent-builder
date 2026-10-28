@@ -51,7 +51,7 @@ Exit code: `0` = package เป็น `draft`, `1` = มี error (กฎ static
 ## สิ่งที่ M5 ไม่ตรวจ
 
 - MCP ถูกติดตั้งบน daemon จริงหรือไม่ และ agent เรียก skill/MCP จริงหรือไม่ (live audit M6)
-- permission ถูกบังคับที่ runtime: guarantee matrix ไม่เปลี่ยนจาก M4 เพราะ `/agent/run` ยังไม่ enforce (DESIGN §4, §6)
+- permission ถูกบังคับที่ runtime: static audit ตรวจเฉพาะว่า `.thclaws/settings.json` (รวม `allowedTools` และ flag browser/HAL/media ของ target Atlas, M15) ตรงกับ render ทุก byte; การที่ `/agent/run` ถอด built-in นอก allowlist จริงพิสูจน์ใน `check_m15_tool_allowlist.py` ไม่ใช่ใน audit (DESIGN §4 "Tool allowlist บน `/agent/run`", §6)
 - `sql-reader` ผ่าน static audit ได้ด้วย SQL pack v2 ของ M7a; การมี descriptor ไม่ยืนยันว่า runtime ถูกติดตั้ง ต้องใช้ `forge pack test` และ live audit ตามลำดับ
 - standalone package: static-pipeline T0 (M9) และ T1 (M14); role/workflow drift เป็น error (รวม `writePaths` ของ worker ใน T1) และ AGENTS.md ต้องระบุ WorkflowRun กับ path ที่ generate; สำหรับ package T1 inventory ถือ `output/**` เป็น runtime output ไม่ใช่ไฟล์ undeclared (ยังเป็น finding ใน T0/T2) และ `thclaws agent validate` ถูกรับรองตามคู่ version+revision ของ tier (T1 เฉพาะ `0.138.0/d452ece`)
 
@@ -148,6 +148,10 @@ python3 scripts/check_m9_standalone.py
 
 # Upstream writePaths diagnostic บน role ที่ gate เขียนเอง (ใช้ประเมิน binary รุ่นใหม่): ไม่มี binary = 2, พบ bypass = 1, ปฏิเสธครบ = 0
 python3 scripts/check_m9_standalone.py --write-boundary
+
+# Gate ของ tool allowlist บน /agent/run (M15): ไม่มี binary, build CLI-only หรือไม่มี key = 2, binary ที่ไม่ใช่ 0.138.0 = 1
+python3 scripts/check_m15_tool_allowlist.py
+python3 scripts/check_m15_tool_allowlist.py --model oai/gpt-5.4-mini --provider-key-env OPENAI_COMPAT_API_KEY
 
 # Gate ของ T1 ที่ส่งมอบ (M14): package จริงจาก generator; ไม่มี binary หรือ key = 2, binary ที่ไม่ใช่คู่ T1 = 1
 python3 scripts/check_m14_standalone_t1.py

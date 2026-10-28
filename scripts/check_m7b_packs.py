@@ -211,7 +211,7 @@ def check(work, *, live=False, model=None, key_env='OPENAI_API_KEY'):
     t2 = {row['claim']: row['status'] for row in report['guarantee_matrix']}
     assert t0['human_approval'] == 'Not applicable' and t2['human_approval'] == 'Not verified'
     assert t0['no_network_builtins'] == 'Static check' and t2['no_network_builtins'] == 'Not applicable'
-    assert t0['no_shell'] == t2['no_shell'] == 'Not guaranteed'
+    assert t0['no_shell'] == t2['no_shell'] == 'Enforced'  # M15: Bash is absent from allowedTools
     template = json.loads(first['atlas-node-template.json'])
     requirements = template['deployment_requirements']
     assert requirements['isolated_daemon_required'] and not requirements['deployment_verified']
