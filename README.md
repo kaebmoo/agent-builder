@@ -76,8 +76,13 @@ python3 scripts/check_m12_baseline.py
 
 - Python 3.11+
 - thClaws baseline `0.138.0` revision `d452ece` สำหรับ Atlas/export/catalog (M12, 2026-10-27; เดิม 0.116.0); standalone T0 รองรับคู่ version+revision 0.116.0/`75edc48`, 0.121.0/`35ccf16`, 0.129.0/`7a27129`, 0.138.0/`d452ece` (รุ่นอื่น fail จนกว่าจะตรวจ DESIGN §4 ใหม่); `thclaws agent validate` / `thclaws agent pack` ต้องอยู่ใน PATH หรือ `THCLAWS_BIN` สำหรับ M4 ขึ้นไป
-- Atlas control plane สำหรับ M8: `forge export` ทำงานได้โดยไม่ต้องมี Atlas; ส่วน native ของ `check_m8_export.py` ใช้ checkout ที่
-  `../atlas-control-plane` หรือ `ATLAS_ROOT` (ไม่พบ → skip exit 2)
+- standalone T1 (M14) รับรองเฉพาะคู่ 0.138.0/`d452ece` (`STANDALONE_T1_THCLAWS_COMPATIBILITY`); คู่ T0 รุ่นเก่ายังเป็น T0 เท่านั้น
+- gate ส่วนที่ต้องสตาร์ท daemon (`thclaws --serve`: M6, M7b live, M8 poll, M11 live, M13, M15, M16) ต้องใช้ desktop build ของ thClaws (`thclaws --help` มี `bots`);
+  build แบบ CLI-only ไม่มี `--serve` (DESIGN §4 "Host + bots layout" ข้อ 13) จึงตรวจส่วนนั้นไม่ได้
+- Atlas control plane สำหรับ M8 และ M16: `forge export` ทำงานได้โดยไม่ต้องมี Atlas; ส่วน native ของ `check_m8_export.py` และ `check_m16_host_deploy.py`
+  ใช้ checkout ที่ `../atlas-control-plane` หรือ `ATLAS_ROOT` ซึ่งต้องอยู่ที่ revision ที่ pin `daa0f49` (ไม่พบ → skip exit 2; อยู่คนละ revision → fail exit 1)
+- SQL pack สำหรับ M6/M7a: `pip install -e ".[sql-pack]"` (`mcp>=1.26,<2`; mcp 2.x ไม่มี `mcp.server.fastmcp`) และ checkout ของ `kaebmoo/AI` ที่ `d95dc28`
+  ชื่อ `AI` วางข้าง checkout ของ agent-builder (ไม่พบ → skip exit 2; อยู่คนละ revision → fail exit 1); ใช้โฟลเดอร์คู่ worktree ตาม `docs/local-test-plan.md` ข้อ 7
 
 ## License
 

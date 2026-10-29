@@ -342,7 +342,8 @@ evidence `candidate` เดิมเป็นของ 0.116.0 ทั้งห�
 ข้อเสนอ milestone ถัดไป (เลขเลื่อนเมื่อเพิ่ม M13): M14 ปลด T1 standalone (ทำแล้ว 2026-10-28 ดูย่อหน้า "M14 ทำใน cloud"),
 M15 adopt `allowedTools` ใน `.thclaws/settings.json` เพื่อยก `tool_allowlist` บน `/agent/run` จาก Declared เป็น Enforced พร้อม native proof (ทำแล้ว 2026-10-28 ดูย่อหน้า "M15 ทำ (Mac)")
 (ต้องรับข้อค้นพบ M13 ว่า `apply_filter` ถูกเรียกก่อนลงทะเบียน Skill/MCP tools จึงไม่กรองสองกลุ่มนั้น), และ M16 (มีเงื่อนไข) host deployment สำหรับ
-package ที่มีเฉพาะ `prompt_json`/`assistant_json` หลังพิสูจน์บน Mac ตาม DESIGN §4 การตัดสินใจ (e).
+package ที่มีเฉพาะ `prompt_json`/`assistant_json` หลังพิสูจน์บน Mac ตาม DESIGN §4 การตัดสินใจ (e) (พิสูจน์และทำแล้ว 2026-10-28 ดูย่อหน้า "M16 ทำ (Mac)";
+merge เข้า main 2026-10-29). ยังไม่มี milestone ที่วางแผนต่อจาก M16.
 
 ผล live บน Mac 2026-10-27 (checkout `0837eef`, binary 0.138.0 `d452ece` desktop build, `oai/gpt-5.4-mini`; รายละเอียดใน `docs/thclaws-host-bots-brief.md`):
 M9 live exit 0 และ `--write-boundary` exit 0; M7b `--live` fail 3/3 ตามคำสั่งในแผน แต่ผ่าน 4/4 เมื่อตั้ง `THCLAWS_AUTO_MIGRATE=0` ผ่าน launcher นอก repo;

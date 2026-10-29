@@ -1,5 +1,10 @@
 # ประเด็นสำหรับวางแผน: ใช้ layout host + bots ของ thClaws 0.138.0
 
+> สถานะ (2026-10-29): แผนนี้ทำแล้ว — M13 (scoped adoption: `builder/` เป็น host workspace, harness ตั้ง `THCLAWS_AUTO_MIGRATE=0` และตรวจ layout จริง,
+> package ที่ generate คง single-agent) และ M16 (host deployment ของ package `prompt_json`/`assistant_json` ผ่าน `forge export --layout host`).
+> ข้อเท็จจริงและการตัดสินใจที่ใช้จริงอยู่ที่ DESIGN §4 "Host + bots layout" และ "Host deployment ของ package prompt/assistant" กับ `docs/PLAN.md`;
+> เนื้อหาข้างล่างเป็นบันทึกการวางแผน ณ 2026-10-27 และไม่อัปเดตตามอีก
+
 ที่มา: ผลจากการรัน `docs/local-test-plan.md` บน Mac เมื่อ 2026-10-27 · checkout `0837eef` · thClaws `0.138.0` revision `d452ece` ·
 model `oai/gpt-5.4-mini` ผ่าน MATCHA (`OPENAI_COMPAT_*`) เอกสารนี้เป็นข้อมูลสำหรับวางแผนเท่านั้น ยังไม่มีการแก้ gate, harness หรือ DESIGN
 
