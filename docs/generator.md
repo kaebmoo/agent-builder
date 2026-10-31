@@ -18,7 +18,7 @@ forge generate fixtures/sql-reader/spec.yaml --out out/sql-reader
 
 ## ไฟล์ที่ได้
 
-- `manifest.json` และ `.thclaws/settings.json`: identity/catalog fields ตาม thClaws v0.116.0 (ไม่เปลี่ยนถึง 0.138.0/`d452ece`, M12). ส่งต่อให้ `thclaws agent validate` ตรวจ ไม่สร้าง manifest validator อีกชุด
+- `manifest.json` และ `.thclaws/settings.json`: identity/catalog fields ตาม thClaws v0.116.0 (ไม่เปลี่ยนถึง 0.138.0/`d452ece` M12 และ 0.146.0/`9f69995` M17). ส่งต่อให้ `thclaws agent validate` ตรวจ ไม่สร้าง manifest validator อีกชุด
 - `.thclaws/settings.json` ของ target Atlas (M15) มี `allowedTools` = `permissions.tools` เรียงตามชื่อ และ `browserEnabled`/`halEnabled`/`imageToolsEnabled` = `false`: daemon ที่ start ด้วย CWD=package ถอด built-in อื่นทั้งหมดก่อนส่ง tool list ให้ model; Skill/SkillList/SkillSearch และ MCP tools ไม่ถูกกรอง (DESIGN §4 "Tool allowlist บน `/agent/run`"). Spec Atlas ที่ประกาศ HAL/media tools (`WebScrape`, `YouTubeTranscript`, `TextToImage` ฯลฯ) ถูก reject เพราะกลุ่มนี้ลงทะเบียนหลัง filter และถูก pin ปิด. Standalone ไม่มี key เหล่านี้
 - `AGENTS.md` และ `.thclaws/skills/<identity.name>/SKILL.md`: mission, permission declarations, refusal และ output จาก spec
 - `agentspec.json`: source contract ที่ serialize แบบ canonical JSON
@@ -67,7 +67,7 @@ Gate ตรวจซ้ำทั้งสอง fixture แบบ byte-for-byte,
 - `1`: generation, contract, compatibility baseline หรือ native validation ล้มเหลว
 - `2`: offline checks ผ่าน แต่ไม่มี `thclaws` จึงประกาศ skip native checks
 
-Native gate ตรวจ thClaws baseline `0.138.0` (M12; เดิม 0.116.0); ถ้า version เปลี่ยนต้องตรวจและปรับ DESIGN ก่อนเปลี่ยน baseline. บนเครื่องที่ binary อยู่ใน source checkout ใช้ PATH เฉพาะ command เช่น:
+Native gate ตรวจ thClaws baseline `0.146.0` (M17; เดิม 0.138.0 ใน M12 และ 0.116.0 ก่อนนั้น); ถ้า version เปลี่ยนต้องตรวจและปรับ DESIGN ก่อนเปลี่ยน baseline. บนเครื่องที่ binary อยู่ใน source checkout ใช้ PATH เฉพาะ command เช่น:
 
 ```bash
 PATH="/path/to/thClaws/target/debug:$PATH" python3 scripts/check_m4_generate.py
@@ -98,11 +98,11 @@ Tools อื่น (รวม KMS/Memory writers, Task/WorkflowRun และ unk
 Role definitions และ workflow เป็นไฟล์ deterministic ที่แก้เองแล้ว static audit fail ด้วย drift.
 
 T1 (M14, DESIGN §4 "Standalone T1 rollout", fixture `fixtures/note-writer-standalone/`): `permissions.write_scope: output` กับ tools ที่เพิ่มได้เฉพาะ
-`Write`/`Edit` (ต้องมีอย่างน้อยหนึ่ง; Docx/Pptx/Xlsx/Pdf/Epub/NotebookEdit/FetchImages ถูก reject ชัดว่ายังไม่รองรับ). planner/verifier ยังเป็น T0 (read-only)
+`Write`/`Edit` (ต้องมีอย่างน้อยหนึ่ง; Docx/Pptx/Xlsx/Pdf/Epub/NotebookEdit/FetchImages/DocConvert ถูก reject ชัดว่ายังไม่รองรับ). planner/verifier ยังเป็น T0 (read-only)
 ส่วน `worker.md` ได้ Write/Edit พร้อม `writePaths: output/**` ซึ่ง thClaws บังคับที่ runtime โดย resolve ปลายทางผ่าน sandbox (traversal, symlink และ dangling symlink
-ถูกปฏิเสธบน 0.138.0 `d452ece`). Package ไม่ ship `output/` (Write สร้าง parent เอง) และ static audit ถือ `output/**` เป็น runtime output เฉพาะ package T1.
+ถูกปฏิเสธบน 0.138.0 `d452ece` และ 0.146.0 `9f69995`). Package ไม่ ship `output/` (Write สร้าง parent เอง) และ static audit ถือ `output/**` เป็น runtime output เฉพาะ package T1.
 Guarantee matrix ของ T1: `output_write_scope: Enforced` (ครอบเฉพาะ Write/Edit ของ worker; Bash ไม่มีในทุก role; MCP tools และ runtime state อยู่นอก boundary),
-`no_file_writes: Not applicable`. T1 รับรองเฉพาะคู่ runtime `0.138.0/d452ece` (`STANDALONE_T1_THCLAWS_COMPATIBILITY`) เพราะ writePaths ของ 0.116.0 `75edc48`
+`no_file_writes: Not applicable`. T1 รับรองคู่ runtime `0.138.0/d452ece` และ `0.146.0/9f69995` (M17) (`STANDALONE_T1_THCLAWS_COMPATIBILITY`) เพราะ writePaths ของ 0.116.0 `75edc48`
 ตรวจ raw glob (`output/../traversal.txt` หลุด) และ 0.129.0 `7a27129` ยังหลุดกรณี dangling symlink; คู่เก่ายังรับรอง T0 เท่านั้น.
 Live audit ของ standalone ทุก tier ทำ tree diff ของ case directory: ไฟล์นอก `output/` (ยกเว้น `.thclaws/state/`, `.thclaws/sessions/`) ทำให้ case fail และ T0 ต้องไม่เขียนไฟล์ใดเลย.
 T0 ที่ส่งมอบยังมี `output_write_scope: Not applicable` และ `no_file_writes: Not guaranteed`: ไม่มี write tools ใน role แต่ runtime state/MCP ไม่ใช่ filesystem isolation.
@@ -110,6 +110,6 @@ T0 ที่ส่งมอบยังมี `output_write_scope: Not applicabl
 
 
 รองรับ native validation ของ standalone T0 บน thClaws 0.116.0 (`75edc48`), 0.121.0 (`35ccf16`),
-0.129.0 (`7a27129`) และ 0.138.0 (`d452ece`) เท่านั้น; ต้องตรงทั้ง version และ revision. Atlas/export ยัง pin 0.116.0.
+0.129.0 (`7a27129`), 0.138.0 (`d452ece`) และ 0.146.0 (`9f69995`) เท่านั้น; ต้องตรงทั้ง version และ revision. Atlas/export pin 0.146.0 (M17).
 `thclaws_baseline` ใน report คือ template/catalog baseline;
 ดู runtime ที่ใช้จริงใน `static_audit.thclaws_validate.version`.

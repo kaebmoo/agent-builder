@@ -56,6 +56,9 @@ M12 (2026-10-27) ย้าย baseline thClaws ไป 0.138.0/`d452ece` หล�
 M15 (2026-10-28): package ที่ deploy กับ Atlas ประกาศ `allowedTools` = `permissions.tools` ใน `.thclaws/settings.json` และ pin `browserEnabled`/`halEnabled`/`imageToolsEnabled` = false
 จึงบังคับ allowlist ของ built-in บน `/agent/run` ได้จริงบน thClaws 0.138.0/`d452ece` (`tool_allowlist` และ `no_shell` เมื่อ `shell: none` เป็น Enforced; Skill และ MCP tools
 อยู่นอก claim) พร้อม gate `check_m15_tool_allowlist.py`; package Atlas ที่ generate ก่อน M15 จะ drift ที่ `.thclaws/settings.json` ต้อง generate ใหม่ ดู DESIGN §4/§6.
+M17 (2026-10-31) ย้าย baseline thClaws ไป 0.146.0/`9f69995` หลังตรวจ DESIGN §4 ทุก claim ซ้ำกับ source ("Baseline 0.146.0 / 9f69995": catalog เพิ่ม `DocConvert`, write landing #223,
+host root โหลด `AGENTS.md` เข้าทุก bot, MCP allowlist keyed ทั้ง command line, office/RAG MCP ที่ engine ฉีดเอง, keychain ตอน start); คู่ standalone T0/T1 เพิ่ม `0.146.0/9f69995`
+และ gate `check_m17_baseline.py`; ส่วนที่ยังไม่ adopt (pin `officeApps`) อยู่ใน DESIGN §4 M17 ข้อ 5.
 
 ```bash
 python3 scripts/check_m7b_packs.py
@@ -75,8 +78,8 @@ python3 scripts/check_m12_baseline.py
 ## ข้อกำหนดขั้นต่ำ
 
 - Python 3.11+
-- thClaws baseline `0.138.0` revision `d452ece` สำหรับ Atlas/export/catalog (M12, 2026-10-27; เดิม 0.116.0); standalone T0 รองรับคู่ version+revision 0.116.0/`75edc48`, 0.121.0/`35ccf16`, 0.129.0/`7a27129`, 0.138.0/`d452ece` (รุ่นอื่น fail จนกว่าจะตรวจ DESIGN §4 ใหม่); `thclaws agent validate` / `thclaws agent pack` ต้องอยู่ใน PATH หรือ `THCLAWS_BIN` สำหรับ M4 ขึ้นไป
-- standalone T1 (M14) รับรองเฉพาะคู่ 0.138.0/`d452ece` (`STANDALONE_T1_THCLAWS_COMPATIBILITY`); คู่ T0 รุ่นเก่ายังเป็น T0 เท่านั้น
+- thClaws baseline `0.146.0` revision `9f69995` สำหรับ Atlas/export/catalog (M17, 2026-10-31; เดิม 0.138.0/`d452ece` ใน M12 และ 0.116.0 ก่อนนั้น); standalone T0 รองรับคู่ version+revision 0.116.0/`75edc48`, 0.121.0/`35ccf16`, 0.129.0/`7a27129`, 0.138.0/`d452ece`, 0.146.0/`9f69995` (รุ่นอื่น fail จนกว่าจะตรวจ DESIGN §4 ใหม่); `thclaws agent validate` / `thclaws agent pack` ต้องอยู่ใน PATH หรือ `THCLAWS_BIN` สำหรับ M4 ขึ้นไป
+- standalone T1 (M14) รับรองคู่ 0.138.0/`d452ece` และ 0.146.0/`9f69995` (M17) (`STANDALONE_T1_THCLAWS_COMPATIBILITY`); คู่ T0 รุ่นเก่ายังเป็น T0 เท่านั้น
 - gate ส่วนที่ต้องสตาร์ท daemon (`thclaws --serve`: M6, M7b live, M8 poll, M11 live, M13, M15, M16) ต้องใช้ desktop build ของ thClaws (`thclaws --help` มี `bots`);
   build แบบ CLI-only ไม่มี `--serve` (DESIGN §4 "Host + bots layout" ข้อ 13) จึงตรวจส่วนนั้นไม่ได้
 - Atlas control plane สำหรับ M8 และ M16: `forge export` ทำงานได้โดยไม่ต้องมี Atlas; ส่วน native ของ `check_m8_export.py` และ `check_m16_host_deploy.py`
@@ -89,6 +92,6 @@ python3 scripts/check_m12_baseline.py
 Apache-2.0 (ดู [LICENSE](LICENSE) และ [NOTICE](NOTICE)) — ครอบเฉพาะโค้ดของ builder; package ที่ generate ออกมาเป็นของผู้ใช้ ใช้ license ตาม `identity.license` ใน AgentSpec
 
 Live audit (M6): `forge live-test out/sql-reader --write` หรือ `forge audit out/sql-reader --live --write`.
-ต้องมี thClaws baseline (0.138.0) และ provider key ใน environment (`OPENAI_API_KEY` สำหรับ fixture SQL).
+ต้องมี thClaws baseline (0.146.0) และ provider key ใน environment (`OPENAI_API_KEY` สำหรับ fixture SQL).
 ไม่มี key จะรายงาน SKIP (exit 2) และคง `draft`; ผ่าน golden cases และหลักฐาน MCP จึงเป็น `candidate`.
 รายละเอียดและขอบเขตการตรวจอยู่ใน [docs/audit.md](docs/audit.md).

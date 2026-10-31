@@ -37,7 +37,7 @@ forge export out/publisher --out out/publisher-export \
   เชื่อตาม report ที่ผ่าน schema (schema ผูก status กับหลักฐาน audit ไว้แล้ว) ไม่ได้รัน static audit หรือ live audit ซ้ำ
 - `atlas-workflow.json` เฉพาะ target `atlas-workflow`: POST เข้า `/api/workflows` ได้ตรง ๆ หลัง register worker/workspace
 - `<name>-<version>.tar.gz` + `.sha256` จาก `thclaws agent pack` (binary จาก PATH หรือ `THCLAWS_BIN`); ไม่มี binary → ข้าม
-  archive และ exit 2; binary ที่ไม่ใช่ baseline `0.138.0` (M12; เดิม 0.116.0) → exit 1. หลัง pack export เปิด archive ตรวจว่าสมาชิกเท่ากับ
+  archive และ exit 2; binary ที่ไม่ใช่ baseline `0.146.0` (M17; เดิม 0.138.0 ใน M12) → exit 1. หลัง pack export เปิด archive ตรวจว่าสมาชิกเท่ากับ
   `generated_files` ของ report และ byte ตรงกับ package ยกเว้น `manifest.json`/`.thclaws/settings.json`; `thclaws agent pack`
   ตัด path ที่มี `_secret` และไฟล์ `.env`/`.key`/`.log`/`.pyc` ออกเงียบ ๆ ดังนั้น pack script ชื่อ `client_secret.py` หรือ input
   ชื่อ `api_secret` (ได้ `inputs--api_secret.json`) ทำให้ export fail แทนที่จะได้ archive ที่ daemon รันต่อโดยไม่มี MCP
@@ -57,11 +57,15 @@ guarantee matrix ใน build report คือคำรับรองเดี�
 
 1. แตก archive ที่ `deployment.package_root` บนเครื่อง worker ตรวจ sha256 แล้ว start `thclaws --serve` จาก directory นั้น
    พร้อม `THCLAWS_API_TOKEN`, **`THCLAWS_AUTO_MIGRATE=0`** และ env ตามชื่อใน `deployment.env`. Package ต้องคงเป็น single-agent workspace
-   (DESIGN §4 "Host + bots layout", §8): desktop build ของ thClaws 0.138.0 จะแปลงโฟลเดอร์ที่เปิดด้วย `--serve`/desktop เป็น host workspace ในที่เดิม
+   (DESIGN §4 "Host + bots layout", §8): desktop build ของ thClaws 0.138.0+ (ตรวจถึง 0.146.0) จะแปลงโฟลเดอร์ที่เปิดด้วย `--serve`/desktop เป็น host workspace ในที่เดิม
    และเขียนทับ AGENTS.md/skills/scripts ทำให้ `workspace_dir` ที่ Atlas ลงทะเบียนไม่ใช่ agent อีกต่อไป จึงห้ามเปิด package ใน desktop app หรือรัน
    `thclaws bots migrate` กับมัน; ถ้าเกิดขึ้นให้ deploy ใหม่จาก archive. ตรวจ `GET /v1/agent/info` ว่า `workspace_dir` เท่ากับ `deployment.package_root`.
    Tree ที่แตกได้ต่างจาก package ที่ audit เฉพาะ `manifest.json` (identity ที่ fuse) และ `.thclaws/settings.json` (block `agent` ถูกตัด)
-   จึงรัน `audit.py`/`forge audit` กับ source package ไม่ใช่ tree ที่แตก
+   จึงรัน `audit.py`/`forge audit` กับ source package ไม่ใช่ tree ที่แตก.
+   MCP ของ pack (DESIGN §4 M17 ข้อ 4, 5, 11): ถ้าไม่ตั้ง `THCLAWS_MCP_ALLOW_ALL=1` ให้ daemon ตั้งแต่ 0.146.0 `~/.config/thclaws/mcp_allowlist.json` ต้องมี**ทั้ง command line**
+   (`command` + `args`) ของทุก server ใน `.thclaws/mcp.json` ไม่ใช่แค่ command; org policy ที่ปิด external MCP ทำให้ server ของ pack ไม่ spawn; เครื่องที่มี office app binaries
+   (`craft/` ข้าง binary, `/opt/craft/bin`) หรือ AI Server hub ที่ `127.0.0.1:9000` ได้ MCP server เพิ่ม (`grid`/`word`/`deck`, `aiserver-rag`) ที่ไม่อยู่ใน `deployment.mcp_servers` →
+   ปิดด้วย `THCLAWS_OFFICE_APPS=` (ว่าง) และ `LITELLM_BASE_URL` หรืออย่าติดตั้ง. ทั้งสามกรณี reachability check ข้อ 5 จับได้
 2. `POST /api/workers` ด้วย `worker` + `token`; `POST /api/workspaces` ด้วย `workspace`
 3. Atlas upsert worker ด้วย `id` หรือ `base_url`: URL ที่ลงทะเบียนให้ worker อื่นแล้วจะเขียนทับ worker นั้นแทนการสร้าง
    `wrk_<name>` และ workflow ของ package ใหม่จะอ้าง worker ที่ไม่มี → ใช้ URL แยกต่อ daemon หรือระบุ `--worker-id` ให้ตรง worker เดิม
@@ -72,7 +76,7 @@ guarantee matrix ใน build report คือคำรับรองเดี�
 
 ## Host layout (M16)
 
-ทางเลือกสำหรับเครื่องที่ใช้ desktop build ของ thClaws 0.138.0 เป็น host (DESIGN §4 "Host deployment ของ package prompt/assistant"):
+ทางเลือกสำหรับเครื่องที่ใช้ desktop build ของ thClaws 0.138.0+ (ตรวจถึง 0.146.0) เป็น host (DESIGN §4 "Host deployment ของ package prompt/assistant"):
 
 ```bash
 forge export out/echo-reader --out out/echo-reader-host --layout host \
@@ -86,7 +90,8 @@ forge export out/echo-reader --out out/echo-reader-host --layout host \
   `deployment.host_files` คือ `.thclaws/settings.json` (`{"workspaceVersion": 4}`) กับ `.thclaws/bots.json` (bot เดียว slug = ชื่อ package); archive เหมือน single-agent ทุก byte
 - ติดตั้ง: สร้าง host root ที่มีเฉพาะ `host_files`, แตก archive ที่ `package_root`, start `thclaws --serve` ที่ host root พร้อม `THCLAWS_API_TOKEN`,
   `THCLAWS_AUTO_MIGRATE=0` และ env ตาม `deployment.env` (host ส่งต่อให้ agent process ที่ spawn ด้วย cwd = bot dir). Atlas ถึงเฉพาะ bot แรกใน `bots.json`
-  (`base_url` ห้าม `?bot=`) จึงหนึ่ง package ต่อหนึ่ง host. ตรวจ `/v1/agent/info.workspace_dir` = `package_root` และไฟล์ของ bot นอก `.thclaws/state/` เท่ากับ archive
+  (`base_url` ห้าม `?bot=`) จึงหนึ่ง package ต่อหนึ่ง host. ตรวจ `/v1/agent/info.workspace_dir` = `package_root` และไฟล์ของ bot นอก `.thclaws/state/` เท่ากับ archive.
+  ห้ามวาง `AGENTS.md`/`CLAUDE.md` ที่ host root: ตั้งแต่ 0.146.0 ทุก bot โหลดสองไฟล์นี้เข้า system prompt (DESIGN §4 M17 ข้อ 3) และ host root ต้องไม่มีไฟล์อื่นนอก `host_files`
 - ลำดับลงทะเบียน Atlas ข้อ 2–5 เหมือนเดิม; `deployment_verified` ยัง `false`
 
 Gate: `check_m16_host_deploy.py` (offline: refusal/determinism/default export ไม่เปลี่ยน; desktop build: ติดตั้งจาก export จริง, stub provider, Atlas poll + workflow run

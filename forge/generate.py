@@ -17,20 +17,22 @@ from forge.spec import validate_spec
 
 ROOT = Path(__file__).resolve().parents[1]
 REPORT_SCHEMA_PATH = ROOT / "builder-build-report.schema.json"
-# Atlas/export baseline (DESIGN §4): moved from 0.116.0 to 0.138.0 in M12 after re-checking every claim against
-# source revision d452ece; the baseline catalog is patterns/tools-<baseline>.json.
-THCLAWS_BASELINE = "0.138.0"
+# Atlas/export baseline (DESIGN §4): moved from 0.116.0 to 0.138.0 in M12 and to 0.146.0 in M17, each time after
+# re-checking every claim against the source revision (d452ece, then 9f69995); the baseline catalog is
+# patterns/tools-<baseline>.json.
+THCLAWS_BASELINE = "0.146.0"
 # Standalone compatibility is evidence-bound: a version without the reviewed
 # source revision is not enough to reopen a runtime-sensitive guarantee.
 STANDALONE_THCLAWS_COMPATIBILITY = {
     "0.116.0": frozenset({"75edc48"}),
     "0.121.0": frozenset({"35ccf16"}),
     "0.129.0": frozenset({"7a27129"}),
-    THCLAWS_BASELINE: frozenset({"d452ece"}),
+    "0.138.0": frozenset({"d452ece"}),
+    THCLAWS_BASELINE: frozenset({"9f69995"}),
 }
 # Standalone T1 (M14, DESIGN §4 "Standalone T1 rollout") rides on native writePaths whose traversal and symlink
-# bypasses were only closed at d452ece; the older T0 pairs stay T0-only.
-STANDALONE_T1_THCLAWS_COMPATIBILITY = {THCLAWS_BASELINE: frozenset({"d452ece"})}
+# bypasses were only closed at d452ece; the older T0 pairs stay T0-only. 0.146.0/9f69995 re-proved the boundary (M17).
+STANDALONE_T1_THCLAWS_COMPATIBILITY = {"0.138.0": frozenset({"d452ece"}), THCLAWS_BASELINE: frozenset({"9f69995"})}
 # The only writers M14 admits into a T1 worker; every other WRITE_BUILTIN_TOOLS member is rejected explicitly.
 T1_WRITE_TOOLS = frozenset({"Write", "Edit"})
 T1_WRITE_PATHS = ("output/**",)
@@ -192,10 +194,10 @@ def guarantee_matrix(spec: dict[str, Any]) -> list[dict[str, str]]:
         ("tool_allowlist", "Enforced",
          (".thclaws/settings.json allowedTools lists the declared tools; /agent/run on a daemon started with CWD=package drops "
          "every other built-in before the model sees its tool list and answers a call to a dropped name with unknown tool "
-         "(thClaws 0.138.0, M15 gate). Skill/SkillList/SkillSearch and MCP tools register after that filter and are outside "
-         "this claim; the browser/HAL/media groups are pinned off, but an active thClaws gateway still adds "
-         "WebScrape/YouTubeTranscript. A missing or invalid settings file, or THCLAWS_PROJECT_ROOT on the daemon, "
-         "disables the list.")),
+         "(thClaws 0.138.0 and 0.146.0, M15/M17 gates). Skill/SkillList/SkillSearch and MCP tools register after that filter and "
+         "are outside this claim; the browser/HAL/media groups are pinned off, but an active thClaws gateway still adds "
+         "WebScrape/YouTubeTranscript and an org-billed gateway install adds the media tools. A missing or invalid settings "
+         "file, or THCLAWS_PROJECT_ROOT on the daemon, disables the list.")),
         ("no_file_writes", "Not guaranteed",
          ("allowedTools drops undeclared built-in writers; declared writers, MCP tools and runtime state can still write. "
          "Daemon isolation and sandbox restrictions are not verified.")),
@@ -220,7 +222,7 @@ def guarantee_matrix(spec: dict[str, Any]) -> list[dict[str, str]]:
     if spec["target"] == "thclaws-standalone":
         t1 = permissions["tier"] == "T1"
         t1_scope_basis = ("Native writePaths output/** on the worker confines Write/Edit to resolved destinations under output/ "
-                          "(thClaws 0.138.0 d452ece); planner/verifier have no write tools and no role has Bash. MCP tools and "
+                          "(thClaws 0.138.0 d452ece and 0.146.0 9f69995); planner/verifier have no write tools and no role has Bash. MCP tools and "
                           "runtime state are outside this boundary; live audit fails any case that writes elsewhere.")
         replacements = {
             "tool_allowlist": ("Enforced", "Native named subagents intersect their tool registry with nonempty role tools; orchestration itself is outside this claim."),
@@ -321,7 +323,7 @@ def render(spec: dict[str, Any], packs_dir: Path | None = None) -> tuple[dict[st
         "version": identity["version"], "license": identity["license"], "author": identity["owner"],
         "categories": ["custom"], "tags": spec.get("routing", {}).get("tags", []),
         "requires": {
-            # thClaws stores this string without parsing (checked 0.116.0 and 0.138.0); retain the full spec range.
+            # thClaws stores this string without parsing (checked 0.116.0, 0.138.0 and 0.146.0); retain the full spec range.
             "thclaws_min_version": identity["thclaws_min_version"],
             "mcp_servers": sorted({server for pack in dependencies for server in pack["mcp_servers"]}),
         },

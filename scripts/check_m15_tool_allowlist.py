@@ -2,7 +2,7 @@
 """M15: Atlas packages declare allowedTools, so /agent/run enforces the built-in tool allowlist — proven on the real package.
 
 Exit 0 = offline checks, native /agent/run probes against the generator's own package and the provider golden cases all
-passed; 1 = failure (including a binary that is not the 0.138.0 baseline: fail closed); 2 = offline passed but thclaws is
+passed; 1 = failure (including a binary that is not the current baseline, THCLAWS_BASELINE: fail closed); 2 = offline passed but thclaws is
 absent, the binary is a CLI-only build without --serve, or the provider key is absent, so that part was explicitly skipped.
 
 Scope (DESIGN §4 "Tool allowlist บน /agent/run"): the filter covers the built-ins thClaws registers before it.

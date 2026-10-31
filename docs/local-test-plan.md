@@ -2,20 +2,23 @@
 
 จุดประสงค์: ปิดส่วนที่ cloud session ทำไม่ได้ เพราะไม่มี provider key, ไม่มี checkout ของ AI/Atlas และไม่ใช่ macOS
 งานทั้งหมดอยู่บน `main` (branch งานเดิมรวมถึง `claude/adoring-feynman-kqs8us` merge แล้ว). อ่าน `AGENTS.md`, `CLAUDE.md`, `docs/PLAN.md`
-ย่อหน้า "M13 เสร็จ (Mac)", "M14 เสร็จ (Mac)", "M6/M7a live (Mac)", "M15 ทำ (Mac)", "M15 merge เข้า main" และ "M16 ทำ (Mac)", DESIGN §4 "Host + bots layout",
-"Standalone T1 rollout" และ "Tool allowlist บน `/agent/run`" ก่อนเริ่ม. สิ่งที่ cloud ทำไม่ได้คือทุกอย่างที่ต้องมี daemon (binary CLI-only ไม่มี `--serve`),
+ย่อหน้า "M13 เสร็จ (Mac)", "M14 เสร็จ (Mac)", "M6/M7a live (Mac)", "M15 ทำ (Mac)", "M15 merge เข้า main", "M16 ทำ (Mac)" และ "M17 ทำ (Mac)", DESIGN §4 "Host + bots layout",
+"Standalone T1 rollout", "Tool allowlist บน `/agent/run`" และ "Baseline 0.146.0 / 9f69995" ก่อนเริ่ม. สิ่งที่ cloud ทำไม่ได้คือทุกอย่างที่ต้องมี daemon (binary CLI-only ไม่มี `--serve`),
 provider key, checkout ของ AI/Atlas ที่ pin และ macOS
 
-ตั้งแต่ M12 baseline คือ thClaws `0.138.0` revision `d452ece` ซึ่งเป็น binary ที่มีอยู่แล้วที่
-`~/Documents/GitHub/thClaws/target/debug/thclaws` (ตรวจด้วย `thclaws --version`). **ไม่ต้อง build รุ่นอื่น**; ถ้า binary ถูก rebuild
-จาก commit อื่น ทุก gate ที่ใช้ binary จะ fail exit 1 ตามออกแบบ จนกว่าจะตรวจ DESIGN §4 ใหม่
+ตั้งแต่ M17 baseline คือ thClaws `0.146.0` revision `9f69995` = desktop build จาก checkout `~/Documents/GitHub/thClaws` ที่ `9f69995`
+(`CARGO_TARGET_DIR=$HOME/Documents/GitHub/thClaws/target-0146 cargo build --features gui --bin thclaws` → `target-0146/debug/thclaws`; ตรวจด้วย `thclaws --version`).
+`target/debug/thclaws` ยังเป็น `0.138.0/d452ece` ของ M12–M16 จนกว่าผู้ดูแลจะแทน. **ไม่ต้อง build รุ่นอื่น**; ถ้า binary ถูก rebuild
+จาก commit อื่น ทุก gate ที่ใช้ binary จะ fail exit 1 ตามออกแบบ จนกว่าจะตรวจ DESIGN §4 ใหม่.
+บน Mac binary ที่ path ใหม่ยังไม่ได้รับ ACL ของ keychain: `thclaws --version`/`agent *` จะค้างรอ dialog ของ macOS (DESIGN §4 M17 ข้อ 9) →
+รันทุก gate ด้วย `export THCLAWS_DISABLE_KEYCHAIN=1` (daemon ที่ harness start ไม่กระทบเพราะ HOME ชั่วคราว)
 
 ## สิ่งที่ต้องยืนยัน
 
 | # | สิ่งที่ตรวจ | ทำไมต้องทำบน local | ผลที่คาด |
 |---|---|---|---|
 | 1 | gate ทุกตัวในโหมด CI (ไม่มี `thclaws` ใน PATH) | ยืนยัน checkout ตรงกับ cloud และยืนยัน fix macOS ของ M10 (เกิดในส่วน offline) | M0–M3 exit 0, ที่เหลือ 2; `check_m10_pack_authoring.py` ต้องเป็น 2 ไม่ใช่ 1; M6/M7a/M8 = 1 ได้เฉพาะเมื่อ `../AI`/`../atlas-control-plane` อยู่คนละ revision กับ pin (ใช้ข้อ 7) |
-| 2 | gate ทุกตัวแบบ native ด้วย binary ของเครื่อง | ยืนยันผล M12 บน macOS (cloud ตรวจบน Linux build จาก commit เดียวกัน) | M0–M5, M7b, M10, M12, M13 exit 0; M9/M11/M14/M15 exit 2 (native ผ่านแล้ว skip provider เพราะไม่มี key); M6/M7a/M8/M16 exit 2 ถ้าไม่มี checkout ข้างเคียง หรือ 1 ถ้าอยู่คนละ revision (M8/M16 ใช้ `ATLAS_ROOT` ที่ pin, M16 ต้องมี key ด้วยตามข้อ 6c) |
+| 2 | gate ทุกตัวแบบ native ด้วย binary ของเครื่อง | ยืนยันผล M12/M17 บน macOS (cloud ตรวจบน Linux build จาก commit เดียวกัน) | M0–M5, M7b, M10, M12, M13, M17 exit 0; M9/M11/M14/M15 exit 2 (native ผ่านแล้ว skip provider เพราะไม่มี key); M6/M7a/M8/M16 exit 2 ถ้าไม่มี checkout ข้างเคียง หรือ 1 ถ้าอยู่คนละ revision (M8/M16 ใช้ `ATLAS_ROOT` ที่ pin, M16 ต้องมี key ด้วยตามข้อ 6c) |
 | 3 | `check_m13_host_layout.py` native (desktop build) | cloud build CLI-only ไม่มี host/migration จึงตรวจ control case และการเปิด `builder/` เป็น host ไม่ได้ | exit 0; ถ้า "changed files outside runtime state" ให้วางรายการไฟล์แล้วหยุด (DESIGN ต้องแก้ก่อน ไม่เพิ่ม ignore) |
 | 4 | `check_m11_builder_agent.py` live `--rounds 3` (ต้องมี key) | ผ่าน 3/3 แล้ว 2026-10-28; รันซ้ำ 3 รอบทุกครั้งที่ prompt/skill ของ `builder/` เปลี่ยน (gate เป็นสองเทิร์น) | exit 0; evidence `out/m11-live/round-<n>-<ts>.json` ครบ 3 ไฟล์ |
 | 5 | `check_m7b_packs.py --live` 3 รอบ (ต้องมี key) | ครั้งก่อนผ่านด้วย launcher นอก repo; ต้องยืนยันว่า harness เองตั้ง `THCLAWS_AUTO_MIGRATE=0` แล้วพอ | exit 0 ทั้ง 3 รอบ |
@@ -30,8 +33,9 @@ provider key, checkout ของ AI/Atlas ที่ pin และ macOS
 cd ~/Documents/GitHub/agent-builder
 git checkout main && git pull --ff-only origin main
 python3 -m venv .venv && . .venv/bin/activate && python3 -m pip install -e ".[dev,sql-pack]"
-~/Documents/GitHub/thClaws/target/debug/thclaws --version      # ต้องได้ thclaws 0.138.0 / revision: d452ece
-export THCLAWS_PATH="$HOME/Documents/GitHub/thClaws/target/debug"
+export THCLAWS_DISABLE_KEYCHAIN=1                               # binary ที่ path ใหม่ติด keychain consent บน Mac (DESIGN §4 M17 ข้อ 9)
+~/Documents/GitHub/thClaws/target-0146/debug/thclaws --version  # ต้องได้ thclaws 0.146.0 / revision: 9f69995
+export THCLAWS_PATH="$HOME/Documents/GitHub/thClaws/target-0146/debug"
 ```
 
 Provider: ใช้ mapping เดิมจาก `.env` (ไม่พิมพ์ค่าออก terminal): `MATCHA_API_KEY` → `OPENAI_COMPAT_API_KEY`,
@@ -64,7 +68,7 @@ for i in 1 2 3; do PATH="$THCLAWS_PATH:$PATH" python3 scripts/check_m7b_packs.py
 # 6. M14 (T1 standalone) native + provider live, แล้ว M9 live (T0) ซ้ำเพราะ run_standalone เพิ่ม tree diff (M14)
 PATH="$THCLAWS_PATH:$PATH" python3 scripts/check_m14_standalone_t1.py --model oai/gpt-5.4-mini --provider-key-env OPENAI_COMPAT_API_KEY
 PATH="$THCLAWS_PATH:$PATH" python3 scripts/check_m9_standalone.py --model oai/gpt-5.4-mini --provider-key-env OPENAI_COMPAT_API_KEY
-PATH="$THCLAWS_PATH:$PATH" python3 scripts/check_m9_standalone.py --write-boundary     # คาด exit 0 บน d452ece
+PATH="$THCLAWS_PATH:$PATH" python3 scripts/check_m9_standalone.py --write-boundary     # คาด exit 0 บน 9f69995
 
 # 6b. M15 (allowedTools บน /agent/run) native + provider live; tool list ของทุก package Atlas เปลี่ยน จึงรัน M7b live ข้อ 5 ซ้ำด้วย
 PATH="$THCLAWS_PATH:$PATH" python3 scripts/check_m15_tool_allowlist.py --model oai/gpt-5.4-mini --provider-key-env OPENAI_COMPAT_API_KEY
@@ -99,15 +103,15 @@ ATLAS_ROOT="$HOME/Documents/GitHub/atlas-control-plane-daa0f49" PATH="$THCLAWS_P
 - ห้าม commit ค่า key, `.env`, `out/`, `pack-conformance.json` หรือ `builder/work`/`builder/out` (ทั้งหมด gitignored อยู่แล้ว)
 - ถ้า M10 ยัง fail บน Mac ให้เก็บ `report['detail']` และ `type(exc).__name__` จาก `forge/pack_test.py` ก่อนเสนอแก้; อย่าแก้ harness โดยไม่รู้สาเหตุ
 - ถ้า M11 live fail ให้อ่าน `out/m11-live/report.json` (`final_text`, assertion ที่ fail) แล้วรายงาน; การแก้ prompt/skill ของ `builder/` ต้องรัน live ซ้ำอย่างน้อย 3 รอบตามกติกา M7b ก่อนอ้างว่าแก้แล้ว
-- ถ้า binary ไม่ใช่ `0.138.0/d452ece` ให้หยุดและรายงาน ไม่ build รุ่นอื่นเองและไม่เพิ่มคู่ version+revision
+- ถ้า binary ไม่ใช่ `0.146.0/9f69995` ให้หยุดและรายงาน ไม่ build รุ่นอื่นเองและไม่เพิ่มคู่ version+revision
 - เมื่อผ่านครบ ให้บันทึกผลลง `docs/PLAN.md` (ย่อหน้าผล Mac ใหม่: วันที่, checkout, model, binary version+revision, exit code ทุก gate ทั้งสองโหมด, path evidence) และ `CHANGELOG.md` แล้วค่อย commit เมื่อผู้ใช้สั่งตาม `CLAUDE.md`
 
 ## รูปแบบรายงานผล
 
 ```
 checkout: <git rev-parse --short HEAD>   thclaws: <version> revision <rev> (desktop build: thclaws --help มี bots)   model: <id>
-CI mode:     m0=0 m1=0 ... m16=2
-native mode: m0=0 ... m13=0 m14=<n> m15=<n> m16=<n>
+CI mode:     m0=0 m1=0 ... m16=2 m17=2
+native mode: m0=0 ... m13=0 m14=<n> m15=<n> m16=<n> m17=0
 M13 native: exit=<n>  (control migration เกิด bots.json: yes|no; host เปิด builder/ แล้วไฟล์ที่ track เปลี่ยน: none|<รายการ>)
 M11 live:   exit=<n>  rounds passed=<k>/3  evidence: out/m11-live/round-*.json  (ต่อรอบ: turn1 หยุดถาม yes|no, turn2 build.py yes|no, detail)
 M7b live:   exit=<n> x3
@@ -122,7 +126,7 @@ optional:   m7a=<n> m6=<n> m8=<n> (ATLAS_ROOT = worktree ที่ pin)
 
 ```
 git checkout main && git pull --ff-only origin main
-อ่าน docs/local-test-plan.md แล้วทำตามลำดับทั้งหมดบนเครื่องนี้ด้วย binary thclaws 0.138.0/d452ece (desktop build) ของเครื่อง
+อ่าน docs/local-test-plan.md แล้วทำตามลำดับทั้งหมดบนเครื่องนี้ด้วย binary thclaws 0.146.0/9f69995 (desktop build) ของเครื่อง
 ห้ามแก้ gate/pin/เกณฑ์ audit/golden cases เพื่อให้ผ่าน และห้าม thclaws bots migrate/unmigrate กับ builder/
 ลำดับ: 1 CI mode ทุก gate → 2 native ทุก gate → 3 check_m13_host_layout.py → 4 check_m11_builder_agent.py --rounds 3
 → 5 check_m7b_packs.py --live x3 → 6 M14/M9 live → 6b check_m15_tool_allowlist.py → 6c check_m16_host_deploy.py (ATLAS_ROOT ที่ pin) → 7 optional (M8 กับ ATLAS_ROOT ที่ pin daa0f49, M6/M7a จากโฟลเดอร์คู่ worktree AI@d95dc28 + agent-builder ตามข้อ 7)
