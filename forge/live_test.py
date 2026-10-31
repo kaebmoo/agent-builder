@@ -146,7 +146,7 @@ def isolated_env(home, settings, token=None, **extra):
     """Environment for a temporary thClaws process started by a gate or live audit (DESIGN §4, §8).
 
     Isolated HOME/config, no MCP allowlist prompt, and the single-agent layout pinned: a desktop build of
-    thClaws 0.138.0 otherwise converts the run directory into a host workspace on `--serve` (moving AGENTS.md
+    thClaws 0.138.0+ (checked to 0.146.0) otherwise converts the run directory into a host workspace on `--serve` (moving AGENTS.md
     and skills into `.thclaws/bots/main/` and rewriting them), which is why the flag is set explicitly rather
     than left to a default that depends on the build feature and on whether a container is detected.
     """

@@ -37,15 +37,15 @@ UPSTREAM = "__UPSTREAM_NODE_ID__"
 T2_PLACEHOLDERS = {"__OPERATOR_T2_WORKER_ID__": "worker_id", "__OPERATOR_T2_WORKSPACE_ID__": "workspace_id"}
 ID_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,127}")
 FILES_DIR_LINE = "\nHandoff files directory: {files_dir}"
-# thclaws agent pack (agent_cli.rs, unchanged from 0.116.0/75edc48 to 0.138.0/d452ece) rewrites exactly these two
+# thclaws agent pack (agent_cli.rs, unchanged from 0.116.0/75edc48 through 0.138.0/d452ece to 0.146.0/9f69995) rewrites exactly these two
 # files; every other member is byte-identical.
 ARCHIVE_REWRITTEN = ("manifest.json", ".thclaws/settings.json")
 NOT_VERIFIED = ("These checks prove reachability and MCP inventory only. Daemon isolation, egress control and the "
                 "approval path are verified by the operator outside this file; the builder never sets deployment_verified.")
 LAYOUTS = ("single-agent", "host")
-# Host workspace files for a hand-installed bot (DESIGN §4 "Host deployment ของ package prompt/assistant" 1, d452ece).
+# Host workspace files for a hand-installed bot (DESIGN §4 "Host deployment ของ package prompt/assistant" 1, d452ece; unchanged at 9f69995).
 HOST_WORKSPACE_VERSION = 4
-# What a host rewrites in a bot that never mentions THCLAWS_AGENT_DIR (bots/agent_paths.rs::fix at d452ece, DESIGN §4 M16 2).
+# What a host rewrites in a bot that never mentions THCLAWS_AGENT_DIR (bots/agent_paths.rs::fix at d452ece, unchanged at 9f69995, DESIGN §4 M16 2).
 HOST_REWRITE_DIRS = ("scripts", "skills", "workflows", "agent_workflow", "gui-shell", "agents", "commands", "templates")
 HOST_REWRITE_SHELL = re.compile(r"""\b(python3?|node|bash|sh) (\.thclaws/[^\s"'`)]+)""")
 HOST_REWRITE_PY = re.compile(r"""(Path|open)\((["'])(\.thclaws/[^"']*)["']""")

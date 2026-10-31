@@ -30,8 +30,10 @@ WRITE_BUILTIN_TOOLS = {
     "epubcreate",
     "fetchimages",
     "pdfcreate",
+    "docconvert",  # 0.146.0: writes <stem>.<to> via the document service (subagent.rs WRITE_TOOL_NAMES)
 }
 NETWORK_BUILTIN_TOOLS = {
+    "docconvert",
     "fetchimages",
     "webfetch",
     "webscrape",

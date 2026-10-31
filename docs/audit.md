@@ -25,14 +25,14 @@ Exit code: `0` = package เป็น `draft`, `1` = มี error (กฎ static
 | `agents_md` | มี section `## Mission` / `## Must` / `## Refuse` / `## Output`, มีประโยค "ตอบ JSON ล้วน" เมื่อ output เป็น `assistant_json`, และ block `permissions` / `model` / `state` ตรงกับ spec | error |
 | `refusal` | ทุกข้อใน `refusal.conditions` และ `refusal.response` ต้องอยู่ใน AGENTS.md (`refusal.json` ตรวจผ่าน `drift`) | error |
 | `schema_vocabulary` | keyword ใน embedded schema (inputs / outputs / refusal) ที่อยู่นอก JSON Schema 2020-12 vocabularies เพราะ validator ไม่สนใจ keyword นั้น | warning: `draft` ผ่าน, `--strict` fail |
-| `tools` | ชื่อ tool อยู่ใน catalog `patterns/tools-0.138.0.json` (baseline ปัจจุบัน; `tools-0.116.0.json` คงไว้เป็นหลักฐาน) หรือเป็น qualified MCP tool จาก pack; catalog รวม tool แบบ conditional ไม่ได้ยืนยันว่าเปิดอยู่บน daemon | warning: `draft` ผ่าน, `--strict` fail |
+| `tools` | ชื่อ tool อยู่ใน catalog `patterns/tools-0.146.0.json` (baseline ปัจจุบัน; `tools-0.138.0.json` และ `tools-0.116.0.json` คงไว้เป็นหลักฐาน) หรือเป็น qualified MCP tool จาก pack; catalog รวม tool แบบ conditional ไม่ได้ยืนยันว่าเปิดอยู่บน daemon | warning: `draft` ผ่าน, `--strict` fail |
 | `single_worker` | เฉพาะ target Atlas: `.thclaws/agents/` และ `.thclaws/agent_workflow/` ต้องว่าง และ AGENTS.md ห้ามสั่ง `WorkflowRun` เพราะ `/agent/run` ไม่มี subagent factory | error |
-| manifest layer | `thclaws agent validate` ผ่าน; binary ต้องเป็น baseline `0.138.0` (M12) ยกเว้น standalone T0 ที่รับรองคู่ version+revision เพิ่มเติม (รุ่นอื่น = fail จนกว่าจะตรวจ DESIGN §4 ใหม่); รันโดยตั้ง `PYTHONPYCACHEPREFIX` นอก package จึงไม่ทิ้ง bytecode | passed / failed / skipped |
+| manifest layer | `thclaws agent validate` ผ่าน; binary ต้องเป็น baseline `0.146.0` (M17; M12 เดิม 0.138.0) ยกเว้น standalone T0 ที่รับรองคู่ version+revision เพิ่มเติม (รุ่นอื่น = fail จนกว่าจะตรวจ DESIGN §4 ใหม่); รันโดยตั้ง `PYTHONPYCACHEPREFIX` นอก package จึงไม่ทิ้ง bytecode | passed / failed / skipped |
 
 `single_worker` ผูกกับ `TARGET_RULES` ใน `forge/audit.py` (ปัจจุบัน `atlas-worker`, `atlas-workflow`) ไม่ใช่กฎสากล; `rules_for(target)` บอกชุดกฎของ target นั้น เพื่อให้ M9 มี `.thclaws/agents/` และ `run.js` ที่ generate จาก spec ได้โดยไม่ต้องแก้กฎ Atlas. ไฟล์ role/workflow ที่เพิ่มเองยังถูกกฎ `inventory` จับทุก target
 
 ข้อยกเว้นของ manifest layer สำหรับ standalone T0 ที่ตรวจแล้วคือ version+revision `0.116.0/75edc48`,
-`0.121.0/35ccf16`, `0.129.0/7a27129` และ `0.138.0/d452ece`; version หรือ revision อื่นยัง fail closed ตาม DESIGN §4.
+`0.121.0/35ccf16`, `0.129.0/7a27129`, `0.138.0/d452ece` และ `0.146.0/9f69995`; version หรือ revision อื่นยัง fail closed ตาม DESIGN §4.
 
 ## ไฟล์ที่แก้ได้หลัง generate
 
@@ -53,7 +53,7 @@ Exit code: `0` = package เป็น `draft`, `1` = มี error (กฎ static
 - MCP ถูกติดตั้งบน daemon จริงหรือไม่ และ agent เรียก skill/MCP จริงหรือไม่ (live audit M6)
 - permission ถูกบังคับที่ runtime: static audit ตรวจเฉพาะว่า `.thclaws/settings.json` (รวม `allowedTools` และ flag browser/HAL/media ของ target Atlas, M15) ตรงกับ render ทุก byte; การที่ `/agent/run` ถอด built-in นอก allowlist จริงพิสูจน์ใน `check_m15_tool_allowlist.py` ไม่ใช่ใน audit (DESIGN §4 "Tool allowlist บน `/agent/run`", §6)
 - `sql-reader` ผ่าน static audit ได้ด้วย SQL pack v2 ของ M7a; การมี descriptor ไม่ยืนยันว่า runtime ถูกติดตั้ง ต้องใช้ `forge pack test` และ live audit ตามลำดับ
-- standalone package: static-pipeline T0 (M9) และ T1 (M14); role/workflow drift เป็น error (รวม `writePaths` ของ worker ใน T1) และ AGENTS.md ต้องระบุ WorkflowRun กับ path ที่ generate; สำหรับ package T1 inventory ถือ `output/**` เป็น runtime output ไม่ใช่ไฟล์ undeclared (ยังเป็น finding ใน T0/T2) และ `thclaws agent validate` ถูกรับรองตามคู่ version+revision ของ tier (T1 เฉพาะ `0.138.0/d452ece`)
+- standalone package: static-pipeline T0 (M9) และ T1 (M14); role/workflow drift เป็น error (รวม `writePaths` ของ worker ใน T1) และ AGENTS.md ต้องระบุ WorkflowRun กับ path ที่ generate; สำหรับ package T1 inventory ถือ `output/**` เป็น runtime output ไม่ใช่ไฟล์ undeclared (ยังเป็น finding ใน T0/T2) และ `thclaws agent validate` ถูกรับรองตามคู่ version+revision ของ tier (T1 เฉพาะ `0.138.0/d452ece` และ `0.146.0/9f69995`)
 
 ## Gate
 
@@ -61,7 +61,7 @@ Exit code: `0` = package เป็น `draft`, `1` = มี error (กฎ static
 python3 scripts/check_m5_static_audit.py
 ```
 
-- `0`: offline checks และส่วน native (`draft` จริงบน thClaws baseline `0.138.0`, wrappers รันเป็น subprocess) ผ่าน
+- `0`: offline checks และส่วน native (`draft` จริงบน thClaws baseline `0.146.0`, wrappers รันเป็น subprocess) ผ่าน
 - `1`: verdict, ข้อความ finding, warning/strict, target binding, schema ของ report หรือ wrapper ผิด
 - `2`: offline ผ่านแต่ไม่มี `thclaws` ใน PATH จึงประกาศ skip ส่วน native
 
@@ -149,7 +149,7 @@ python3 scripts/check_m9_standalone.py
 # Upstream writePaths diagnostic บน role ที่ gate เขียนเอง (ใช้ประเมิน binary รุ่นใหม่): ไม่มี binary = 2, พบ bypass = 1, ปฏิเสธครบ = 0
 python3 scripts/check_m9_standalone.py --write-boundary
 
-# Gate ของ tool allowlist บน /agent/run (M15): ไม่มี binary, build CLI-only หรือไม่มี key = 2, binary ที่ไม่ใช่ 0.138.0 = 1
+# Gate ของ tool allowlist บน /agent/run (M15): ไม่มี binary, build CLI-only หรือไม่มี key = 2, binary ที่ไม่ใช่ baseline ปัจจุบัน (0.146.0) = 1
 python3 scripts/check_m15_tool_allowlist.py
 python3 scripts/check_m15_tool_allowlist.py --model oai/gpt-5.4-mini --provider-key-env OPENAI_COMPAT_API_KEY
 

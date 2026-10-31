@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""M13: thClaws host + bots layout (0.138.0 `d452ece`) — harness pins the single-agent layout, builder/ is a host workspace.
+"""M13: thClaws host + bots layout (0.138.0 `d452ece`, re-checked on 0.146.0 `9f69995` in M17) — harness pins the single-agent layout, builder/ is a host workspace.
 
 Exit 0 = offline checks pass and the binary on PATH is a desktop (gui) build that leaves a v2 package alone under
 THCLAWS_AUTO_MIGRATE=0, migrates it without the flag (negative control), serves builder/ as a host whose agent reports

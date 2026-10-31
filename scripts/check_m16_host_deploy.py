@@ -3,7 +3,7 @@
 
 Exit 0 = offline checks, the native host probes (hand install from the real export, stub provider), the Atlas poll and
 workflow run through the host, and the provider golden cases through the host all passed; 1 = failure (including a
-binary that is not the 0.138.0 baseline or an Atlas checkout that is not the pinned ref: fail closed); 2 = offline
+binary that is not the current baseline (THCLAWS_BASELINE) or an Atlas checkout that is not the pinned ref: fail closed); 2 = offline
 passed but thclaws is absent, the binary is a CLI-only build without --serve, Atlas is not found, or the provider key
 is absent, so that part was explicitly skipped. DESIGN §4 "Host deployment ของ package prompt/assistant".
 """
