@@ -26,6 +26,7 @@ User goal → Discovery (7 questions) → AgentSpec (SSOT)
 
 ## เอกสาร
 
+- [docs/getting-started.md](docs/getting-started.md) — คู่มือเริ่มต้นสำหรับมือใหม่: ติดตั้ง, generate/audit ครั้งแรก, เขียน spec เอง, รันจริง, เอาไปใช้กับ Atlas
 - [docs/DESIGN.md](docs/DESIGN.md) — design baseline (AgentSpec, target/pattern matrix, guarantee matrix, audit 2 ชั้น)
 - [docs/PLAN.md](docs/PLAN.md) — milestones M0–M17 และ M19 (M18/M20 เสนอ) พร้อม definition of done และ check script ต่อ milestone
 - [AGENTS.md](AGENTS.md) — กติกาสำหรับ coding agent ที่ทำงานใน repo นี้
