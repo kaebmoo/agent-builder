@@ -17,6 +17,7 @@ import json
 import os
 import re
 import secrets
+import shlex
 import shutil
 import signal
 import socket
@@ -51,7 +52,11 @@ ATLAS_FIXTURES = ('invoice-reviewer', 'sql-reader', 'publisher')
 STANDALONE_FIXTURES = ('text-reviewer-standalone', 'note-writer-standalone')
 SKILL_TOOLS = {'Skill', 'SkillList', 'SkillSearch'}
 MCP = {'echo__echo', 'echo__reverse'}
+OFFICE = {'gridcraft__echo', 'gridcraft__reverse'}  # the stub office app below answers MCP with the echo server
 PINS = {'browserEnabled': False, 'halEnabled': False, 'imageToolsEnabled': False}
+# Every target, standalone included: thClaws 0.144.0+ injects the installed office-app MCP servers on each AppConfig load
+# and [] is the only valid opt-out (DESIGN §4 M17 item 5 follow-up).
+OFFICE_PIN = {'officeApps': []}
 
 
 def rejects(call, needle=None):
@@ -83,14 +88,17 @@ def offline(base, packs):
     settings = json.loads((package / '.thclaws/settings.json').read_text(encoding='utf-8'))
     assert settings['allowedTools'] == ['Read', 'echo__echo', 'echo__reverse'], settings
     assert {key: settings[key] for key in PINS} == PINS, settings
+    assert {key: settings[key] for key in OFFICE_PIN} == OFFICE_PIN, settings
     for name in ATLAS_FIXTURES:
         fixture = load_spec(ROOT / f'fixtures/{name}/spec.yaml')
         rendered = json.loads(render(fixture)[0]['.thclaws/settings.json'])
         assert rendered['allowedTools'] == sorted(fixture['permissions']['tools']), (name, rendered)
         assert {key: rendered[key] for key in PINS} == PINS, (name, rendered)
+        assert {key: rendered[key] for key in OFFICE_PIN} == OFFICE_PIN, (name, rendered)
     for name in STANDALONE_FIXTURES:
         rendered = json.loads(render(load_spec(ROOT / f'fixtures/{name}/spec.yaml'))[0]['.thclaws/settings.json'])
         assert not {'allowedTools', *PINS} & set(rendered), (name, 'standalone settings must not change in M15')
+        assert {key: rendered[key] for key in OFFICE_PIN} == OFFICE_PIN, (name, 'every target pins officeApps')
 
     # Built-ins registered after the filter are pinned off, so an Atlas spec that declares one is rejected, not shipped.
     # T2 is the only tier that may declare a shell or network, so it also reaches the rule for the HAL (network) tools.
@@ -122,13 +130,16 @@ def offline(base, packs):
     for mutation in ({k: v for k, v in settings.items() if k != 'allowedTools'},
                      {**settings, 'allowedTools': [*settings['allowedTools'], 'Bash']},
                      {**settings, 'halEnabled': True},
-                     {k: v for k, v in settings.items() if k != 'browserEnabled'}):
+                     {k: v for k, v in settings.items() if k != 'browserEnabled'},
+                     {k: v for k, v in settings.items() if k != 'officeApps'},
+                     {**settings, 'officeApps': ['word']}):
         path.write_text(json.dumps(mutation, indent=2) + '\n', encoding='utf-8')
         findings = audit_package(package, packs_dir=packs, thclaws=False)['static_audit']['findings']
         assert any(f['rule'] == 'drift' and '.thclaws/settings.json' in f['message'] for f in findings), (mutation, findings)
     path.write_text(original, encoding='utf-8')
-    print('M15 offline PASS: deterministic allowedTools + browser/HAL/media pins on every Atlas fixture, standalone '
-          'unchanged, late built-ins rejected, matrix rows and limits, deployment hint, settings drift')
+    print('M15 offline PASS: deterministic allowedTools + browser/HAL/media pins on every Atlas fixture, officeApps: [] on '
+          'every fixture, standalone otherwise unchanged, late built-ins rejected, matrix rows and limits, deployment hint, '
+          'settings drift')
     return spec
 
 
@@ -189,6 +200,13 @@ def native(base, spec, packs, binary):
     generated = json.loads(settings_path.read_text(encoding='utf-8'))
     home = base / 'home'
     home.mkdir()
+    # A stub gridcraft-cli where thClaws looks for the office apps: the officeApps pin must keep it out although it is
+    # installed (DESIGN §4 M17 item 5 follow-up). It speaks MCP through the echo server, so a leak shows as gridcraft__*.
+    office = base / 'office-bin'
+    office.mkdir()
+    stub = office / 'gridcraft-cli'
+    stub.write_text(f'#!/bin/sh\nexec {shlex.quote(sys.executable)} {shlex.quote(str(ECHO / "scripts/server.py"))}\n')
+    stub.chmod(0o755)
     # The operator's user layer switches every late group on; only the package pins may keep them away.
     user = base / 'user-settings.json'
     user.write_text(json.dumps({'browserEnabled': False, 'halEnabled': True, 'imageToolsEnabled': True}))
@@ -197,7 +215,8 @@ def native(base, spec, packs, binary):
         thread.start()
         token = secrets.token_urlsafe(32)
         env = isolated_env(home, user, token, OPENAI_COMPAT_API_KEY='local-probe-only', HAL_API_KEY='local-probe-only', GEMINI_API_KEY='local-probe-only',
-                           OPENAI_COMPAT_BASE_URL=f'http://127.0.0.1:{server.server_port}/v1')
+                           OPENAI_COMPAT_BASE_URL=f'http://127.0.0.1:{server.server_port}/v1',
+                           THCLAWS_OFFICE_BIN_DIR=str(office))
         with socket.socket() as listener:
             listener.bind(('127.0.0.1', 0))
             port = listener.getsockname()[1]
@@ -234,7 +253,8 @@ def native(base, spec, packs, binary):
             def configure(value):
                 settings_path.write_text(json.dumps(value, indent=2) + '\n', encoding='utf-8')
 
-            # 1. Generated settings: the model sees the allowlist plus the Skill tools; every other built-in is gone.
+            # 1. Generated settings: the model sees the allowlist plus the Skill tools; every other built-in is gone and so
+            #    is the installed stub office app (officeApps: []).
             expected = set(generated['allowedTools']) | SKILL_TOOLS
             for tool, arguments, allowed in (
                 ('Read', {'path': 'AGENTS.md'}, True),
@@ -270,11 +290,19 @@ def native(base, spec, packs, binary):
             (work / 'bash-control.txt').unlink()
             print(f'M15 native PASS (control): no allowedTools -> {len(offered)} tools offered and Bash ran')
 
-            # 4. Settings are read per request: restoring the generated file restores the denial without a restart.
+            # 3b. Control: without the officeApps pin the same daemon injects the installed stub office app and offers its
+            #     tools, so the pin is what kept them out of step 1 (DESIGN §4 M17 item 5 follow-up).
+            configure({key: value for key, value in generated.items() if key != 'officeApps'})
+            offered, result, _ = run('Read', {'path': 'AGENTS.md'})
+            assert OFFICE <= offered and result['status'] == 'ok', (sorted(offered), result)
+            print(f'M15 native PASS (control): no officeApps pin -> stub office app offered {sorted(OFFICE)}')
+
+            # 4. Settings are read per request: restoring the generated file restores the denial and drops the office
+            #    app again without a restart.
             configure(generated)
             offered, result, changed = run('Bash', {'command': 'touch bash-probe.txt'})
             assert offered == expected and result['status'] == 'error' and not changed, (result, changed)
-            print('M15 native PASS: restored allowedTools denies Bash again on the same daemon')
+            print('M15 native PASS: restored settings deny Bash and drop the stub office app again on the same daemon')
         finally:
             Provider.action = None
             Provider.records.clear()

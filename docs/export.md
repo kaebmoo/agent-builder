@@ -64,8 +64,8 @@ guarantee matrix ใน build report คือคำรับรองเดี�
    จึงรัน `audit.py`/`forge audit` กับ source package ไม่ใช่ tree ที่แตก.
    MCP ของ pack (DESIGN §4 M17 ข้อ 4, 5, 11): ถ้าไม่ตั้ง `THCLAWS_MCP_ALLOW_ALL=1` ให้ daemon ตั้งแต่ 0.146.0 `~/.config/thclaws/mcp_allowlist.json` ต้องมี**ทั้ง command line**
    (`command` + `args`) ของทุก server ใน `.thclaws/mcp.json` ไม่ใช่แค่ command; org policy ที่ปิด external MCP ทำให้ server ของ pack ไม่ spawn; เครื่องที่มี office app binaries
-   (`craft/` ข้าง binary, `/opt/craft/bin`) หรือ AI Server hub ที่ `127.0.0.1:9000` ได้ MCP server เพิ่ม (`grid`/`word`/`deck`, `aiserver-rag`) ที่ไม่อยู่ใน `deployment.mcp_servers` →
-   ปิดด้วย `THCLAWS_OFFICE_APPS=` (ว่าง) และ `LITELLM_BASE_URL` หรืออย่าติดตั้ง. ทั้งสามกรณี reachability check ข้อ 5 จับได้
+   (`craft/` ข้าง binary, `/opt/craft/bin`) หรือ AI Server hub ที่ `127.0.0.1:9000` ได้ MCP server เพิ่ม (`gridcraft`/`wordcraft`/`deckcraft`, `aiserver-rag`) ที่ไม่อยู่ใน `deployment.mcp_servers` →
+   office apps ถูก package ปิดเองด้วย `"officeApps": []` ใน `.thclaws/settings.json` (ห้ามตั้ง `THCLAWS_OFFICE_APPS` ให้ daemon เพราะทับค่าของ package); `aiserver-rag` ไม่มี setting ใน package ปิดด้วย `LITELLM_BASE_URL` หรืออย่าติดตั้ง hub. ทั้งสามกรณี reachability check ข้อ 5 จับได้
 2. `POST /api/workers` ด้วย `worker` + `token`; `POST /api/workspaces` ด้วย `workspace`
 3. Atlas upsert worker ด้วย `id` หรือ `base_url`: URL ที่ลงทะเบียนให้ worker อื่นแล้วจะเขียนทับ worker นั้นแทนการสร้าง
    `wrk_<name>` และ workflow ของ package ใหม่จะอ้าง worker ที่ไม่มี → ใช้ URL แยกต่อ daemon หรือระบุ `--worker-id` ให้ตรง worker เดิม

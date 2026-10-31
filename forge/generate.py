@@ -195,7 +195,8 @@ def guarantee_matrix(spec: dict[str, Any]) -> list[dict[str, str]]:
          (".thclaws/settings.json allowedTools lists the declared tools; /agent/run on a daemon started with CWD=package drops "
          "every other built-in before the model sees its tool list and answers a call to a dropped name with unknown tool "
          "(thClaws 0.138.0 and 0.146.0, M15/M17 gates). Skill/SkillList/SkillSearch and MCP tools register after that filter and "
-         "are outside this claim; the browser/HAL/media groups are pinned off, but an active thClaws gateway still adds "
+         "are outside this claim; the browser/HAL/media groups are pinned off, as are the office-app MCP servers "
+         "(officeApps: []; THCLAWS_OFFICE_APPS on the daemon overrides it), but an active thClaws gateway still adds "
          "WebScrape/YouTubeTranscript and an org-billed gateway install adds the media tools. A missing or invalid settings "
          "file, or THCLAWS_PROJECT_ROOT on the daemon, disables the list.")),
         ("no_file_writes", "Not guaranteed",
@@ -342,6 +343,11 @@ def render(spec: dict[str, Any], packs_dir: Path | None = None) -> tuple[dict[st
         # "Tool allowlist", M15).
         settings.update(allowedTools=sorted(spec["permissions"]["tools"]), browserEnabled=False, halEnabled=False,
                         imageToolsEnabled=False)
+    # thClaws 0.144.0+ injects the installed office-app MCP servers (gridcraft/wordcraft/deckcraft) on every AppConfig
+    # load, daemon and CLI alike, unless the project opts out; [] is the only valid opt-out (false voids the whole file,
+    # allowedTools included). Pinned on every target so a host with the craft binaries cannot add file-writing MCP
+    # tools to a package that never declared them (DESIGN §4 M17 item 5 follow-up).
+    settings["officeApps"] = []
     add_json(".thclaws/settings.json", settings)
     add_json(".thclaws/schemas/refusal.json", spec["refusal"]["schema"])
     for section in ("inputs", "outputs"):

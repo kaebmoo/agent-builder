@@ -58,7 +58,7 @@ M15 (2026-10-28): package ที่ deploy กับ Atlas ประกาศ `a
 อยู่นอก claim) พร้อม gate `check_m15_tool_allowlist.py`; package Atlas ที่ generate ก่อน M15 จะ drift ที่ `.thclaws/settings.json` ต้อง generate ใหม่ ดู DESIGN §4/§6.
 M17 (2026-10-31) ย้าย baseline thClaws ไป 0.146.0/`9f69995` หลังตรวจ DESIGN §4 ทุก claim ซ้ำกับ source ("Baseline 0.146.0 / 9f69995": catalog เพิ่ม `DocConvert`, write landing #223,
 host root โหลด `AGENTS.md` เข้าทุก bot, MCP allowlist keyed ทั้ง command line, office/RAG MCP ที่ engine ฉีดเอง, keychain ตอน start); คู่ standalone T0/T1 เพิ่ม `0.146.0/9f69995`
-และ gate `check_m17_baseline.py`; ส่วนที่ยังไม่ adopt (pin `officeApps`) อยู่ใน DESIGN §4 M17 ข้อ 5.
+และ gate `check_m17_baseline.py`; pin `"officeApps": []` ถูก adopt ในทุก package (รวม standalone) เมื่อ 2026-10-31 หลังตรวจ source ซ้ำ (DESIGN §4 M17 ข้อ 5 follow-up; gate M15).
 
 ```bash
 python3 scripts/check_m7b_packs.py
