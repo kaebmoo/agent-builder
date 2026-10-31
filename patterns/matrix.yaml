@@ -1,4 +1,4 @@
-# DESIGN §3, thClaws v0.116.0 (re-checked unchanged on 0.138.0/d452ece). Package compatibility, not runtime guarantees.
+# DESIGN §3, thClaws v0.116.0 (re-checked unchanged on 0.138.0/d452ece and 0.146.0/9f69995). Package compatibility, not runtime guarantees.
 thclaws-standalone:
   execution_surface: thclaws-gui-cli-catalog
   allowed_patterns: [static-pipeline, batch-fanout, dynamic]

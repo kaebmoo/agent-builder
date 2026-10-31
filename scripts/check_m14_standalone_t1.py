@@ -135,10 +135,12 @@ def offline(base, spec):
     assert any(f['rule'] == 'inventory' and 'output/a.txt' in f['message']
                for f in audit_package(t0, thclaws=False)['static_audit']['findings']), 'output/ must stay a finding for T0'
 
-    # Certification pairs: T1 only on 0.138.0/d452ece; T0 keeps its four pairs.
-    assert STANDALONE_T1_THCLAWS_COMPATIBILITY == {'0.138.0': frozenset({'d452ece'})}
-    assert len(STANDALONE_THCLAWS_COMPATIBILITY) == 4 and '0.129.0' in STANDALONE_THCLAWS_COMPATIBILITY
+    # Certification pairs: T1 only on 0.138.0/d452ece and 0.146.0/9f69995 (M17); T0 keeps its five pairs.
+    assert STANDALONE_T1_THCLAWS_COMPATIBILITY == {'0.138.0': frozenset({'d452ece'}), '0.146.0': frozenset({'9f69995'})}
+    assert len(STANDALONE_THCLAWS_COMPATIBILITY) == 5 and '0.129.0' in STANDALONE_THCLAWS_COMPATIBILITY
     for version_text, tier, expected in (('thclaws 0.138.0\nrevision: d452ece\n', 'T1', 'passed'),
+                                         ('thclaws 0.146.0\nrevision: 9f69995\n', 'T1', 'passed'),
+                                         ('thclaws 0.146.0\nrevision: 492bfb2\n', 'T1', 'failed'),
                                          ('thclaws 0.129.0\nrevision: 7a27129\n', 'T1', 'failed'),
                                          ('thclaws 0.129.0\nrevision: 7a27129\n', 'T0', 'passed')):
         completed = subprocess.CompletedProcess([], 0, version_text, '')
