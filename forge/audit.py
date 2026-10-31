@@ -290,6 +290,9 @@ def exit_code(report: dict[str, Any]) -> int:
 def configure(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("package", type=Path, help="generated package directory")
     parser.add_argument("--live", action="store_true", help="run isolated golden cases after static audit")
+    parser.add_argument("--security", action="store_true", help=(
+        "deterministic security audit on top of a strict static audit (DESIGN §7 M19); "
+        "with --live it can promote candidate to shippable"))
     parser.add_argument("--timeout", type=float, default=120)
     parser.add_argument("--provider-key-env", default="OPENAI_API_KEY")
     parser.add_argument("--strict", action="store_true", help="treat warnings as failures (the shippable bar)")
@@ -297,6 +300,43 @@ def configure(parser: argparse.ArgumentParser) -> None:
 
 
 def command(args: argparse.Namespace) -> int:
+    if args.security:
+        from forge.security import exit_code_security, security_audit
+
+        try:
+            if args.live:
+                from forge.live_test import live_audit
+                report = live_audit(args.package, timeout=args.timeout, key_env=args.provider_key_env,
+                                    strict=True)[0]
+            else:
+                report = audit_package(args.package, strict=True)
+            security_audit(args.package, report)
+        except (OSError, ValueError, TypeError, subprocess.SubprocessError) as exc:
+            print(f"audit FAIL: {exc}")
+            return 1
+        audit = report["static_audit"]
+        for finding in audit["findings"]:
+            print(f"  ✗ {finding['rule']}: {finding['message']}")
+        validate = audit["thclaws_validate"]
+        print(f"thclaws agent validate: {validate['status']}"
+              + (f" ({validate['version']})" if validate["version"] else "")
+              + (f"\n{validate['detail']}" if validate["detail"] else ""))
+        if args.live:
+            verdict = {"passed": "PASS", "failed": "FAIL", "skipped": "SKIP"}[report["audit"]["live"]]
+            print(f"live audit {verdict}: {report['live_audit']['detail']}")
+        security = report["security_audit"]
+        for finding in security["findings"]:
+            print(f"  ✗ {finding['rule']}: {finding['message']}")
+        print(f"security: {security['status']} (scanned {security['scanned_files']} files)")
+        stored = Path(args.package) / "builder-build-report.json"
+        if args.write:
+            write_report(args.package, report)
+            print("builder-build-report.json updated")
+        elif not stored.is_file() or stored.read_text(encoding="utf-8") != json_text(report):
+            print("note: builder-build-report.json does not reflect this result; run studio.py to record it")
+        code = exit_code_security(report, live_requested=args.live)
+        print(f"package_status={report['package_status']} ({['PASS', 'FAIL', 'SKIP'][code]})")
+        return code
     if args.live:
         from forge.live_test import command as live_command
         return live_command(args)
