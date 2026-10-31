@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://thclaws.cloud/schemas/agent-builder/builder-build-report.schema.json",
   "title": "Agent Builder build report",
-  "description": "Generation, static audit and isolated live audit evidence.",
+  "description": "Generation, static audit, isolated live audit and deterministic security audit evidence.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -26,7 +26,8 @@
       "enum": [
         "unverified",
         "draft",
-        "candidate"
+        "candidate",
+        "shippable"
       ]
     },
     "target": {
@@ -171,7 +172,11 @@
           ]
         },
         "security": {
-          "const": "not_run"
+          "enum": [
+            "not_run",
+            "passed",
+            "failed"
+          ]
         }
       }
     },
@@ -587,6 +592,64 @@
           }
         }
       }
+    },
+    "security_audit": {
+      "type": "object",
+      "description": "Written by forge.security; present exactly when audit.security is not not_run.",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "strict",
+        "findings",
+        "scanned_files",
+        "detail"
+      ],
+      "properties": {
+        "status": {
+          "enum": [
+            "passed",
+            "failed"
+          ]
+        },
+        "strict": {
+          "const": true
+        },
+        "findings": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "rule",
+              "severity",
+              "message"
+            ],
+            "properties": {
+              "rule": {
+                "type": "string",
+                "minLength": 1
+              },
+              "severity": {
+                "enum": [
+                  "error",
+                  "warning"
+                ]
+              },
+              "message": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
+        },
+        "scanned_files": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "detail": {
+          "type": "string"
+        }
+      }
     }
   },
   "allOf": [
@@ -621,7 +684,8 @@
           "package_status": {
             "enum": [
               "draft",
-              "candidate"
+              "candidate",
+              "shippable"
             ]
           }
         }
@@ -921,6 +985,151 @@
             "properties": {
               "status": {
                 "const": "skipped"
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "audit": {
+            "properties": {
+              "security": {
+                "const": "not_run"
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "not": {
+          "required": [
+            "security_audit"
+          ]
+        }
+      },
+      "else": {
+        "required": [
+          "security_audit"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "audit": {
+            "properties": {
+              "security": {
+                "const": "passed"
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "security_audit": {
+            "properties": {
+              "status": {
+                "const": "passed"
+              },
+              "findings": {
+                "maxItems": 0
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "audit": {
+            "properties": {
+              "security": {
+                "const": "failed"
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "security_audit": {
+            "properties": {
+              "status": {
+                "const": "failed"
+              },
+              "findings": {
+                "minItems": 1
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "package_status": {
+            "const": "shippable"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "live_audit"
+        ],
+        "properties": {
+          "audit": {
+            "properties": {
+              "live": {
+                "const": "passed"
+              },
+              "spec": {
+                "const": "passed"
+              },
+              "manifest": {
+                "const": "passed"
+              },
+              "static": {
+                "const": "passed"
+              },
+              "security": {
+                "const": "passed"
+              }
+            }
+          },
+          "live_audit": {
+            "properties": {
+              "status": {
+                "const": "passed"
+              },
+              "cases": {
+                "minItems": 4,
+                "items": {
+                  "properties": {
+                    "status": {
+                      "const": "passed"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "static_audit": {
+            "properties": {
+              "strict": {
+                "const": true
+              }
+            }
+          },
+          "compatibility": {
+            "properties": {
+              "status": {
+                "const": "matched"
               }
             }
           }

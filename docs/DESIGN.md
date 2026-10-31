@@ -283,6 +283,43 @@ Worker และ policy pin worker/workspace เป็น placeholder ที่ 
 static audit: schema ของ spec, manifest ที่ generate, permission declaration vs pack, env names, MCP/skill มีอยู่จริง, refusal surface ครบ, AGENTS.md มี section บังคับ (Mission / Must / Refuse / Output) และประโยค "ตอบ JSON ล้วน" เมื่อ output เป็น `assistant_json`, `thclaws agent validate` ผ่าน
 live audit: start daemon ชั่วคราวแบบ isolated, ยิง `/agent/run` จริงด้วย golden cases (normal / missing input / refusal / malformed); `expect: result` validate กับ schema ของ `assistant_json` output เดียว และ `expect: refusal` validate กับ `refusal.schema`, แล้วเก็บ SSE tool/skill events เป็น evidence. ถ้า response ผ่านทั้ง expected และ opposite branch schema ให้ fail เป็น ambiguous; result ที่มีหลาย output หรือ `collect_files` อย่างเดียวอยู่นอก live-audit scope ของ M6 จนกว่าจะมี output selector contract
 สถานะ: `draft` (static ผ่าน) → `candidate` (live ผ่าน) → `shippable` (compatibility + security ผ่าน) ไม่มี API key = อยู่ที่ draft ห้ามบอกว่า deploy-ready
+
+**Security audit (M19)**: `forge audit <package> --security` ตรวจแบบ deterministic บน static audit ที่รันด้วย
+`strict=True` ในรอบเดียวกัน ไม่เรียก LLM และไม่ต้องใช้ provider key. "security passed" หมายถึงผ่านครบทั้งสี่ finding rules:
+
+- `strict`: static audit ต้องไม่มี finding ใด ๆ; warning `tools` / `schema_vocabulary` กัน security passed ด้วย
+- `secrets`: ไม่มีค่า secret ที่ตรง pattern ในไฟล์ package และไม่มี path ที่ `thclaws agent pack` ตัดเงียบ (§8):
+  `.env`, `.key`, `.pem`, `.p12`, `_secret`, `id_rsa`. ใช้ regex กับ relative path แบบ POSIX:
+  `(\.env$|\.key$|\.pem$|\.p12$|_secret|id_rsa)` และตรวจ content ด้วย fixed patterns ต่อไปนี้ตามลำดับ:
+  `private_key`: `-----BEGIN [A-Z ]*PRIVATE KEY-----`, `openai_key`: `\bsk-[A-Za-z0-9_-]{20,}`,
+  `aws_key`: `\bAKIA[0-9A-Z]{16}\b`, `github_pat`: `\bghp_[A-Za-z0-9]{30,}`,
+  `slack_token`: `\bxox[baprs]-[A-Za-z0-9-]{10,}`, `google_key`: `\bAIza[0-9A-Za-z_-]{30,}`,
+  `jwt`: `\beyJ[A-Za-z0-9_-]{10,}\.eyJ[A-Za-z0-9_-]{10,}`.
+  สำหรับแต่ละชื่อ env ที่ spec ประกาศ (เรียงชื่อและใช้ `re.escape(name)` แทน `NAME`) เพิ่ม
+  `env_assignment`: `(?m)^\s*(?:export\s+)?NAME=\S+` และ `env_json_value`: `"NAME"\s*:\s*"[^"<$][^"]*"`.
+  Content finding ระบุ path, line number (เริ่มที่ 1) และ pattern name เท่านั้น ห้ามแสดงค่า;
+  sensitive-path finding ระบุ path. ตรวจทุก regular file เรียงตาม relative path ยกเว้น `.thclaws/state/`, `.git/`,
+  path ที่มีส่วน `__pycache__`, suffix `.pyc` และ `builder-build-report.json`; ข้าม symlink (static inventory ตรวจแล้ว)
+  และข้าม content ที่ decode UTF-8 ไม่ได้
+- `packs`: ทุก entry ใน `dependencies[]` ต้องมี `status: conformant`; `assets_bundled` / `missing` ไม่ผ่าน.
+  Provenance เทียบกับ `source.ref` ถูกตรวจโดย `forge/packs.py::conformance` ใน static audit อยู่แล้ว
+- `egress`: `permissions.network == allowlist` ต้องมี host อย่างน้อยหนึ่งจาก `hosts` ของ packs ที่ประกาศ;
+  `general-http` ไม่เป็น finding เพราะ guarantee matrix ระบุ Not guaranteed อยู่แล้ว;
+  `none` ครอบคลุมด้วย M1 และ rule `packs`
+
+เลื่อนเป็น `shippable` ก็ต่อเมื่อในรอบเดียวกัน `package_status == candidate` (live ผ่าน),
+`compatibility.status == matched`, `static_audit.strict == true` และไม่มี static finding พร้อม security passed.
+`--security` โดยไม่มี `--live` บันทึกผล security ได้แต่สถานะไม่เกิน `draft`; ไม่ใช้ `candidate` ที่เก็บจากรอบก่อน.
+Security audit ไม่พิสูจน์ network egress enforcement, runtime isolation, deployment (`deployment_verified` ใน export
+ยังเป็น false), human approval (`human_approval` คงเดิม) หรือ MCP server behaviour นอก pack conformance;
+ไม่เปลี่ยนแถวใดใน guarantee matrix.
+
+Report ใช้ `audit.security` ∈ `not_run | passed | failed`; `security_audit` =
+`{status, strict: true, findings[], scanned_files, detail}` มีเมื่อและเฉพาะเมื่อ `audit.security != not_run`.
+Exit code ของ `forge audit --security`: `1` เมื่อ static / manifest / live / security ใด failed;
+`2` เมื่อ manifest skipped (ไม่มี binary) หรือขอ live แล้ว skipped (เช่นไม่มี key); `0` ในกรณีอื่น.
+Gate ของ milestone นี้คือ `scripts/check_m19_security_audit.py` (เขียนใน slice ถัดไป).
+
 `audit.py` / `studio.py` ใน package เป็น runner บาง ๆ ที่เรียก builder logic ตัวเดียว: `audit.py` ตรวจอย่างเดียวไม่แก้ไฟล์ ส่วน `studio.py` ตรวจแล้วบันทึกผลลง `builder-build-report.json` (M5, ดู [audit.md](audit.md))
 กฎ static audit ที่อิง single-worker (ไม่มี `.thclaws/agents/`, ไม่มี `WorkflowRun`) ผูกกับ target Atlas เท่านั้น
 
