@@ -8,6 +8,7 @@
 forge audit out/invoice-reviewer            # ตรวจอย่างเดียว ไม่แก้ไฟล์ใด ๆ
 forge audit out/invoice-reviewer --write    # ตรวจแล้วบันทึกผลลง builder-build-report.json
 forge audit out/invoice-reviewer --strict   # warning นับเป็น fail (เกณฑ์ก่อน shippable)
+forge audit out/<pkg> --security           # M19: strict + deterministic security checks
 ```
 
 ใน package มี wrapper สองตัวที่ generate มาให้: `python3 audit.py` เท่ากับ `forge audit <package>` และ `python3 studio.py` เท่ากับ `forge audit <package> --write`. ทั้งคู่เป็น runner บาง ๆ ที่ import `forge.audit` จึงต้องติดตั้ง builder (`pip install -e`) หรือตั้ง `PYTHONPATH` ไปที่ checkout ก่อน. กฎทั้งหมดอยู่ที่ `forge/audit.py` ที่เดียว
@@ -42,7 +43,7 @@ Exit code: `0` = package เป็น `draft`, `1` = มี error (กฎ static
 
 - `unverified` → `draft` เมื่อไม่มี finding ระดับ error และ `thclaws agent validate` ผ่าน
 - ไม่มี binary: กฎ static ผ่านแต่ `audit.manifest = skipped` → คง `unverified` ตาม DESIGN §7 และ report ระบุเหตุผล
-- warning ไม่กัน `draft` แต่ถูกบันทึกใน `static_audit.findings`; ต้องแก้ก่อน `shippable` (milestone ถัดไปใช้ `--strict`)
+- warning ไม่กัน `draft` แต่ถูกบันทึกใน `static_audit.findings`; ต้องแก้ก่อน `shippable` (M19 `--security` รัน static audit ด้วย `--strict` ในรอบเดียวกัน)
 - `builder-build-report.schema.json` บังคับว่า `draft` ต้องมี `audit.spec` / `manifest` / `static = passed` และมี `static_audit`; `audit.manifest` ต้องเท่ากับ `static_audit.thclaws_validate.status`; `audit.static = passed` ต้องไม่มี finding ระดับ error และถ้า `strict` ต้องไม่มี finding เลย; report ที่อ้าง `draft` หรือ `shippable` โดยหลักฐานไม่รองรับจะไม่ผ่าน schema (gate M5 ทดสอบ report ปลอมทั้ง 8 แบบ)
 - audit ไม่แก้ไฟล์ใด ๆ นอกจาก report เมื่อ `--write`; รันซ้ำได้ report เหมือนเดิมทุก byte บนเครื่องเดียวกัน (`thclaws_validate.version` มาจาก binary ที่ใช้)
 - report สะท้อนผลครั้งล่าสุดที่รัน `studio.py`; แก้ไฟล์แล้วต้องรันใหม่ (`audit.py` จะเตือนเมื่อ report ไม่ตรงกับผลปัจจุบัน)
@@ -165,3 +166,54 @@ boundary drift, inventory `output/**` เฉพาะ T1 และตารา�
 (worker Write/Edit ใต้ `output/` สำเร็จ; Write นอก output, `output/../traversal.txt`, symlink directory, dangling symlink, Edit ไฟล์นอก output และ Bash ถูกปฏิเสธ;
 planner/verifier Write/Edit/Bash ถูกปฏิเสธ) และ pipeline 4 golden cases ผ่าน provider จำลองที่ worker เขียน `output/note.md` จริง (tree diff ยืนยัน);
 provider จริงรัน golden cases ของ `note-writer-standalone` เมื่อมี key.
+
+
+## Security audit (M19)
+
+`--security` ตรวจแบบ deterministic ตาม DESIGN §7 บน strict static audit ในรอบเดียวกัน ไม่เรียก LLM
+และไม่ต้องใช้ provider key สำหรับ security checks:
+
+```bash
+forge audit <pkg> --security
+forge audit <pkg> --live --security --write
+# รันจาก directory ของ package; ต้องติดตั้ง builder หรือตั้ง PYTHONPATH
+python3 studio.py --security
+```
+
+| rule | ตรวจอะไร | severity |
+|---|---|---|
+| `strict` | static audit ต้องไม่มี finding ใด รวม warning `tools` และ `schema_vocabulary` | error |
+| `secrets` | สแกน content ด้วย fixed secret patterns และค่า env ที่ spec ประกาศ; กัน sensitive paths ที่ `thclaws agent pack` ตัดเงียบ (`.env`, `.key`, `.pem`, `.p12`, `_secret`, `id_rsa`); finding ระบุ path/line/pattern โดยไม่แสดงค่า | error |
+| `packs` | ทุก dependency ต้อง `conformant`; `assets_bundled`/`missing` ไม่พอ และ static conformance ตรวจ provenance เทียบ `source.ref` | error |
+| `egress` | `network: allowlist` ต้องมี host จาก pack ที่ประกาศอย่างน้อยหนึ่ง; `general-http` คงขอบเขต Not guaranteed ตาม matrix | error |
+
+Content scan ตรวจ regular files ยกเว้น `.thclaws/state/`, `.git/`, `__pycache__/`, `*.pyc`
+และ `builder-build-report.json`; ข้าม symlink และ content ที่ decode UTF-8 ไม่ได้ โดย static inventory ยังตรวจอยู่.
+รายละเอียด regex อยู่ใน DESIGN §7; การไม่พบ pattern ไม่ใช่หลักฐานว่าไม่มี secret ทุกรูปแบบ.
+
+`shippable` ต้องมี live evidence ในรอบเดียวกัน (`--live --security`): live ผ่านเป็น `candidate`,
+`compatibility.status: matched`, strict static ไม่มี finding และ security ผ่าน จึงเลื่อนสถานะได้.
+ไม่ใช้ `candidate` ที่บันทึกไว้จากรอบก่อน; `--security` อย่างเดียวได้สูงสุด `draft`
+หรือคง `unverified` เมื่อไม่มี binary. Live ยังต้องมี provider key ตาม M6/M9.
+
+Report ใช้ `audit.security: not_run | passed | failed` และมี `security_audit` เมื่อและเฉพาะเมื่อ
+security ถูกรัน: `{status, strict: true, findings[], scanned_files, detail}`.
+Schema กัน `shippable` ที่ไม่มี live/security/strict/compatibility evidence และกัน security passed ที่มี finding.
+Exit code ของ `forge audit --security`: `0` = การตรวจที่รันผ่าน, `1` = static/manifest/live/security ใด failed,
+`2` = manifest skipped หรือขอ live แล้ว skipped; skip ไม่เลื่อนเป็น `shippable`.
+
+Security audit ไม่พิสูจน์ egress enforcement, runtime isolation, deployment, human approval หรือ
+MCP behaviour นอก pack conformance; ไม่เปลี่ยนแถวใดใน guarantee matrix (DESIGN §6)
+และไม่ตั้ง `deployment_verified` ใน export.
+
+```bash
+python3 scripts/check_m19_security_audit.py
+```
+
+Gate ตรวจ offline negative cases, report schema, determinism/ไม่เขียน package, synthetic promotion rule,
+CLI และ studio; native ตรวจ baseline validation และ live golden cases 4/4 ผ่าน scripted provider บน
+`127.0.0.1` พร้อม `echo__reverse` แล้วเลื่อนเป็น `shippable` ทั้ง Python API และ CLI โดยไม่ใช้ key จริง.
+`--timeout` กำหนดวินาทีต่อ live case (default 180).
+Exit `0` = offline + native ผ่านทั้งหมด; `1` = assertion/การตรวจล้มเหลว (รวม binary ไม่ตรง baseline);
+`2` = offline ผ่านแต่ไม่มี thclaws หรือเป็น CLI-only build ที่ไม่มี `--serve` จึงประกาศ SKIP.
+Synthetic promotion เป็นหลักฐานของกฎเท่านั้น; scripted provider ไม่ใช่หลักฐานพฤติกรรมของ model จริง.

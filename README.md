@@ -27,15 +27,20 @@ User goal → Discovery (7 questions) → AgentSpec (SSOT)
 ## เอกสาร
 
 - [docs/DESIGN.md](docs/DESIGN.md) — design baseline (AgentSpec, target/pattern matrix, guarantee matrix, audit 2 ชั้น)
-- [docs/PLAN.md](docs/PLAN.md) — milestones M0–M16 พร้อม definition of done และ check script ต่อ milestone
+- [docs/PLAN.md](docs/PLAN.md) — milestones M0–M17 และ M19 (M18/M20 เสนอ) พร้อม definition of done และ check script ต่อ milestone
 - [AGENTS.md](AGENTS.md) — กติกาสำหรับ coding agent ที่ทำงานใน repo นี้
 - [docs/generator.md](docs/generator.md) — M4 generator, CLI, build report และข้อจำกัด
-- [docs/audit.md](docs/audit.md) — M5 static audit: กฎ, สถานะ, wrappers และ gate
+- [docs/audit.md](docs/audit.md) — M5 static audit และ M19 security audit: กฎ, สถานะ, wrappers และ gate
 - [docs/export.md](docs/export.md) — M8 `forge export`: atlas-register.json, workflow, archive และลำดับลงทะเบียน
 - [docs/packs.md](docs/packs.md) — M10 pack contract สำหรับผู้เขียน MCP ภายนอก: `forge pack new` / `discover` / `test`
 - [builder/README.md](builder/README.md) — M11 builder-agent workspace: interview, `confirmed_by`, `build.py` และ gate
 
 ## สถานะ
+
+M19 (2026-10-31): `forge audit --security` ตรวจ deterministic rules `strict`/`secrets`/`packs`/`egress`;
+`shippable` ต้องมี live evidence ในรอบเดียวกัน พร้อม gate `check_m19_security_audit.py`.
+ผล native ที่ reviewer รันบน thclaws 0.146.0/`9f69995`: gate exit 0, ถึง `shippable` ผ่าน scripted provider,
+golden cases 4/4 และเรียก `echo__reverse`; ไม่ใช้ provider key (ดู evidence ใน PLAN). หลักฐาน synthetic/scripted นี้ไม่ใช่การรัน model จริง.
 
 M7b (publisher email/SFTP pack) — เสร็จ 2026-09-08. MCP รองรับ dry run, persistent idempotency key
 และ fixed destination จาก env ของ operator. Package T2 มี approval fragment ที่บังคับ `human_gate`
@@ -69,6 +74,7 @@ python3 scripts/check_m13_host_layout.py
 python3 scripts/check_m14_standalone_t1.py
 python3 scripts/check_m15_tool_allowlist.py
 python3 scripts/check_m16_host_deploy.py
+python3 scripts/check_m19_security_audit.py
 python3 scripts/check_m12_baseline.py
 ```
 

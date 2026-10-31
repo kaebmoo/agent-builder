@@ -76,7 +76,7 @@ PATH="/path/to/thClaws/target/debug:$PATH" python3 scripts/check_m4_generate.py
 
 `agent new` ถูกเรียกทั้ง static-pipeline, batch-fanout และ dynamic เพื่อตรวจรูปแบบ scaffold โดย dynamic ต้องไม่มี run.js. `agent validate` ตรวจ package จริง รวมถึง synthetic pack script โดยให้ bytecode cache อยู่ภายนอก package
 
-Report ที่ generate มีสถานะ `unverified`; manifest/static/live/security เป็น `not_run`. ผล validator ใน gate เป็นหลักฐานแยกจาก report ที่สร้างและไม่แก้ไฟล์ package. การ validate package format ผ่านไม่ใช่หลักฐานว่า SQL MCP ทำงาน, permission ถูกบังคับ หรือ package ผ่าน audit. `draft` มาจาก static audit (M5, `studio.py` หรือ `forge audit --write`); live audit และ security ยังไม่รัน
+Report ที่ generate มีสถานะ `unverified`; manifest/static/live/security เป็น `not_run`. ผล validator ใน gate เป็นหลักฐานแยกจาก report ที่สร้างและไม่แก้ไฟล์ package. การ validate package format ผ่านไม่ใช่หลักฐานว่า SQL MCP ทำงาน, permission ถูกบังคับ หรือ package ผ่าน audit. `draft` มาจาก static audit (M5, `studio.py` หรือ `forge audit --write`); live audit (M6/M9) และ security audit (M19, `forge audit --security`) เป็นขั้นแยกที่เลื่อนสถานะเป็น `candidate` / `shippable` ได้ตามหลักฐานในรอบเดียวกัน
 
 
 ## Standalone T0 (M9)
