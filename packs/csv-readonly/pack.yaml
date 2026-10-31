@@ -1,0 +1,35 @@
+min_tier: T0
+network: none
+hosts: []
+env: [CSV_READONLY_ROOT]
+tools: []
+mcp_servers:
+  - name: csv-readonly
+    command: python3
+    args: [scripts/server.py]
+    tools: [files, columns, preview, aggregate]
+    mutating: []
+scripts: [server.py]
+skills: []
+fixture:
+  setup: fixture/setup.py
+  cases:
+    - {tool: csv-readonly__files, args: {}, expect: ok}
+    - {tool: csv-readonly__columns, args: {file: sales.csv}, expect: ok}
+    - {tool: csv-readonly__preview, args: {file: sales.csv, rows: 2}, expect: ok}
+    - tool: csv-readonly__aggregate
+      args: {file: sales.csv, metric: sum, column: amount, group_by: region}
+      expect: ok
+    - {tool: csv-readonly__aggregate, args: {file: people.tsv, metric: count}, expect: ok}
+    - tool: csv-readonly__aggregate
+      args: {file: sales.csv, metric: avg, column: amount, where: {column: product, equals: widget}}
+      expect: ok
+    - {tool: csv-readonly__columns, args: {file: ../outside.csv}, expect: error}
+    - {tool: csv-readonly__columns, args: {file: /etc/passwd}, expect: error}
+    - {tool: csv-readonly__columns, args: {file: missing.csv}, expect: error}
+    - {tool: csv-readonly__columns, args: {file: notes.txt}, expect: error}
+    - {tool: csv-readonly__aggregate, args: {file: sales.csv, metric: median, column: amount}, expect: error}
+    - {tool: csv-readonly__aggregate, args: {file: sales.csv, metric: sum, column: product}, expect: error}
+    - {tool: csv-readonly__aggregate, args: {file: sales.csv, metric: sum}, expect: error}
+    - {tool: csv-readonly__preview, args: {file: sales.csv, rows: 0}, expect: error}
+    - {tool: csv-readonly__files, args: {extra: true}, expect: error}
