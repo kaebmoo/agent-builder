@@ -12,6 +12,7 @@ import os
 import shutil
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -57,8 +58,6 @@ def offline() -> None:
                          ('docs/local-test-plan.md', REVISION), ('docs/PLAN.md', '| M17 |'), ('CHANGELOG.md', 'M17')):
         assert phrase in (ROOT / path).read_text(encoding='utf-8'), (path, phrase)
     # The static audit must read the baseline catalog, not a stale one.
-    import tempfile
-
     from forge.audit import static_findings
     from forge.generate import generate
     from forge.spec import load_spec
@@ -84,8 +83,10 @@ def native() -> int:
     assert lines and lines[0] == f'thclaws {THCLAWS_BASELINE}', f'{lines[:1]} is not the baseline {THCLAWS_BASELINE}; re-check DESIGN §4 first'
     assert revision in STANDALONE_THCLAWS_COMPATIBILITY[THCLAWS_BASELINE], f'revision {revision} is not the reviewed source; re-check DESIGN §4 first'
     # builder/ is a host workspace since M13; the agent thclaws validates lives in its shelf folder (DESIGN §9).
-    validate = subprocess.run([binary, 'agent', 'validate', str(ROOT / 'builder/.thclaws/bots/main')], capture_output=True, text=True,
-                              env={**os.environ, 'PYTHONPYCACHEPREFIX': '/tmp/m17-pycache'}, timeout=120, check=False)
+    # thclaws validate runs `python -m py_compile` on the agent's scripts: keep the bytecode out of builder/ and off /tmp (S5443).
+    with tempfile.TemporaryDirectory(prefix='m17-pycache-') as cache:
+        validate = subprocess.run([binary, 'agent', 'validate', str(ROOT / 'builder/.thclaws/bots/main')], capture_output=True, text=True,
+                                  env={**os.environ, 'PYTHONPYCACHEPREFIX': cache}, timeout=120, check=False)
     assert validate.returncode == 0, validate.stdout + validate.stderr
     # The writePaths boundary (traversal, symlink, dangling symlink) must hold on this baseline too (M17 item 2).
     boundary = subprocess.run([sys.executable, str(ROOT / 'scripts/check_m9_standalone.py'), '--write-boundary'],

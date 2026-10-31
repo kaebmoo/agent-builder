@@ -7,8 +7,9 @@
 provider key, checkout ของ AI/Atlas ที่ pin และ macOS
 
 ตั้งแต่ M17 baseline คือ thClaws `0.146.0` revision `9f69995` = desktop build จาก checkout `~/Documents/GitHub/thClaws` ที่ `9f69995`
-(`CARGO_TARGET_DIR=$HOME/Documents/GitHub/thClaws/target-0146 cargo build --features gui --bin thclaws` → `target-0146/debug/thclaws`; ตรวจด้วย `thclaws --version`).
-`target/debug/thclaws` ยังเป็น `0.138.0/d452ece` ของ M12–M16 จนกว่าผู้ดูแลจะแทน. **ไม่ต้อง build รุ่นอื่น**; ถ้า binary ถูก rebuild
+(`cargo build --features gui --bin thclaws` → `target/debug/thclaws`; ตรวจด้วย `thclaws --version`; ถ้า copy binary ทับ path เดิมแทน build
+ต้อง `codesign -s - -f target/debug/thclaws` ซ้ำ ไม่เช่นนั้น macOS SIGKILL ตอนรันครั้งแรก).
+build `0.138.0/d452ece` ของ M12–M16 ถูกแทนที่แล้ว 2026-10-31 (ไม่มี binary เก่าเหลือบนเครื่อง; control ต่อ `d452ece` ต้อง build ใหม่จาก source). **ไม่ต้อง build รุ่นอื่น**; ถ้า binary ถูก rebuild
 จาก commit อื่น ทุก gate ที่ใช้ binary จะ fail exit 1 ตามออกแบบ จนกว่าจะตรวจ DESIGN §4 ใหม่.
 บน Mac binary ที่ path ใหม่ยังไม่ได้รับ ACL ของ keychain: `thclaws --version`/`agent *` จะค้างรอ dialog ของ macOS (DESIGN §4 M17 ข้อ 9) →
 รันทุก gate ด้วย `export THCLAWS_DISABLE_KEYCHAIN=1` (daemon ที่ harness start ไม่กระทบเพราะ HOME ชั่วคราว)
@@ -33,9 +34,9 @@ provider key, checkout ของ AI/Atlas ที่ pin และ macOS
 cd ~/Documents/GitHub/agent-builder
 git checkout main && git pull --ff-only origin main
 python3 -m venv .venv && . .venv/bin/activate && python3 -m pip install -e ".[dev,sql-pack]"
-export THCLAWS_DISABLE_KEYCHAIN=1                               # binary ที่ path ใหม่ติด keychain consent บน Mac (DESIGN §4 M17 ข้อ 9)
-~/Documents/GitHub/thClaws/target-0146/debug/thclaws --version  # ต้องได้ thclaws 0.146.0 / revision: 9f69995
-export THCLAWS_PATH="$HOME/Documents/GitHub/thClaws/target-0146/debug"
+export THCLAWS_DISABLE_KEYCHAIN=1                               # binary ที่ยังไม่มี keychain ACL ติด consent บน Mac (DESIGN §4 M17 ข้อ 9)
+~/Documents/GitHub/thClaws/target/debug/thclaws --version       # ต้องได้ thclaws 0.146.0 / revision: 9f69995
+export THCLAWS_PATH="$HOME/Documents/GitHub/thClaws/target/debug"
 ```
 
 Provider: ใช้ mapping เดิมจาก `.env` (ไม่พิมพ์ค่าออก terminal): `MATCHA_API_KEY` → `OPENAI_COMPAT_API_KEY`,
