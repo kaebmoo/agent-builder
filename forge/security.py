@@ -42,18 +42,18 @@ def scan_files(package: Path) -> list[Path]:
     return sorted(files, key=lambda target: target.relative_to(package).as_posix())
 
 
-def security_findings(package: Path, spec: dict, report: dict, *,
-                      packs_dir: Path | None = None) -> tuple[list[dict], int]:
-    findings = []
+def strict_findings(report: dict) -> list[dict]:
     static = report["static_audit"]
-    if static["findings"] or not static["strict"]:
-        findings.append({"rule": "strict", "severity": "error", "message":
-                         f"static audit under --strict reports {len(static['findings'])} finding(s); "
-                         "security requires none"})
+    if not static["findings"] and static["strict"]:
+        return []
+    return [{"rule": "strict", "severity": "error", "message":
+             f"static audit under --strict reports {len(static['findings'])} finding(s); security requires none"}]
 
+
+def secret_findings(package: Path, spec: dict, files: list[Path]) -> list[dict]:
     patterns = [*SECRET_PATTERNS,
                 *(pattern for name in sorted(spec["env"]) for pattern in env_value_patterns(name))]
-    files = scan_files(package)
+    findings = []
     for target in files:
         path = target.relative_to(package).as_posix()
         if SENSITIVE_PATH.search(path):
@@ -64,30 +64,45 @@ def security_findings(package: Path, spec: dict, report: dict, *,
         except UnicodeDecodeError:
             continue
         for line, content in enumerate(text.splitlines(), 1):
-            matched = {name for name, pattern in patterns if pattern.search(content)}
-            for name in sorted(matched):
+            for name in sorted({name for name, pattern in patterns if pattern.search(content)}):
                 findings.append({"rule": "secrets", "severity": "error", "message":
                                  f"{path}:{line}: matches secret pattern {name}; remove the value and provision "
                                  "it from the daemon environment"})
+    return findings
 
-    for dependency in report["dependencies"]:
-        if dependency["status"] != "conformant":
-            findings.append({"rule": "packs", "severity": "error", "message":
-                             f"pack {dependency['pack']}: status {dependency['status']}; security requires "
-                             "conformant evidence from forge pack test"})
 
-    if spec["permissions"]["network"] == "allowlist":
-        hosts = set()
-        for capability in spec["capabilities"]:
-            folder = (packs_dir or ROOT / "packs").resolve() / capability["pack"]
-            if (folder / "pack.yaml").exists():
-                try:
-                    hosts.update(read_pack(folder)["hosts"])
-                except (OSError, ValueError, TypeError, KeyError, yaml.YAMLError):
-                    continue  # Invalid packs already block the strict static audit.
-        if not hosts:
-            findings.append({"rule": "egress", "severity": "error", "message":
-                             "network allowlist declared but no pack declares hosts; egress cannot be declared"})
+def pack_findings(report: dict) -> list[dict]:
+    return [{"rule": "packs", "severity": "error", "message":
+             f"pack {dependency['pack']}: status {dependency['status']}; security requires "
+             "conformant evidence from forge pack test"}
+            for dependency in report["dependencies"] if dependency["status"] != "conformant"]
+
+
+def declared_hosts(spec: dict, packs_dir: Path | None) -> set[str]:
+    hosts: set[str] = set()
+    for capability in spec["capabilities"]:
+        folder = (packs_dir or ROOT / "packs").resolve() / capability["pack"]
+        if not (folder / "pack.yaml").exists():
+            continue
+        try:
+            hosts.update(read_pack(folder)["hosts"])
+        except (OSError, ValueError, TypeError, KeyError, yaml.YAMLError):
+            continue  # Invalid packs already block the strict static audit.
+    return hosts
+
+
+def egress_findings(spec: dict, packs_dir: Path | None) -> list[dict]:
+    if spec["permissions"]["network"] != "allowlist" or declared_hosts(spec, packs_dir):
+        return []
+    return [{"rule": "egress", "severity": "error", "message":
+             "network allowlist declared but no pack declares hosts; egress cannot be declared"}]
+
+
+def security_findings(package: Path, spec: dict, report: dict, *,
+                      packs_dir: Path | None = None) -> tuple[list[dict], int]:
+    files = scan_files(package)
+    findings = [*strict_findings(report), *secret_findings(package, spec, files),
+                *pack_findings(report), *egress_findings(spec, packs_dir)]
     return sorted(findings, key=lambda finding: (finding["rule"], finding["message"])), len(files)
 
 

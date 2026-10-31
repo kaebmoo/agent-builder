@@ -25,6 +25,7 @@ from forge.generate import (
     standalone_compatibility,
 )
 from forge.packs import conformance, mcp_tools, read_pack
+from forge.security import exit_code_security, security_audit
 from forge.spec import ATLAS_TARGETS
 
 Finding = dict[str, str]
@@ -299,67 +300,54 @@ def configure(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--write", action="store_true", help="record the verdict in builder-build-report.json")
 
 
-def command(args: argparse.Namespace) -> int:
+def audited_report(args: argparse.Namespace) -> dict[str, Any]:
+    """Static audit (strict when --security), or the live audit when --live --security; may raise."""
+    if args.security and args.live:
+        from forge.live_test import live_audit
+        report = live_audit(args.package, timeout=args.timeout, key_env=args.provider_key_env, strict=True)[0]
+    else:
+        report = audit_package(args.package, strict=args.strict or args.security)
     if args.security:
-        from forge.security import exit_code_security, security_audit
+        security_audit(args.package, report)
+    return report
 
-        try:
-            if args.live:
-                from forge.live_test import live_audit
-                report = live_audit(args.package, timeout=args.timeout, key_env=args.provider_key_env,
-                                    strict=True)[0]
-            else:
-                report = audit_package(args.package, strict=True)
-            security_audit(args.package, report)
-        except (OSError, ValueError, TypeError, subprocess.SubprocessError) as exc:
-            print(f"audit FAIL: {exc}")
-            return 1
-        audit = report["static_audit"]
-        for finding in audit["findings"]:
-            print(f"  ✗ {finding['rule']}: {finding['message']}")
-        validate = audit["thclaws_validate"]
-        print(f"thclaws agent validate: {validate['status']}"
-              + (f" ({validate['version']})" if validate["version"] else "")
-              + (f"\n{validate['detail']}" if validate["detail"] else ""))
-        if args.live:
-            verdict = {"passed": "PASS", "failed": "FAIL", "skipped": "SKIP"}[report["audit"]["live"]]
-            print(f"live audit {verdict}: {report['live_audit']['detail']}")
-        security = report["security_audit"]
-        for finding in security["findings"]:
-            print(f"  ✗ {finding['rule']}: {finding['message']}")
-        print(f"security: {security['status']} (scanned {security['scanned_files']} files)")
-        stored = Path(args.package) / "builder-build-report.json"
-        if args.write:
-            write_report(args.package, report)
-            print("builder-build-report.json updated")
-        elif not stored.is_file() or stored.read_text(encoding="utf-8") != json_text(report):
-            print("note: builder-build-report.json does not reflect this result; run studio.py to record it")
-        code = exit_code_security(report, live_requested=args.live)
-        print(f"package_status={report['package_status']} ({['PASS', 'FAIL', 'SKIP'][code]})")
-        return code
-    if args.live:
+
+def print_security(report: dict[str, Any], *, live: bool) -> None:
+    if live:
+        verdict = {"passed": "PASS", "failed": "FAIL", "skipped": "SKIP"}[report["audit"]["live"]]
+        print(f"live audit {verdict}: {report['live_audit']['detail']}")
+    security = report["security_audit"]
+    for finding in security["findings"]:
+        print(f"  ✗ {finding['rule']}: {finding['message']}")
+    print(f"security: {security['status']} (scanned {security['scanned_files']} files)")
+
+
+def command(args: argparse.Namespace) -> int:
+    if args.live and not args.security:
         from forge.live_test import command as live_command
         return live_command(args)
     try:
-        report = audit_package(args.package, strict=args.strict)
+        report = audited_report(args)
     except (OSError, ValueError, TypeError, subprocess.SubprocessError) as exc:
         print(f"audit FAIL: {exc}")
         return 1
     audit = report["static_audit"]
     for finding in audit["findings"]:
-        mark = "✗" if finding["severity"] == "error" or args.strict else "⚠"
+        mark = "✗" if finding["severity"] == "error" or args.strict or args.security else "⚠"
         print(f"  {mark} {finding['rule']}: {finding['message']}")
     validate = audit["thclaws_validate"]
     print(f"thclaws agent validate: {validate['status']}"
           + (f" ({validate['version']})" if validate["version"] else "")
           + (f"\n{validate['detail']}" if validate["detail"] else ""))
+    if args.security:
+        print_security(report, live=args.live)
     stored = Path(args.package) / "builder-build-report.json"
     if args.write:
         write_report(args.package, report)
         print("builder-build-report.json updated")
     elif not stored.is_file() or stored.read_text(encoding="utf-8") != json_text(report):
         print("note: builder-build-report.json does not reflect this result; run studio.py to record it")
-    code = exit_code(report)
+    code = exit_code_security(report, live_requested=args.live) if args.security else exit_code(report)
     print(f"package_status={report['package_status']} ({['PASS', 'FAIL', 'SKIP'][code]})")
     return code
 

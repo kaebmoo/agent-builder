@@ -346,7 +346,8 @@ def main():
                 for target in (packs, packs_unproven):
                     shutil.copytree(ECHO, target / 'echo', ignore=IGNORE)
                 evidence, code = test_pack('echo', packs, timeout=10)
-                assert code == 0, f'echo conformance failed: {evidence}'
+                if code != 0:
+                    raise AssertionError(f'echo conformance failed: {evidence}')
                 spec, package = offline(base, packs, packs_unproven)
                 runtime = cli_runtime(base, packs)
                 cli_offline(base, package, runtime)
