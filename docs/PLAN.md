@@ -3,7 +3,7 @@
 กติกาเดียวกับ Atlas: **หนึ่ง milestone = หนึ่ง check script** ใน `scripts/check_<milestone>.py` ที่ fail เมื่อพฤติกรรมพัง
 ห้าม tick milestone ก่อน check ผ่าน commit ต่อ milestone เมื่อ gate เขียว
 
-ลำดับตาม baseline ที่ตกลง: schema → fixtures → matrix → generator → thclaws validate → static audit → SQL pack ขั้นต่ำ (M7a) → live audit → publisher pack (M7b) → export → standalone generator (M9, เพิ่ม 2026-09-07 ต่อท้าย MVP เพื่อไม่เลื่อนสาย Atlas) → pack authoring workflow (M10) → builder-agent (M11) (เพิ่ม 2026-09-07 หลัง MVP; M7a ขยายเป็น pack contract ในวันเดียวกัน) → baseline 0.138.0 (M12, เพิ่ม 2026-10-27 เพราะ binary ที่ผู้ดูแลใช้จริงไม่ใช่ 0.116.0 อีกแล้ว) → host + bots layout (M13, เพิ่ม 2026-10-27 หลัง M7b/M11 live บน Mac fail เพราะ `--serve` ของ desktop build แปลง package ในที่เดิม; ประเด็นใน `docs/thclaws-host-bots-brief.md`) → ปลด T1 standalone (M14) → `allowedTools` บน `/agent/run` (M15, เพิ่ม 2026-10-28) → host deployment ของ package prompt/assistant (M16, เพิ่ม 2026-10-28 ตาม DESIGN §4 M13 (e)) → ข้อเสนอต่อจาก M16: M17–M20 (เสนอ 2026-10-31; M17 re-baseline และ M19 ทำแล้ว 2026-10-31 ดูย่อหน้า "M17 ทำ (Mac)" / "M19 ทำ (Mac)", M18/M20 ยังไม่เริ่ม ดูย่อหน้า "สถานะ 2026-10-31" ท้าย "ขั้นถัดไป")
+ลำดับตาม baseline ที่ตกลง: schema → fixtures → matrix → generator → thclaws validate → static audit → SQL pack ขั้นต่ำ (M7a) → live audit → publisher pack (M7b) → export → standalone generator (M9, เพิ่ม 2026-09-07 ต่อท้าย MVP เพื่อไม่เลื่อนสาย Atlas) → pack authoring workflow (M10) → builder-agent (M11) (เพิ่ม 2026-09-07 หลัง MVP; M7a ขยายเป็น pack contract ในวันเดียวกัน) → baseline 0.138.0 (M12, เพิ่ม 2026-10-27 เพราะ binary ที่ผู้ดูแลใช้จริงไม่ใช่ 0.116.0 อีกแล้ว) → host + bots layout (M13, เพิ่ม 2026-10-27 หลัง M7b/M11 live บน Mac fail เพราะ `--serve` ของ desktop build แปลง package ในที่เดิม; ประเด็นใน `docs/thclaws-host-bots-brief.md`) → ปลด T1 standalone (M14) → `allowedTools` บน `/agent/run` (M15, เพิ่ม 2026-10-28) → host deployment ของ package prompt/assistant (M16, เพิ่ม 2026-10-28 ตาม DESIGN §4 M13 (e)) → ข้อเสนอต่อจาก M16: M17–M20 (เสนอ 2026-10-31; M17 re-baseline และ M19 ทำแล้ว 2026-10-31 ดูย่อหน้า "M17 ทำ (Mac)" / "M19 ทำ (Mac)", M18/M20 ยังไม่เริ่ม ดูย่อหน้า "สถานะ 2026-10-31" ท้าย "ขั้นถัดไป") → M21 pack อิสระ 3 ตัว (เพิ่มและทำ 2026-11-01)
 
 | M | ชื่อ | ผลลัพธ์ | Definition of done | check |
 |---|---|---|---|---|
@@ -29,6 +29,7 @@
 | M18 | Deployment จริงครั้งแรก end-to-end (เสนอ 2026-10-31, ยังไม่เริ่ม) | `echo-reader` หรือ `sql-reader` (T0) บน host ที่ไม่ใช่เครื่อง dev: launcher (launchd/systemd) ที่ตั้ง env ตาม deployment hints ของ export, secret จาก env ของ daemon, register กับ Atlas จริง, workflow run จริง; runbook + checklist ที่ operator ติ๊ก `deployment_verified` นอก builder (builder ไม่ตั้งค่านี้เอง ตาม DESIGN §6) | workflow run `succeeded` บน host จริงอย่างน้อย 1 package พร้อม checklist ครบและขั้นตอน rollback; ไม่มี claim ใหม่ใน guarantee matrix | `check_m18_deploy_runbook.py` (ยังไม่มี; ตรวจ runbook/launcher template แบบ static; ส่วน host จริง skip exit 2) |
 | M19 | Security audit → path ไป `shippable` (เสนอ 2026-10-31, ทำ 2026-10-31 ดูย่อหน้า "M19 ทำ (Mac)") | นิยาม "security passed" แบบ deterministic ใน DESIGN §7 (static `--strict` ผ่าน, pack provenance ตรง `source.ref`, secret scan ของ package tree, egress declaration ครบ, ไม่มี Declared ที่อ้างเกิน matrix) และ `forge audit --security` เขียน `security` ใน build report; promote `candidate` → `shippable` เมื่อ compatibility + security ผ่าน | package ที่ถูกต้องได้ `shippable`; package ที่ถูกแก้ให้ผิด (secret ใน tree, provenance ไม่ตรง, pack ไม่ conformant) fail พร้อมเหตุผล; ไม่ใช้ LLM ตัดสิน | `check_m19_security_audit.py` (0 = offline + native ผ่าน; 1 = fail รวม binary ไม่ตรง baseline; 2 = offline ผ่านแต่ไม่มี binary/ไม่มี `--serve`; ไม่ต้องใช้ key จริง) |
 | M20 | T2 side-effect proof (เสนอ 2026-10-31, ยังไม่เริ่ม) | publisher ส่ง email/SFTP จริงไป test mailbox/test server ผ่าน Atlas `human_gate` บน T2 daemon แยกตาม approval fragment ของ M7b; evidence ว่า `/agent/run` ตรงถูกปิดจาก network นอก Atlas | ส่งจริงสำเร็จหลัง approve และไม่เกิดเมื่อ reject; แถว `human_approval` ใน matrix ยกจาก Not verified ได้เฉพาะเมื่อ evidence ครบ และระบุว่า enforce โดย Atlas ไม่ใช่ thClaws | `check_m20_t2_side_effect.py` (ยังไม่มี; ไม่มี test mailbox/SFTP → skip exit 2) |
+| M21 | Independent example packs (เพิ่ม 2026-11-01, ทำ 2026-11-01 ดูย่อหน้า "M21 ทำ (Mac)") | pack อิสระที่ใช้กับงานไหนก็ได้ 3 ตัว `sqlite-readonly` (SQLite `mode=ro` + authorizer), `csv-readonly` (CSV/TSV ในโฟลเดอร์เดียว เปิดอ่านและปฏิเสธ symlink/traversal), `datetime-tools` (ไม่มี env); stdlib เท่านั้น ไม่ผูก repo อื่น; fixture `sqlite-reader` (atlas-worker), `csv-reader` / `datetime-helper` (standalone static-pipeline) และเอกสาร | conformance บนสำเนา temp, descriptor ที่ไม่มี negative case หรือ mutating แต่ T0 ถูก reject; generate ซ้ำเหมือนกันทุก byte รวม report, MCP config/script/manifest ตรง, strict static ไม่มี finding + security passed และ report ผ่าน schema; read-only/result probes ผ่าน; native validate ทั้งสามเป็น `draft`; ไม่รวม live evidence และไม่ใช่ hardened services | `check_m21_example_packs.py` (ไม่มี binary → 2; 0 = offline + native ผ่าน; 1 = fail รวม binary ไม่ตรง baseline; ไม่ใช้ key) |
 
 ## นอกแผน (ทำหลัง MVP เมื่อมีเหตุผล)
 
@@ -347,7 +348,7 @@ evidence `candidate` เดิมเป็นของ 0.116.0 ทั้งห�
 M15 adopt `allowedTools` ใน `.thclaws/settings.json` เพื่อยก `tool_allowlist` บน `/agent/run` จาก Declared เป็น Enforced พร้อม native proof (ทำแล้ว 2026-10-28 ดูย่อหน้า "M15 ทำ (Mac)")
 (ต้องรับข้อค้นพบ M13 ว่า `apply_filter` ถูกเรียกก่อนลงทะเบียน Skill/MCP tools จึงไม่กรองสองกลุ่มนั้น), และ M16 (มีเงื่อนไข) host deployment สำหรับ
 package ที่มีเฉพาะ `prompt_json`/`assistant_json` หลังพิสูจน์บน Mac ตาม DESIGN §4 การตัดสินใจ (e) (พิสูจน์และทำแล้ว 2026-10-28 ดูย่อหน้า "M16 ทำ (Mac)";
-merge เข้า main 2026-10-29). milestone ที่เสนอต่อจาก M16 (M17–M20) อยู่ในตารางและย่อหน้า "สถานะ 2026-10-31" ท้ายบท; M17 และ M19 ทำแล้ว 2026-10-31 (ย่อหน้า "M17 ทำ (Mac)" / "M19 ทำ (Mac)"), M18/M20 ยังไม่เริ่ม.
+merge เข้า main 2026-10-29). milestone ที่เสนอต่อจาก M16 (M17–M20) อยู่ในตารางและย่อหน้า "สถานะ 2026-10-31" ท้ายบท; M17 และ M19 ทำแล้ว 2026-10-31 (ย่อหน้า "M17 ทำ (Mac)" / "M19 ทำ (Mac)"), M18/M20 ยังไม่เริ่ม; M21 pack อิสระ 3 ตัวทำแล้ว 2026-11-01 (ย่อหน้า "M21 ทำ (Mac)").
 
 ผล live บน Mac 2026-10-27 (checkout `0837eef`, binary 0.138.0 `d452ece` desktop build, `oai/gpt-5.4-mini`; รายละเอียดใน `docs/thclaws-host-bots-brief.md`):
 M9 live exit 0 และ `--write-boundary` exit 0; M7b `--live` fail 3/3 ตามคำสั่งในแผน แต่ผ่าน 4/4 เมื่อตั้ง `THCLAWS_AUTO_MIGRATE=0` ผ่าน launcher นอก repo;
@@ -506,7 +507,7 @@ native mode: m0=0 m1=0 m2=0 m3=0 m4=0 m5=0 m6=1 m7a=1 m7b=0 m8=1 m9=2 m10=0 m11=
   (g) host layout (M16) รับเฉพาะ `prompt_json`/`assistant_json`, หนึ่ง package ต่อ host, Atlas ถึง bot แรกเท่านั้น.
   (h) GitHub CI ตรวจจริงแค่ M0–M3 + ruff (M4+ skip เพราะไม่มี binary), `tests/` ว่าง (pytest no-op), evidence native/live อยู่ใน `out/` ที่ gitignored บน Mac เครื่องเดียว →
       nightly/self-hosted job ที่มี binary หรืออย่างน้อย commit summary ที่ redact แล้วลง `docs/evidence/`; เติม pytest อย่างน้อย 1 test หรือถอดจาก CI.
-  (i) pack จริงมี 2 (`sql-readonly`, `publisher-email-sftp`) + `echo` fixture; `google-weather` ยัง `missing` ทำให้ demo ของ builder-agent จบที่ `missing` เสมอ.
+  (i) pack จริงมี 2 (`sql-readonly`, `publisher-email-sftp`) + `echo` fixture; `google-weather` ยัง `missing` ทำให้ demo ของ builder-agent จบที่ `missing` เสมอ → M21 ทำแล้ว 2026-11-01: pack อิสระ sqlite-readonly / csv-readonly / datetime-tools; google-weather ยังไม่มี.
   (j) เล็ก: standalone รองรับเฉพาะ `static-pipeline`, T1 รับรองเฉพาะ `d452ece`, `must_call` ไม่มีใน schema, Atlas `output_format: json` ไม่ตรวจ schema, `.codex/hooks.json` ที่ commit มี absolute path `/Users/seal/...`.
 - รอผู้ดูแลตัดสินใจ: push `main`; thClaws — freeze binary `d452ece` เป็น runtime production (copy ออกจาก `target/debug` + บันทึก sha) หรือทำ M17 re-baseline (แนะนำ M17 เพราะ fork ไปแล้ว 2 release) — **ทำ M17 แล้ว 2026-10-31** (ย่อหน้า "M17 ทำ (Mac)"; binary `d452ece` ที่ `target/debug` ยังอยู่ รอผู้ดูแลแทนด้วย build `9f69995`);
   ลำดับที่เสนอ M17 → M18 → M19 → M20 แล้วค่อย model pin / pack ตัวที่ 3 / CI evidence.
@@ -557,3 +558,31 @@ native (`THCLAWS_DISABLE_KEYCHAIN=1`, `THCLAWS_BIN=~/Documents/GitHub/thClaws/ta
 Codex sandbox bind `127.0.0.1` ไม่ได้; native proof ข้างต้นเป็นผลที่ reviewer รัน.
 Round 2 Codex รัน CI mode ได้ exit 2 พร้อม `M19 egress: exercised on a T2 atlas-workflow probe`: M1 และ generator รับ probe และ security audit พบ `egress` (`no pack declares hosts`).
 Security ไม่เพิ่ม claim ใน guarantee matrix และไม่ยืนยัน egress enforcement/runtime isolation/deployment/human approval.
+
+M21 ทำ (Mac) 2026-11-01 (delegate run 20261101-0040: Codex เขียนโค้ด, Claude review และรัน gate; branch ai/delegate-20261101-0040; binary thclaws 0.146.0/9f69995; ไม่ใช้ provider key):
+เพิ่ม pack อิสระ T0/network none ที่ใช้ stdlib เท่านั้น: `sqlite-readonly` อ่าน SQLite ไฟล์ใดก็ได้ด้วย `mode=ro` + authorizer และ SELECT/WITH gate,
+`csv-readonly` อ่าน CSV/TSV ใต้โฟลเดอร์ที่ operator กำหนดด้วย read mode และปฏิเสธ traversal/symlink,
+`datetime-tools` คำนวณเวลา/timezone/ระยะเวลา/วันทำการโดยไม่มี env (ต้องมี tz database ของเครื่อง).
+ตัวอย่าง `sqlite-reader` เป็น atlas-worker; `csv-reader` และ `datetime-helper` เป็น standalone static-pipeline.
+Gate `check_m21_example_packs.py` ทดสอบสำเนา temp โดยไม่เขียน checkout: conformance, descriptor ไม่มี negative case และ mutating-T0 ถูก reject,
+generate ซ้ำเหมือนกันทุก byte รวม report, MCP config/manifest/bundled script ตรง, strict static/security ผ่านและ report ผ่าน schema,
+probe ปฏิเสธ SQLite UPDATE/DELETE ใน WITH แล้ว invoices ยัง 6 แถว, CSV traversal ถูกปฏิเสธและยอดรวมตรง, datetime conversion/วันทำการตรงและ timezone ผิดถูกปฏิเสธ;
+native audit + security + write report ต้องได้ `draft`. ไม่ใช้ live/provider และไม่พิสูจน์ candidate/shippable; packs เป็นตัวอย่าง ไม่ใช่ hardened services และไม่เพิ่ม guarantee claim.
+
+หลักฐาน (แยกผู้รัน):
+
+```text
+Codex CI mode (ไม่มี binary; pack tests บนสำเนา temp):
+  sqlite-readonly: exit=0, conformant, 12 cases
+  csv-readonly: exit=0, conformant, 15 cases
+  datetime-tools: exit=0, conformant, 13 cases
+  check_m1_spec.py = 0; check_m2_fixtures.py = 0; check_m3_matrix.py = 0
+  check_m21_example_packs.py = 2 (M21 offline PASS + explicit M21 SKIP)
+Reviewer native slice 01–03 (ผลที่ reviewer ตรวจแล้ว ตาม brief; thclaws 0.146.0/9f69995):
+  forge audit --security: sqlite-reader / csv-reader / datetime-helper → draft (PASS) ทั้งสาม
+  check_m9_standalone.py = 2 (ไม่มี key)
+Reviewer (round 1 review, 2026-11-01):
+  check_m21_example_packs.py CI mode (ไม่มี binary) = 2 (M21 offline PASS + explicit M21 SKIP)
+  check_m21_example_packs.py native = 0 (M21 native PASS: sqlite-reader / csv-reader / datetime-helper draft on thclaws 0.146.0 revision 9f69995)
+  check_m2_fixtures.py = 0; uvx ruff check . = 0; git diff --check = 0; test -x scripts/check_m21_example_packs.py = 0
+```

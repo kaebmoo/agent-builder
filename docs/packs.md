@@ -20,7 +20,10 @@ forge pack test <name>                                  # 2. conformance โด�
 
 ตัวอย่างสมบูรณ์ที่เล็กที่สุดอยู่ที่ [`fixtures/packs/echo/`](../fixtures/packs/echo/README.md): stdlib stdio MCP สอง tool,
 ไม่มี env, ไม่มี network. ตัวอย่างจริงดู [`packs/sql-readonly`](../packs/sql-readonly/README.md) (T0, wrap runtime ภายนอก)
-และ [`packs/publisher-email-sftp`](../packs/publisher-email-sftp/README.md) (T2, mutating tools).
+และ [`packs/publisher-email-sftp`](../packs/publisher-email-sftp/README.md) (T2, mutating tools),
+รวมถึงตัวอย่างอิสระ [`packs/sqlite-readonly`](../packs/sqlite-readonly/README.md) (T0, SQLite ไฟล์ใดก็ได้ อ่านอย่างเดียวด้วย `mode=ro` + authorizer),
+[`packs/csv-readonly`](../packs/csv-readonly/README.md) (T0, CSV/TSV ใต้โฟลเดอร์เดียว) และ
+[`packs/datetime-tools`](../packs/datetime-tools/README.md) (T0, ไม่มี env) — ทั้งสามใช้ stdlib เท่านั้น ไม่ผูกกับ repo อื่น (M21).
 
 ## สิ่งที่ `forge pack new` และ `forge pack discover` ทำ และไม่ทำ
 

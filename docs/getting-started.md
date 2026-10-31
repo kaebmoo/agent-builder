@@ -336,7 +336,12 @@ spec ต้องมี block `confirmed_by` (ดู [builder/README.md](../buil
 |---|---|---|---|---|---|
 | `sql-readonly` | query ฐานข้อมูล SQLite แบบอ่านอย่างเดียว (ดู metadata, ตรวจ SQL, รัน query) ห่อ MCP ของโปรเจ็กต์ `kaebmoo/AI` ไม่มี admin tool | T0, none | `sql-readonly__metadata`, `__query`, `__validate` | `SQL_READONLY_AI_ROOT`, `SQL_READONLY_DSN` | `fixtures/sql-reader/spec.yaml` |
 | `publisher-email-sftp` | ส่ง email หรือ upload ไฟล์ทาง SFTP ไปปลายทางที่ operator กำหนดไว้ล่วงหน้า ทุก call ต้องระบุ `dry_run` และ `idempotency_key` ส่งจริงต้องผ่าน `human_gate` ของ Atlas | T2, general-http | `publisher-email-sftp__send_email`, `__upload_file` | `PUBLISHER_CONFIG`, `PUBLISHER_INPUT_ROOT`, `PUBLISHER_STATE_DIR` | `fixtures/publisher/spec.yaml` |
+| `sqlite-readonly` | อ่าน SQLite ไฟล์ใดก็ได้ด้วย `mode=ro` + authorizer | T0, none | `sqlite-readonly__tables`, `__schema`, `__query` | `SQLITE_READONLY_DB` | `fixtures/sqlite-reader/spec.yaml` |
+| `csv-readonly` | ดูไฟล์, header, preview และ aggregate CSV/TSV แบบอ่านอย่างเดียวภายในโฟลเดอร์ที่กำหนด | T0, none | `csv-readonly__files`, `__columns`, `__preview`, `__aggregate` | `CSV_READONLY_ROOT` | `fixtures/csv-reader/spec.yaml` |
+| `datetime-tools` | ดูเวลา, แปลง timezone, หาระยะเวลา และบวกวันทำการ | T0, none | `datetime-tools__now`, `__convert`, `__diff`, `__add_business_days` | ไม่มี | `fixtures/datetime-helper/spec.yaml` |
 | `echo` (ใน `fixtures/packs/`) | ตัวอย่างอ้างอิงเล็กสุด: echo/reverse ข้อความ ไม่มี env ไม่มี network ใช้เป็นต้นแบบเขียน pack และใช้ใน gate ไม่ใช่ความสามารถสำหรับงานจริง | T0, none | `echo__echo`, `echo__reverse` | ไม่มี | `fixtures/packs/echo/spec.yaml` (ต้องใช้ `--packs-dir fixtures/packs`) |
+
+  ทั้งสาม pack ใหม่เป็นตัวอย่างอิสระ (M21, stdlib เท่านั้น ใช้กับ target ใดก็ได้); งาน email/SFTP ใช้ `publisher-email-sftp` กับงานทั่วไปได้ โดย operator ตั้งปลายทางและ credentials ใน config ตามการออกแบบ เพื่อให้ agent ไม่เป็นผู้เลือกผู้รับ.
 
   `sql-readonly` ต้องมี checkout ของ `kaebmoo/AI` ที่ revision `d95dc28` วางข้าง agent-builder ชื่อ `AI` และติดตั้ง `pip install -e ".[sql-pack]"` (`mcp>=1.26,<2`)
   ส่วน `publisher-email-sftp` ต้องมี OpenSSH `sftp` บน PATH เมื่อส่งจริง ดูรายละเอียดใน README ของแต่ละ pack
