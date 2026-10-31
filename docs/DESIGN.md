@@ -590,7 +590,7 @@ identity มาเมื่อ `workspace_dir` = bot dir และไม่ม�
 
 Source: checkout `~/Documents/GitHub/thClaws` ที่ `9f69995` (merge หลัง release `v0.146.0` `492bfb2`; `git describe` = `v0.146.0-24-g9f69995`; 15 commits ถัดจาก `d452ece`).
 ตรวจด้วย `git diff d452ece 9f69995 -- crates/core/src` (131 ไฟล์) แล้วเปิด source ของ `9f69995` อ่านยืนยันทุกไฟล์ที่ §4 (M12, M13, M14, M15, M16) อ้างถึง (path ใต้ `crates/core/src/`, เลขบรรทัดของ `9f69995`).
-Desktop build `cargo build --features gui --bin thclaws` (ไม่มี `kms_search_index` เหมือน build `d452ece` เดิม) ใน `target-0146/` รายงาน `thclaws 0.146.0` / `revision: 9f69995 (main)` / `built: ...`; parser ของ gate ใช้ token แรกหลัง `revision:` ได้เหมือนเดิม.
+Desktop build `cargo build --features gui --bin thclaws` (ไม่มี `kms_search_index` เหมือน build `d452ece` เดิม) ใน `target-0146/` (copy ไปแทน `target/debug/thclaws` แล้ว 2026-10-31 และลบ `target-0146/` ทิ้ง) รายงาน `thclaws 0.146.0` / `revision: 9f69995 (main)` / `built: ...`; parser ของ gate ใช้ token แรกหลัง `revision:` ได้เหมือนเดิม.
 
 **ไม่เปลี่ยน** (diff ว่าง): `api_v1/agent.rs` (`effective_config` `:501`, field ของ `/agent/run`, SSE), `api_v1/info.rs`, `api_v1/mod.rs` (`THCLAWS_API_TOKEN`), `api_v1/artifacts.rs` (`/v1/inputs`, `collect_files`),
 `cloud/agent_cli.rs` (validate warn writePaths+Bash, pack fuse), `cloud/agent_scaffold.rs`, `cloud/pack.rs` (strip list `.thclaws/bots/`, `.home/`, `.playwright-mcp/`, `media-jobs.jsonl`; rewrite `manifest.json` + `.thclaws/settings.json` ตัด key `agent`),
@@ -637,7 +637,7 @@ Desktop build `cargo build --features gui --bin thclaws` (ไม่มี `kms_s
 
 **การตัดสินใจ (M17)**: baseline ของ Atlas/export/catalog = `0.146.0` (binary ต้องรายงาน `thclaws 0.146.0`); standalone T0 เพิ่มคู่ `0.146.0/9f69995` คงสี่คู่เดิมเป็นหลักฐานประวัติ; T1 เพิ่มคู่ `0.146.0/9f69995` และคง `0.138.0/d452ece` (แต่ละคู่พิสูจน์ด้วย gate M14 บน binary ของตน);
 `patterns/tools-0.138.0.json` คงไว้เป็นหลักฐาน และ static audit ใช้ `tools-0.146.0.json`; `forge/spec.py` เพิ่ม `docconvert` (ข้อ 1); basis ของ `tool_allowlist`/`output_write_scope` อ้าง `0.146.0` + gate M17 (ข้อ 6); **ไม่ adopt** เป็นโค้ด: pin `officeApps` (ข้อ 5, รอผู้ใช้ตัดสิน), host-root instructions (ข้อ 3, บันทึก + docs), allowlist format (ข้อ 4, docs);
-harness ไม่เปลี่ยน (isolation เดิมพอ — ข้อ 9); `check_m12_baseline.py` คงเป็น gate ประวัติของ `0.138.0/d452ece` (ตรวจว่าคู่และ catalog เดิมยังอยู่) และ `check_m17_baseline.py` เป็น gate ของ baseline นี้. binary `d452ece` ที่ `target/debug` ยังไม่ถูกแทนจนกว่า gate ทั้งหมดผ่านบน `target-0146`. Native/live evidence อยู่ใน PLAN M17.
+harness ไม่เปลี่ยน (isolation เดิมพอ — ข้อ 9); `check_m12_baseline.py` คงเป็น gate ประวัติของ `0.138.0/d452ece` (ตรวจว่าคู่และ catalog เดิมยังอยู่) และ `check_m17_baseline.py` เป็น gate ของ baseline นี้. binary `d452ece` ที่ `target/debug` ถูกแทนด้วย build `9f69995` แล้ว 2026-10-31 หลัง gate ทั้งหมดผ่าน (copy ทับแล้ว `codesign -s - -f`; PLAN M17 ข้อค้าง (2)). Native/live evidence อยู่ใน PLAN M17.
 
 ### M9 compatibility follow-up (2026-09-16, thClaws 0.129.0 `7a27129`)
 
