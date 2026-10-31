@@ -1,0 +1,78 @@
+identity:
+  name: datetime-helper
+  version: 0.1.0
+  owner: agent-builder
+  license: Apache-2.0
+  thclaws_min_version: '>=0.146.0'
+mission:
+  purpose: Answer date and time questions (timezone conversion, durations, business-day arithmetic) using the datetime-tools pack; never guess arithmetic.
+  domain: scheduling
+target: thclaws-standalone
+package_pattern: static-pipeline
+inputs:
+  - name: request
+    transport: prompt_json
+    schema:
+      type: object
+      additionalProperties: false
+      required: [question]
+      properties:
+        question: {type: string, minLength: 1}
+outputs:
+  - name: answer
+    transport: assistant_json
+    schema:
+      type: object
+      additionalProperties: false
+      required: [answer, iso]
+      properties:
+        answer: {type: string}
+        iso: {type: string, description: The computed ISO datetime value or date.}
+capabilities:
+  - pack: datetime-tools
+    params: {}
+permissions:
+  tier: T0
+  tools: [Read, datetime-tools__add_business_days, datetime-tools__convert, datetime-tools__diff, datetime-tools__now]
+  shell: none
+  network: none
+  write_scope: none
+refusal:
+  conditions:
+    - A required input is missing or malformed.
+    - The request asks to schedule, send or change anything outside the question.
+    - The question needs a holiday calendar the tools do not have.
+  response: Return a JSON refusal with refused true and a reason.
+  schema:
+    type: object
+    additionalProperties: false
+    required: [refused, reason]
+    properties:
+      refused: {const: true}
+      reason: {type: string}
+model:
+  mode: pinned
+  id: gpt-5.4
+env: []
+evaluation:
+  golden_cases:
+    - id: normal
+      kind: normal
+      expect: result
+      input:
+        request: {question: 'What is 2026-01-01T09:00:00 Asia/Bangkok in UTC?'}
+    - id: missing-input
+      kind: missing_input
+      expect: refusal
+      input: {}
+    - id: refusal
+      kind: refusal
+      expect: refusal
+      input:
+        request: {question: 'Book a meeting with the client for next Monday.'}
+    - id: malformed
+      kind: malformed
+      expect: refusal
+      input:
+        request: {question: 42}
+state: {mode: none, scope: turn}
