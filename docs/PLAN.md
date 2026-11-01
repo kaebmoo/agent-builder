@@ -3,7 +3,7 @@
 กติกาเดียวกับ Atlas: **หนึ่ง milestone = หนึ่ง check script** ใน `scripts/check_<milestone>.py` ที่ fail เมื่อพฤติกรรมพัง
 ห้าม tick milestone ก่อน check ผ่าน commit ต่อ milestone เมื่อ gate เขียว
 
-ลำดับตาม baseline ที่ตกลง: schema → fixtures → matrix → generator → thclaws validate → static audit → SQL pack ขั้นต่ำ (M7a) → live audit → publisher pack (M7b) → export → standalone generator (M9, เพิ่ม 2026-09-07 ต่อท้าย MVP เพื่อไม่เลื่อนสาย Atlas) → pack authoring workflow (M10) → builder-agent (M11) (เพิ่ม 2026-09-07 หลัง MVP; M7a ขยายเป็น pack contract ในวันเดียวกัน) → baseline 0.138.0 (M12, เพิ่ม 2026-10-27 เพราะ binary ที่ผู้ดูแลใช้จริงไม่ใช่ 0.116.0 อีกแล้ว) → host + bots layout (M13, เพิ่ม 2026-10-27 หลัง M7b/M11 live บน Mac fail เพราะ `--serve` ของ desktop build แปลง package ในที่เดิม; ประเด็นใน `docs/thclaws-host-bots-brief.md`) → ปลด T1 standalone (M14) → `allowedTools` บน `/agent/run` (M15, เพิ่ม 2026-10-28) → host deployment ของ package prompt/assistant (M16, เพิ่ม 2026-10-28 ตาม DESIGN §4 M13 (e)) → ข้อเสนอต่อจาก M16: M17–M20 (เสนอ 2026-10-31; M17 re-baseline และ M19 ทำแล้ว 2026-10-31 ดูย่อหน้า "M17 ทำ (Mac)" / "M19 ทำ (Mac)", M18/M20 ยังไม่เริ่ม ดูย่อหน้า "สถานะ 2026-10-31" ท้าย "ขั้นถัดไป") → M21 pack อิสระ 3 ตัว (เพิ่มและทำ 2026-11-01)
+ลำดับตาม baseline ที่ตกลง: schema → fixtures → matrix → generator → thclaws validate → static audit → SQL pack ขั้นต่ำ (M7a) → live audit → publisher pack (M7b) → export → standalone generator (M9, เพิ่ม 2026-09-07 ต่อท้าย MVP เพื่อไม่เลื่อนสาย Atlas) → pack authoring workflow (M10) → builder-agent (M11) (เพิ่ม 2026-09-07 หลัง MVP; M7a ขยายเป็น pack contract ในวันเดียวกัน) → baseline 0.138.0 (M12, เพิ่ม 2026-10-27 เพราะ binary ที่ผู้ดูแลใช้จริงไม่ใช่ 0.116.0 อีกแล้ว) → host + bots layout (M13, เพิ่ม 2026-10-27 หลัง M7b/M11 live บน Mac fail เพราะ `--serve` ของ desktop build แปลง package ในที่เดิม; ประเด็นใน `docs/thclaws-host-bots-brief.md`) → ปลด T1 standalone (M14) → `allowedTools` บน `/agent/run` (M15, เพิ่ม 2026-10-28) → host deployment ของ package prompt/assistant (M16, เพิ่ม 2026-10-28 ตาม DESIGN §4 M13 (e)) → ข้อเสนอต่อจาก M16: M17–M20 (เสนอ 2026-10-31; M17 re-baseline และ M19 ทำแล้ว 2026-10-31 ดูย่อหน้า "M17 ทำ (Mac)" / "M19 ทำ (Mac)", M18/M20 ยังไม่เริ่ม ดูย่อหน้า "สถานะ 2026-10-31" ท้าย "ขั้นถัดไป") → M21 pack อิสระ 3 ตัว (เพิ่มและทำ 2026-11-01) → M22 unverified-runtime mode (เสนอ 2026-11-01 ยังไม่เริ่ม ดูย่อหน้า "M22 แผน")
 
 | M | ชื่อ | ผลลัพธ์ | Definition of done | check |
 |---|---|---|---|---|
@@ -30,6 +30,7 @@
 | M19 | Security audit → path ไป `shippable` (เสนอ 2026-10-31, ทำ 2026-10-31 ดูย่อหน้า "M19 ทำ (Mac)") | นิยาม "security passed" แบบ deterministic ใน DESIGN §7 (static `--strict` ผ่าน, pack provenance ตรง `source.ref`, secret scan ของ package tree, egress declaration ครบ, ไม่มี Declared ที่อ้างเกิน matrix) และ `forge audit --security` เขียน `security` ใน build report; promote `candidate` → `shippable` เมื่อ compatibility + security ผ่าน | package ที่ถูกต้องได้ `shippable`; package ที่ถูกแก้ให้ผิด (secret ใน tree, provenance ไม่ตรง, pack ไม่ conformant) fail พร้อมเหตุผล; ไม่ใช้ LLM ตัดสิน | `check_m19_security_audit.py` (0 = offline + native ผ่าน; 1 = fail รวม binary ไม่ตรง baseline; 2 = offline ผ่านแต่ไม่มี binary/ไม่มี `--serve`; ไม่ต้องใช้ key จริง) |
 | M20 | T2 side-effect proof (เสนอ 2026-10-31, ยังไม่เริ่ม) | publisher ส่ง email/SFTP จริงไป test mailbox/test server ผ่าน Atlas `human_gate` บน T2 daemon แยกตาม approval fragment ของ M7b; evidence ว่า `/agent/run` ตรงถูกปิดจาก network นอก Atlas | ส่งจริงสำเร็จหลัง approve และไม่เกิดเมื่อ reject; แถว `human_approval` ใน matrix ยกจาก Not verified ได้เฉพาะเมื่อ evidence ครบ และระบุว่า enforce โดย Atlas ไม่ใช่ thClaws | `check_m20_t2_side_effect.py` (ยังไม่มี; ไม่มี test mailbox/SFTP → skip exit 2) |
 | M21 | Independent example packs (เพิ่ม 2026-11-01, ทำ 2026-11-01 ดูย่อหน้า "M21 ทำ (Mac)") | pack อิสระที่ใช้กับงานไหนก็ได้ 3 ตัว `sqlite-readonly` (SQLite `mode=ro` + authorizer), `csv-readonly` (CSV/TSV ในโฟลเดอร์เดียว เปิดอ่านและปฏิเสธ symlink/traversal), `datetime-tools` (ไม่มี env); stdlib เท่านั้น ไม่ผูก repo อื่น; fixture `sqlite-reader` (atlas-worker), `csv-reader` / `datetime-helper` (standalone static-pipeline) และเอกสาร | conformance บนสำเนา temp, descriptor ที่ไม่มี negative case หรือ mutating แต่ T0 ถูก reject; generate ซ้ำเหมือนกันทุก byte รวม report, MCP config/script/manifest ตรง, strict static ไม่มี finding + security passed และ report ผ่าน schema; read-only/result probes ผ่าน; native validate ทั้งสามเป็น `draft`; ไม่รวม live evidence และไม่ใช่ hardened services | `check_m21_example_packs.py` (ไม่มี binary → 2; 0 = offline + native ผ่าน; 1 = fail รวม binary ไม่ตรง baseline; ไม่ใช้ key) |
+| M22 | Unverified-runtime mode (เสนอ 2026-11-01, ยังไม่เริ่ม ดูย่อหน้า "M22 แผน") | flag opt-in `--allow-unverified-runtime` ของ `forge audit` / `live-test` / `export` ให้ binary ที่ไม่ใช่คู่ที่รับรอง (ใหม่กว่าหรือเก่ากว่า กฎเดียว) ยังรัน `thclaws agent validate` / live / `agent pack` ได้ โดย report บันทึก `static_audit.thclaws_validate.runtime: unverified` + version/revision จริง, guarantee matrix ลดแถวที่พึ่ง runtime (`tool_allowlist`, `no_shell`, `output_write_scope`, `collect_files`) จาก Enforced เป็น Declared พร้อมเหตุผล, สถานะไม่เกิน `candidate` (security ไม่ promote เป็น `shippable`), export เขียน `deployment.runtime.verified: false`; ไม่มี flag = พฤติกรรมเดิม (fail 1); gate ของ repo และ `builder/` คงเข้มเท่าเดิม; แก้ DESIGN §4/§7 ก่อนโค้ด | บน binary จริง (verified) report และ exit code เหมือนก่อน M22 ทุก byte ยกเว้น field `runtime: verified`; บน wrapper ที่พิมพ์ version ปลอม: ไม่มี flag → manifest failed exit 1 / มี flag → `draft` exit 0 + แถว matrix ถูกลดครบตามรายการ + `--security` ผ่านแต่สถานะคง `draft` + synthetic `candidate` ไม่ถูก promote (detail ระบุ runtime) + export exit 0 พร้อม `runtime.verified: false` (ไม่มี flag → 1); schema ปฏิเสธ `shippable` ที่ `runtime != verified`; M19 gate ยังถึง `shippable` บน binary จริง | `check_m22_unverified_runtime.py` (ไม่มี binary → 2; ใช้ wrapper script แทน binary ปลอม) |
 
 ## นอกแผน (ทำหลัง MVP เมื่อมีเหตุผล)
 
@@ -348,7 +349,7 @@ evidence `candidate` เดิมเป็นของ 0.116.0 ทั้งห�
 M15 adopt `allowedTools` ใน `.thclaws/settings.json` เพื่อยก `tool_allowlist` บน `/agent/run` จาก Declared เป็น Enforced พร้อม native proof (ทำแล้ว 2026-10-28 ดูย่อหน้า "M15 ทำ (Mac)")
 (ต้องรับข้อค้นพบ M13 ว่า `apply_filter` ถูกเรียกก่อนลงทะเบียน Skill/MCP tools จึงไม่กรองสองกลุ่มนั้น), และ M16 (มีเงื่อนไข) host deployment สำหรับ
 package ที่มีเฉพาะ `prompt_json`/`assistant_json` หลังพิสูจน์บน Mac ตาม DESIGN §4 การตัดสินใจ (e) (พิสูจน์และทำแล้ว 2026-10-28 ดูย่อหน้า "M16 ทำ (Mac)";
-merge เข้า main 2026-10-29). milestone ที่เสนอต่อจาก M16 (M17–M20) อยู่ในตารางและย่อหน้า "สถานะ 2026-10-31" ท้ายบท; M17 และ M19 ทำแล้ว 2026-10-31 (ย่อหน้า "M17 ทำ (Mac)" / "M19 ทำ (Mac)"), M18/M20 ยังไม่เริ่ม; M21 pack อิสระ 3 ตัวทำแล้ว 2026-11-01 (ย่อหน้า "M21 ทำ (Mac)").
+merge เข้า main 2026-10-29). milestone ที่เสนอต่อจาก M16 (M17–M20) อยู่ในตารางและย่อหน้า "สถานะ 2026-10-31" ท้ายบท; M17 และ M19 ทำแล้ว 2026-10-31 (ย่อหน้า "M17 ทำ (Mac)" / "M19 ทำ (Mac)"), M18/M20 ยังไม่เริ่ม; M21 pack อิสระ 3 ตัวทำแล้ว 2026-11-01 (ย่อหน้า "M21 ทำ (Mac)"); M22 unverified-runtime mode เสนอ 2026-11-01 ยังไม่เริ่ม (ย่อหน้า "M22 แผน").
 
 ผล live บน Mac 2026-10-27 (checkout `0837eef`, binary 0.138.0 `d452ece` desktop build, `oai/gpt-5.4-mini`; รายละเอียดใน `docs/thclaws-host-bots-brief.md`):
 M9 live exit 0 และ `--write-boundary` exit 0; M7b `--live` fail 3/3 ตามคำสั่งในแผน แต่ผ่าน 4/4 เมื่อตั้ง `THCLAWS_AUTO_MIGRATE=0` ผ่าน launcher นอก repo;
@@ -586,3 +587,45 @@ Reviewer (round 1 review, 2026-11-01):
   check_m21_example_packs.py native = 0 (M21 native PASS: sqlite-reader / csv-reader / datetime-helper draft on thclaws 0.146.0 revision 9f69995)
   check_m2_fixtures.py = 0; uvx ruff check . = 0; git diff --check = 0; test -x scripts/check_m21_example_packs.py = 0
 ```
+
+M22 แผน (2026-11-01) — unverified-runtime mode (เสนอ ยังไม่เริ่ม; ผู้ใช้ตัดสินใจหลังคำถาม "ถ้ามี thClaws ใหม่กว่า pin จะยืดหยุ่นได้ไหม"):
+เหตุผล: วันนี้ binary ที่ไม่ใช่คู่ที่รับรอง (DESIGN §4: Atlas ตรวจ version == `THCLAWS_BASELINE`, standalone ตรวจคู่ version+revision ต่อ tier)
+ทำให้ manifest layer `failed` → exit 1, live audit ถูก block ("static or manifest audit failed; live audit blocked"), `forge export` exit 1,
+สถานะค้าง `unverified` โดยไม่มีทางเลือก. thClaws ออก release รายสัปดาห์ ผู้ใช้ส่วนใหญ่จะมีรุ่นใหม่กว่า pin; package ที่ generate แล้วรันด้วยรุ่นนั้นได้อยู่แล้ว
+(builder ไม่อยู่ใน runtime path) แต่ builder ไม่บันทึกอะไรเลย. "ใหม่กว่า" ไม่ใช่ "ปลอดภัยกว่า" (0.138.0 → 0.146.0 เปลี่ยน 12 จุด) จึงต้องยืดหยุ่นแบบบันทึกความไม่รู้
+ไม่ใช่ปล่อยผ่าน. หลักการคงเดิม: พูดเฉพาะสิ่งที่พิสูจน์แล้ว (AGENTS.md).
+นิยาม: verified runtime = binary ที่ผ่านกฎ §4 เดิม; unverified runtime = binary อื่นที่ตอบ `--version` ได้ (ใหม่กว่าหรือเก่ากว่า กฎเดียว ไม่เทียบลำดับ version).
+โหมดเปิดด้วย flag `--allow-unverified-runtime` บน `forge audit`, `forge live-test`, `forge export` เท่านั้น (runner `audit.py`/`studio.py` ได้ flag ผ่าน `configure()` เดิม);
+ไม่มี flag = พฤติกรรมเดิมทุกประการ. ไม่มี environment variable override.
+พฤติกรรมเมื่อเปิด flag:
+- `thclaws_validate`: ยังรัน `thclaws agent validate` จริง; report `static_audit.thclaws_validate` เพิ่ม field `runtime: verified | unverified` (ไม่มีเมื่อ `skipped`)
+  และ `revision` ที่อ่านได้; บรรทัดพิมพ์ `thclaws agent validate: passed on UNVERIFIED runtime <version> (baseline 0.146.0); runtime guarantees downgraded`.
+- guarantee matrix (ตอน audit ไม่ใช่ตอน generate เพราะ generate ไม่รู้ binary): แถวที่สถานะ Enforced และพึ่งพฤติกรรม runtime ที่ §4 ตรวจไว้
+  (`tool_allowlist`, `no_shell`, `output_write_scope` ของ standalone T1, `collect_files`) ลดเป็น `Declared` และ basis นำหน้าด้วย
+  "Runtime <version> (<revision>) not reviewed against DESIGN §4: " แบบ deterministic; แถว Static check / Not guaranteed / Not verified คงเดิม.
+  `--write` บันทึกแถวที่ลดแล้ว; audit ซ้ำบน binary verified คืนแถวเดิม (matrix คำนวณใหม่จาก spec + runtime ทุกครั้ง).
+- สถานะ: ถึง `draft` ได้ (thClaws รุ่นนั้นยอมรับ manifest จริง) และ `candidate` ได้เมื่อ live ผ่าน (รันกับ model จริงบน binary นั้น);
+  `security_audit` ตรวจ 4 rules เท่าเดิมและผ่านได้ แต่เงื่อนไข promote เป็น `shippable` เพิ่ม `thclaws_validate.runtime == verified`;
+  เมื่อไม่ promote `detail` ระบุ "runtime <version> is not a verified baseline; shippable requires a verified runtime". schema เพิ่ม allOf กัน `shippable` ที่ `runtime != verified`.
+- `forge live-test` / `--live`: ปลด block เมื่อ flag เปิดและ manifest passed; `live_audit.provenance` บันทึก runtime version/revision.
+- `forge export`: ไม่ exit 1; สร้าง archive ด้วย binary นั้น (self-check เดิมที่เปิด archive เทียบ `generated_files`/byte ยังทำ), `atlas-register.json`
+  เพิ่ม `deployment.runtime: {version, revision, verified: false, baseline}` และพิมพ์ warning; binary verified ได้ `verified: true`.
+- exit code: ไม่เปลี่ยนความหมาย (`0` draft/candidate, `1` failed, `2` skip); unverified ไม่ใช่ skip เพราะมีการตรวจจริงเกิดขึ้น.
+ไม่เปลี่ยน: gate `scripts/check_*` ทุกตัวยังตรวจ baseline/คู่ที่รับรองแบบ fail 1 (หลักฐานของ repo ไม่ใช่ของผู้ใช้); `builder/` `build.py` ไม่รับ flag (builder-agent ยังเข้มเท่าเดิม);
+ไม่มี auto re-baseline; ไม่เพิ่มคู่ compatibility ใหม่ (นั่นคืองาน M17-style พร้อม review §4).
+Gate `check_m22_unverified_runtime.py`: ไม่มี binary → 2. มี binary → สร้าง wrapper script ใน temp dir ที่ `--version` พิมพ์ `thclaws 0.999.0` / `revision: 0000000 (fake)` และ
+`exec` binary จริงสำหรับ argument อื่น แล้วใช้ `THCLAWS_BIN=<wrapper>`:
+(a) `audit_package` ไม่มี flag → manifest `failed`, status `unverified`, exit 1 (เหมือนเดิม);
+(b) มี flag → `draft`, `runtime: unverified`, แถว matrix ลดครบและเฉพาะรายการ, exit 0, report ผ่าน schema; `--write` แล้วอ่านกลับเท่ากัน;
+(c) `--security` + flag → `security.status: passed`, สถานะคง `draft`; synthetic `candidate` report + `security_audit` → ไม่ promote และ detail ระบุ runtime;
+(d) `forge export` + flag → exit 0, archive เปิดได้, `deployment.runtime.verified == false`; ไม่มี flag → exit 1;
+(e) schema ปฏิเสธ report `shippable` ที่ `runtime: unverified`;
+(f) binary จริง (verified) → report ของ `audit_package` เท่ากับผลก่อนเปิด flag ทุก field ยกเว้น `runtime: verified`/`revision`, และ `check_m19_security_audit.py` native ยัง 0.
+ทำบน fixture standalone T0 (`text-reviewer-standalone`) และ Atlas (`echo-reader` หรือ `invoice-reviewer`) อย่างละหนึ่ง.
+ลำดับ slice (ถ้าทำผ่าน /delegate): 01 DESIGN §4 "Verified vs unverified runtime (M22)" + §7 สถานะ, schema, `forge/audit.py` (flag, `runtime`, matrix downgrade, บรรทัดพิมพ์);
+02 `forge/live_test.py` (ปลด block + provenance), `forge/security.py` (เงื่อนไข promote), `forge/atlas_export.py` (`deployment.runtime` + warning);
+03 gate M22 + docs (audit.md, export.md, generator.md, getting-started ข้อ 2/11 ทั้งสองภาษา, README, CHANGELOG, PLAN evidence).
+ความเสี่ยง: (1) ผู้ใช้อาจอ่าน `candidate` บน runtime unverified เป็นการรับรอง → ทุกบรรทัดสถานะและ matrix ต้องพิมพ์คำว่า UNVERIFIED runtime ชัด;
+(2) wrapper script ต้องถูก `shutil.which` มองเป็น executable (ตั้ง mode 0o755) และ `agent pack` ผ่าน wrapper ต้องส่ง argument/stdout ครบ;
+(3) Codex sandbox รัน `agent validate`/`agent pack` ได้แต่ไม่ bind loopback → live ส่วน Atlas ของ gate ไม่ต้องมี (ใช้ standalone T0 กับ scripted provider ถ้าจำเป็น);
+(4) ต้องไม่แตะ pin หรือ gate เดิมเพื่อให้ผ่าน.
