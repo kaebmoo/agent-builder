@@ -333,7 +333,8 @@ def audited_report(args: argparse.Namespace) -> dict[str, Any]:
     """Static audit (strict when --security), or the live audit when --live --security; may raise."""
     if args.security and args.live:
         from forge.live_test import live_audit
-        report = live_audit(args.package, timeout=args.timeout, key_env=args.provider_key_env, strict=True)[0]
+        report = live_audit(args.package, timeout=args.timeout, key_env=args.provider_key_env, strict=True,
+                            allow_unverified_runtime=args.allow_unverified_runtime)[0]
     else:
         report = audit_package(args.package, strict=args.strict or args.security,
                                allow_unverified_runtime=args.allow_unverified_runtime)

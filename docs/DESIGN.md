@@ -215,11 +215,11 @@ runner `audit.py`/`studio.py` ใน package ส่ง argv ผ่าน `config
    Report schema ปฏิเสธ `shippable` ที่ `runtime: unverified`; field ที่ไม่มี = validation ไม่ได้รัน ซึ่ง status `passed` โดยไม่มี flag
    เกิดได้เฉพาะบน verified runtime.
 4. Live audit ปลด block เองเมื่อ manifest `passed` ด้วย flag; `live_audit.runtime: {version, revision, verified}` คัดลอก identity ของ runtime
-   จาก `thclaws_validate` ในรอบเดียวกัน ไม่ใส่ใน `live_audit.provenance` ซึ่งเป็น map ต่อ pack ที่มี shape ตายตัว — implement ใน slice 02.
+   จาก `thclaws_validate` ในรอบเดียวกัน ไม่ใส่ใน `live_audit.provenance` ซึ่งเป็น map ต่อ pack ที่มี shape ตายตัว.
 5. Export: ไม่มี flag ปฏิเสธ binary unverified ด้วยข้อความเดิม และปฏิเสธ report ที่บันทึก `runtime: unverified`.
    มี flag → สร้าง archive ด้วย binary นั้น (self-check archive เทียบ `generated_files`/byte ยังทำ), `atlas-register.json` เพิ่ม
    `deployment.runtime: {version, revision, verified, baseline}` (`null` เมื่อไม่มี binary) และพิมพ์ warning;
-   binary verified → `verified: true` — implement ใน slice 02.
+   binary verified → `verified: true`.
 6. Exit code ไม่เปลี่ยนความหมาย: `0` draft/candidate, `1` failed, `2` skip; unverified ไม่ใช่ skip เพราะมีการตรวจจริงเกิดขึ้น.
 
 ไม่เปลี่ยน: gate `scripts/check_*` ทุกตัวยังตรวจ baseline/คู่ที่รับรองแบบ fail 1 เพราะเป็นหลักฐานของ repo ไม่ใช่ของผู้ใช้;

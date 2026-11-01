@@ -446,16 +446,21 @@ def run_standalone(package, spec, packs_dir, evidence, timeout, key_env):
             raise ValueError('one or more standalone golden cases failed')
 
 def live_audit(package: Path, *, packs_dir: Path | None = None, timeout: float = 120,
-               key_env: str = 'OPENAI_API_KEY', strict: bool = False):
+               key_env: str = 'OPENAI_API_KEY', strict: bool = False, allow_unverified_runtime: bool = False):
     package = Path(package).resolve()
     if not re.fullmatch(r'[A-Z][A-Z0-9_]*_API_KEY', key_env):
         raise ValueError('provider-key-env must be a provider *_API_KEY env name')
     if not math.isfinite(timeout) or timeout <= 0:
         raise ValueError('timeout must be finite and positive')
-    report = audit_package(package, packs_dir=packs_dir, strict=strict)
+    report = audit_package(package, packs_dir=packs_dir, strict=strict,
+                           allow_unverified_runtime=allow_unverified_runtime)
     evidence = {'status': 'skipped', 'detail': '', 'cases': [], 'daemon_servers': [],
                 'called_tools': [], 'provenance': {}}
     report['live_audit'] = evidence
+    validate = report['static_audit']['thclaws_validate']
+    if 'runtime' in validate:
+        evidence['runtime'] = {'version': validate['version'], 'revision': validate['revision'],
+                               'verified': validate['runtime'] == 'verified'}
     code = exit_code(report)
     try:
         if code:
@@ -492,17 +497,24 @@ def configure(parser):
     parser.add_argument('package', type=Path)
     parser.add_argument('--write', action='store_true')
     parser.add_argument('--strict', action='store_true')
+    parser.add_argument('--allow-unverified-runtime', action='store_true', help=(
+        'M22: still run thclaws agent validate on a binary outside the verified baseline/pairs; '
+        'the report records runtime: unverified, runtime-dependent guarantee rows drop to Declared '
+        'and the status never exceeds candidate'))
     parser.add_argument('--timeout', type=float, default=120, help='seconds per case (default: 120)')
     parser.add_argument('--provider-key-env', default='OPENAI_API_KEY', help='env name for the pinned model provider')
 
 
 def command(args):
     try:
-        report, code = live_audit(args.package, timeout=args.timeout, key_env=args.provider_key_env, strict=args.strict)
+        report, code = live_audit(args.package, timeout=args.timeout, key_env=args.provider_key_env,
+                                  strict=args.strict, allow_unverified_runtime=args.allow_unverified_runtime)
         if args.write:
             write_report(args.package, report)
         print(f"live audit {['PASS', 'FAIL', 'SKIP'][code]}: {report['live_audit']['detail']}")
-        print(f"package_status={report['package_status']}")
+        unverified = (args.allow_unverified_runtime
+                      and report['static_audit']['thclaws_validate'].get('runtime') == 'unverified')
+        print(f"package_status={report['package_status']}" + (' on UNVERIFIED runtime' if unverified else ''))
         return code
     except (ValueError, OSError) as exc:
         print(f'live audit FAIL: {exc}')

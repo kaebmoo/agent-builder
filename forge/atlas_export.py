@@ -16,7 +16,7 @@ from urllib.parse import urlsplit, urlunsplit
 
 from jsonschema import Draft202012Validator, ValidationError
 
-from forge.audit import static_findings, thclaws_validate
+from forge.audit import runtime_identity, static_findings, thclaws_validate
 from forge.generate import (
     REPORT_SCHEMA_PATH,
     ROOT,
@@ -155,7 +155,7 @@ def templates(spec: dict[str, Any], binding: dict[str, str]) -> tuple[dict, dict
 
 
 def render_export(spec: dict[str, Any], report: dict[str, Any], binding: dict[str, str],
-                  archive: str | None) -> dict[str, bytes]:
+                  archive: str | None, runtime: dict[str, Any] | None) -> dict[str, bytes]:
     """Render the export files in memory; deterministic for one package and one binding."""
     if spec["target"] not in ATLAS_TARGETS:
         raise ValueError("Atlas export supports atlas-worker and atlas-workflow packages only")
@@ -190,6 +190,7 @@ def render_export(spec: dict[str, Any], report: dict[str, Any], binding: dict[st
             "daemon_cwd": binding["workspace_dir"],
             "isolated_daemon_required": spec["permissions"]["tier"] == "T2",
             "deployment_verified": False,
+            "runtime": runtime,
             "env": sorted(spec["env"]),
             "network": spec["permissions"]["network"],
             "hosts": sorted({host for pack in dependencies for host in pack.get("hosts", [])}),
@@ -241,17 +242,13 @@ def render_export(spec: dict[str, Any], report: dict[str, Any], binding: dict[st
 
 
 def pack_archive(binary: str, package: Path, target: Path, expected: set[str]) -> None:
-    """Delegate packing to thClaws (DESIGN §1), then prove the archive is the audited package.
+    """Pack with the caller-checked thClaws binary (DESIGN §1), then prove the archive is the audited package.
 
     thclaws agent pack silently strips paths containing `_secret` and files ending in .env/.key/.log/.pyc
     (pack.rs), so a pack script such as client_secret.py or an input named api_secret would deploy without its
     file while the run continues without that MCP (DESIGN §4). Members must equal the report's generated
     files and match the package byte-for-byte except ARCHIVE_REWRITTEN.
     """
-    version = subprocess.run([binary, "--version"], capture_output=True, text=True, check=True, timeout=30)
-    if version.stdout.split()[:2] != ["thclaws", THCLAWS_BASELINE]:
-        first = (version.stdout.strip().splitlines() or ["<no output>"])[0]
-        raise ValueError(f"{first} is not the verified baseline {THCLAWS_BASELINE}")
     result = subprocess.run([binary, "agent", "pack", str(package), "--out", str(target)],
                             capture_output=True, text=True, timeout=120, check=False)
     if result.returncode != 0 or not target.is_file():
@@ -273,7 +270,8 @@ def pack_archive(binary: str, package: Path, target: Path, expected: set[str]) -
     target.with_name(target.name + ".sha256").write_text(f"{digest}  {target.name}\n", encoding="utf-8")
 
 
-def export(package: Path, out: Path, *, packs_dir: Path | None = None, **binding_values: str | None
+def export(package: Path, out: Path, *, packs_dir: Path | None = None, allow_unverified_runtime: bool = False,
+           **binding_values: str | None
            ) -> tuple[dict[str, Any], int]:
     """Write atlas-register.json, the workflow (atlas-workflow only) and the thClaws archive into a new directory.
 
@@ -302,17 +300,33 @@ def export(package: Path, out: Path, *, packs_dir: Path | None = None, **binding
     if report["audit"]["static"] != "passed" or report["audit"]["manifest"] == "failed":
         raise ValueError(f"builder-build-report.json records audit.static={report['audit']['static']} "
                          f"audit.manifest={report['audit']['manifest']}; run forge audit --write first")
+    recorded = report.get("static_audit", {}).get("thclaws_validate", {})
+    if recorded.get("runtime") == "unverified" and not allow_unverified_runtime:
+        raise ValueError("builder-build-report.json records thclaws agent validate on an unverified runtime "
+                         f"{recorded['version']}; rerun forge audit --write on the baseline or pass "
+                         "--allow-unverified-runtime")
     binding = bind(spec, **binding_values)
     if "host_root" in binding and (reasons := host_refusals(spec, {path: (package / path).read_bytes()
                                                                    for path in report["generated_files"]})):
         raise ValueError("layout host supports prompt_json/assistant_json packages only: " + "; ".join(reasons))
     binary = shutil.which(os.environ.get("THCLAWS_BIN", "thclaws"))
+    if binary:
+        lines, _runtime_version, revision = runtime_identity(binary)
+        verified = bool(lines) and lines[0] == f"thclaws {THCLAWS_BASELINE}"
+        if not verified and not allow_unverified_runtime:
+            first = lines[0] if lines else "<no output>"
+            raise ValueError(f"{first} is not the verified baseline {THCLAWS_BASELINE}")
+        runtime = {"version": " ".join(lines[:2]), "revision": revision, "verified": verified,
+                   "baseline": THCLAWS_BASELINE}
+    else:
+        runtime = None
     if binary and report["audit"]["manifest"] != "passed":
-        validate = thclaws_validate(package)  # the recorded audit ran without the binary; never pack unvalidated
+        # The recorded audit ran without the binary; never pack unvalidated.
+        validate = thclaws_validate(package, allow_unverified_runtime=allow_unverified_runtime)
         if validate["status"] != "passed":
             raise ValueError(f"thclaws agent validate {validate['status']}: {validate['detail']}")
     archive = f"{spec['identity']['name']}-{spec['identity']['version']}.tar.gz" if binary else None
-    files = render_export(spec, report, binding, archive)
+    files = render_export(spec, report, binding, archive, runtime)
     out.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix=".forge-export-", dir=out.parent) as temporary:
         staged = Path(temporary) / "export"
@@ -342,13 +356,18 @@ def configure(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--worker-id", help="Atlas worker id (default wrk_<name>)")
     parser.add_argument("--workspace-id", help="Atlas workspace id (default wsp_<name>)")
     parser.add_argument("--workspace-key", help="Atlas workspace key (default <name>)")
+    parser.add_argument("--allow-unverified-runtime", action="store_true", help=(
+        "M22: still run thclaws agent validate on a binary outside the verified baseline/pairs; "
+        "the report records runtime: unverified, runtime-dependent guarantee rows drop to Declared "
+        "and the status never exceeds candidate"))
 
 
 def command(args: argparse.Namespace) -> int:
     try:
         register, code = export(args.package, args.out, base_url=args.base_url, workspace_dir=args.workspace_dir,
                                 worker_id=args.worker_id, workspace_id=args.workspace_id,
-                                workspace_key=args.workspace_key, layout=args.layout, host_root=args.host_root)
+                                workspace_key=args.workspace_key, layout=args.layout, host_root=args.host_root,
+                                allow_unverified_runtime=args.allow_unverified_runtime)
     except (OSError, ValueError, TypeError, KeyError, subprocess.SubprocessError, ValidationError) as exc:
         print(f"export FAIL: {exc}")
         return 1
@@ -358,4 +377,8 @@ def command(args: argparse.Namespace) -> int:
           f"archive={package['archive'] or 'skipped, thclaws not on PATH (SKIP)'}")
     print("Registration is an operator step. deployment_verified is never set by the builder; "
           "the Atlas poll proves reachability and MCP inventory only.")
+    runtime = register["deployment"]["runtime"]
+    if runtime is not None and runtime["verified"] is False:
+        print(f"warning: UNVERIFIED runtime {runtime['version']} (baseline {THCLAWS_BASELINE}); "
+              "deployment.runtime.verified=false; runtime guarantees were not reviewed against DESIGN §4")
     return code
