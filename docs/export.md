@@ -18,6 +18,14 @@ forge export out/publisher --out out/publisher-export \
 `audit.static` ไม่ใช่ `passed` หรือ `audit.manifest` เป็น `failed`. ถ้า report ถูกเขียนบนเครื่องที่ไม่มี `thclaws`
 (`manifest: skipped`, `unverified`) แต่ตอน export มี binary export จะรัน `thclaws agent validate` เองก่อน pack และปฏิเสธเมื่อไม่ผ่าน.
 
+M22 — binary นอก baseline → `export FAIL … is not the verified baseline` (exit 1) และ report ที่บันทึก
+`runtime: unverified` ก็ถูกปฏิเสธ เว้นแต่ใส่ `--allow-unverified-runtime`.
+เมื่อใส่ flag export สร้าง archive ด้วย binary นั้น (self-check เดิม), เขียน
+`deployment.runtime: {version, revision, verified, baseline}` และพิมพ์ `warning: UNVERIFIED runtime …`;
+binary baseline ได้ `verified: true`; ไม่มี binary ได้ `null` (exit 2 เหมือนเดิม).
+บน unverified runtime แถว guarantee ที่พึ่ง runtime ลดเป็น `Declared` ตอน audit และสถานะไม่เกิน `candidate`
+(ไม่ถึง `shippable`); export ไม่เลื่อนสถานะและไม่ยืนยัน deployment. ดู [audit.md](audit.md#unverified-runtime-m22).
+
 ค่าที่ operator ให้คือ deployment-time binding (DESIGN §3) ไม่มี token หรือค่า secret ใด ๆ:
 
 - `--base-url`: URL ของ daemon ที่ Atlas เรียก; รับเฉพาะ `http://`/`https://` ตัวพิมพ์เล็ก, host และ port ที่ถูกต้อง (ไม่รับ 0), path ได้,
@@ -30,14 +38,14 @@ forge export out/publisher --out out/publisher-export \
 ไฟล์ที่ได้:
 
 - `atlas-register.json`: worker/workspace payload, `node_template`, `edge_template` (เฉพาะ input `atlas_file_handoff`),
-  `policy_template`, `deployment` (env names, MCP servers, network/hosts, daemon CWD, `reachability_checks`,
+  `policy_template`, `deployment` (env names, MCP servers, network/hosts, daemon CWD, `runtime`, `reachability_checks`,
   `deployment_verified: false`), `registration` steps และ `package.package_status` / `package.audit` ที่คัดลอกจาก
   `builder-build-report.json`; `atlas_ref` คือ ref ของ Atlas ที่ pin schema ไม่ใช่ revision ที่ operator ใช้จริง. ข้อจำกัด: export ตรวจว่า report ไม่ stale
   เฉพาะ `dependencies` / `deployment_hints` / `generated_files` เทียบกับ render ปัจจุบัน ส่วน `package_status` และ `audit`
   เชื่อตาม report ที่ผ่าน schema (schema ผูก status กับหลักฐาน audit ไว้แล้ว) ไม่ได้รัน static audit หรือ live audit ซ้ำ
 - `atlas-workflow.json` เฉพาะ target `atlas-workflow`: POST เข้า `/api/workflows` ได้ตรง ๆ หลัง register worker/workspace
 - `<name>-<version>.tar.gz` + `.sha256` จาก `thclaws agent pack` (binary จาก PATH หรือ `THCLAWS_BIN`); ไม่มี binary → ข้าม
-  archive และ exit 2; binary ที่ไม่ใช่ baseline `0.146.0` (M17; เดิม 0.138.0 ใน M12) → exit 1. หลัง pack export เปิด archive ตรวจว่าสมาชิกเท่ากับ
+  archive และ exit 2; binary ที่ไม่ใช่ baseline `0.146.0` (M17; เดิม 0.138.0 ใน M12) → exit 1 (เว้นแต่ `--allow-unverified-runtime`, M22). หลัง pack export เปิด archive ตรวจว่าสมาชิกเท่ากับ
   `generated_files` ของ report และ byte ตรงกับ package ยกเว้น `manifest.json`/`.thclaws/settings.json`; `thclaws agent pack`
   ตัด path ที่มี `_secret` และไฟล์ `.env`/`.key`/`.log`/`.pyc` ออกเงียบ ๆ ดังนั้น pack script ชื่อ `client_secret.py` หรือ input
   ชื่อ `api_secret` (ได้ `inputs--api_secret.json`) ทำให้ export fail แทนที่จะได้ archive ที่ daemon รันต่อโดยไม่มี MCP
@@ -106,6 +114,8 @@ ATLAS_ROOT=/path/to/atlas-control-plane-daa0f49 PATH="/path/to/thClaws/target/de
 true; operator ต้องยืนยัน daemon isolation, egress และ approval path ของ deployment เองนอกไฟล์นี้
 
 ## Gate
+
+`check_m8_export.py` ยังตรวจ baseline อย่างเข้ม; เส้นทาง flag M22 พิสูจน์โดย `check_m22_unverified_runtime.py`.
 
 ```bash
 python3 scripts/check_m8_export.py

@@ -209,12 +209,36 @@ def static_findings(package: Path, packs_dir: Path | None = None) -> tuple[list[
     return findings, report
 
 
-def thclaws_validate(package: Path, *, standalone_t0: bool = False, standalone_tier: str | None = None) -> dict[str, Any]:
+RUNTIME_SENSITIVE_CLAIMS = frozenset({"tool_allowlist", "no_shell", "output_write_scope", "collect_files"})
+
+
+def runtime_identity(binary: str) -> tuple[list[str], str, str | None]:
+    """Return --version lines (stripped, nonempty), bare version and revision token or None (DESIGN §4 M22)."""
+    lines = [line.strip() for line in subprocess.run([binary, "--version"], capture_output=True, text=True,
+                                                 check=True, timeout=30).stdout.splitlines() if line.strip()]
+    runtime_version = lines[0].removeprefix("thclaws ") if lines else ""
+    revision = next((line.split(":", 1)[1].strip().split()[0]
+                     for line in lines[1:] if line.startswith("revision:") and ":" in line
+                     and line.split(":", 1)[1].strip()), None)
+    return lines, runtime_version, revision
+
+
+def downgrade_runtime_rows(matrix: list[dict[str, str]], version: str) -> list[dict[str, str]]:
+    """Downgrade Enforced rows that depend on reviewed runtime behaviour to Declared (DESIGN §4 M22)."""
+    prefix = f"Runtime {version} not reviewed against DESIGN §4: "
+    return [{**row, "status": "Declared", "basis": prefix + row["basis"]}
+            if row["claim"] in RUNTIME_SENSITIVE_CLAIMS and row["status"] == "Enforced" else row
+            for row in matrix]
+
+
+def thclaws_validate(package: Path, *, standalone_t0: bool = False, standalone_tier: str | None = None,
+                     allow_unverified_runtime: bool = False) -> dict[str, Any]:
     """Run `thclaws agent validate` without leaving bytecode in the package. Skips explicitly when absent.
 
     Standalone packages are certified per version+revision pair and per tier: T0 pairs come from
     STANDALONE_THCLAWS_COMPATIBILITY, T1 only from STANDALONE_T1_THCLAWS_COMPATIBILITY (DESIGN §4). `standalone_t0`
     is the pre-M14 spelling of `standalone_tier="T0"`.
+    M22 records runtime identity and optionally validates binaries outside the verified baseline/pairs.
     """
     if standalone_t0 and standalone_tier is None:
         standalone_tier = "T0"
@@ -222,15 +246,10 @@ def thclaws_validate(package: Path, *, standalone_t0: bool = False, standalone_t
     if binary is None:
         return {"status": "skipped", "version": None,
                 "detail": "thclaws is not on PATH (THCLAWS_BIN); manifest validation not run, package stays unverified"}
-    lines = [line.strip() for line in subprocess.run([binary, "--version"], capture_output=True, text=True,
-                                                     check=True, timeout=30).stdout.splitlines() if line.strip()]
+    lines, runtime_version, revision = runtime_identity(binary)
     version = " ".join(lines[:2])
     if standalone_tier is not None:
         pairs = standalone_compatibility(standalone_tier)
-        runtime_version = lines[0].removeprefix("thclaws ") if lines else ""
-        revision = next((line.split(":", 1)[1].strip().split()[0]
-                         for line in lines[1:] if line.startswith("revision:") and ":" in line
-                         and line.split(":", 1)[1].strip()), None)
         supported_revisions = pairs.get(runtime_version, frozenset())
         verified = revision in supported_revisions
         expected = ", ".join(f"{runtime} ({', '.join(sorted(revisions))})" for runtime, revisions in pairs.items())
@@ -239,20 +258,23 @@ def thclaws_validate(package: Path, *, standalone_t0: bool = False, standalone_t
     else:
         verified = bool(lines) and lines[0] == f"thclaws {THCLAWS_BASELINE}"
         detail = f"{version} is not the verified baseline {THCLAWS_BASELINE}; re-check DESIGN §4 first"
-    if not verified:
+    runtime = "verified" if verified else "unverified"
+    if not verified and not allow_unverified_runtime:
         return {"status": "failed", "version": version,
-                "detail": detail}
+                "detail": detail, "runtime": runtime, "revision": revision}
     with tempfile.TemporaryDirectory(prefix="agent-builder-pycache-") as cache:
         result = subprocess.run([binary, "agent", "validate", str(package)], capture_output=True, text=True,
                                 env={**os.environ, "PYTHONPYCACHEPREFIX": cache}, timeout=120, check=False)
     if result.returncode == 0:
-        return {"status": "passed", "version": version, "detail": ""}
+        return {"status": "passed", "version": version, "detail": "",
+                "runtime": runtime, "revision": revision}
     output = (result.stdout + result.stderr).replace(str(package), "<package>").strip()
-    return {"status": "failed", "version": version, "detail": output}
+    return {"status": "failed", "version": version, "detail": output,
+            "runtime": runtime, "revision": revision}
 
 
 def audit_package(package: Path, *, packs_dir: Path | None = None, strict: bool = False,
-                  thclaws: bool = True) -> dict[str, Any]:
+                  thclaws: bool = True, allow_unverified_runtime: bool = False) -> dict[str, Any]:
     """Return the build report with the static-audit verdict filled in. Never writes to the package."""
     package = Path(package)
     findings, report = static_findings(package, packs_dir)
@@ -266,13 +288,16 @@ def audit_package(package: Path, *, packs_dir: Path | None = None, strict: bool 
         report["audit"]["spec"] = "failed"
     standalone_tier = (report.get("declared_permissions", {}).get("tier")
                        if report.get("target") == "thclaws-standalone" else None)
-    validate = thclaws_validate(package, standalone_tier=standalone_tier) if thclaws else {
+    validate = thclaws_validate(package, standalone_tier=standalone_tier,
+                               allow_unverified_runtime=allow_unverified_runtime) if thclaws else {
         "status": "skipped", "version": None, "detail": "thclaws validation disabled for this run"}
     errors = [f for f in findings if f["severity"] == "error" or strict]
     report["audit"].update(static="failed" if errors else "passed", manifest=validate["status"])
     report["package_status"] = "draft" if not errors and validate["status"] == "passed" and (
         report["audit"]["spec"] == "passed") else "unverified"
     report["static_audit"] = {"strict": strict, "findings": findings, "thclaws_validate": validate}
+    if allow_unverified_runtime and validate.get("runtime") == "unverified":
+        report["guarantee_matrix"] = downgrade_runtime_rows(report["guarantee_matrix"], validate["version"])
     return report
 
 
@@ -297,6 +322,10 @@ def configure(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--timeout", type=float, default=120)
     parser.add_argument("--provider-key-env", default="OPENAI_API_KEY")
     parser.add_argument("--strict", action="store_true", help="treat warnings as failures (the shippable bar)")
+    parser.add_argument("--allow-unverified-runtime", action="store_true", help=(
+        "M22: still run thclaws agent validate on a binary outside the verified baseline/pairs; "
+        "the report records runtime: unverified, runtime-dependent guarantee rows drop to Declared "
+        "and the status never exceeds candidate"))
     parser.add_argument("--write", action="store_true", help="record the verdict in builder-build-report.json")
 
 
@@ -304,9 +333,11 @@ def audited_report(args: argparse.Namespace) -> dict[str, Any]:
     """Static audit (strict when --security), or the live audit when --live --security; may raise."""
     if args.security and args.live:
         from forge.live_test import live_audit
-        report = live_audit(args.package, timeout=args.timeout, key_env=args.provider_key_env, strict=True)[0]
+        report = live_audit(args.package, timeout=args.timeout, key_env=args.provider_key_env, strict=True,
+                            allow_unverified_runtime=args.allow_unverified_runtime)[0]
     else:
-        report = audit_package(args.package, strict=args.strict or args.security)
+        report = audit_package(args.package, strict=args.strict or args.security,
+                               allow_unverified_runtime=args.allow_unverified_runtime)
     if args.security:
         security_audit(args.package, report)
     return report
@@ -336,9 +367,14 @@ def command(args: argparse.Namespace) -> int:
         mark = "✗" if finding["severity"] == "error" or args.strict or args.security else "⚠"
         print(f"  {mark} {finding['rule']}: {finding['message']}")
     validate = audit["thclaws_validate"]
-    print(f"thclaws agent validate: {validate['status']}"
-          + (f" ({validate['version']})" if validate["version"] else "")
-          + (f"\n{validate['detail']}" if validate["detail"] else ""))
+    unverified = args.allow_unverified_runtime and validate.get("runtime") == "unverified"
+    if unverified and validate["status"] == "passed":
+        print(f"thclaws agent validate: passed on UNVERIFIED runtime {validate['version']} "
+              f"(baseline {THCLAWS_BASELINE}); runtime guarantees downgraded")
+    else:
+        print(f"thclaws agent validate: {validate['status']}"
+              + (f" ({validate['version']})" if validate["version"] else "")
+              + (f"\n{validate['detail']}" if validate["detail"] else ""))
     if args.security:
         print_security(report, live=args.live)
     stored = Path(args.package) / "builder-build-report.json"
@@ -348,7 +384,8 @@ def command(args: argparse.Namespace) -> int:
     elif not stored.is_file() or stored.read_text(encoding="utf-8") != json_text(report):
         print("note: builder-build-report.json does not reflect this result; run studio.py to record it")
     code = exit_code_security(report, live_requested=args.live) if args.security else exit_code(report)
-    print(f"package_status={report['package_status']} ({['PASS', 'FAIL', 'SKIP'][code]})")
+    print(f"package_status={report['package_status']} ({['PASS', 'FAIL', 'SKIP'][code]})"
+          + (" on UNVERIFIED runtime" if unverified else ""))
     return code
 
 

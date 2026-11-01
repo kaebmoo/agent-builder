@@ -9,6 +9,7 @@ forge audit out/invoice-reviewer            # ตรวจอย่างเด�
 forge audit out/invoice-reviewer --write    # ตรวจแล้วบันทึกผลลง builder-build-report.json
 forge audit out/invoice-reviewer --strict   # warning นับเป็น fail (เกณฑ์ก่อน shippable)
 forge audit out/<pkg> --security           # M19: strict + deterministic security checks
+forge audit out/<pkg> --allow-unverified-runtime   # M22: binary นอก baseline/คู่ที่รับรอง ดูหัวข้อ "Unverified runtime"
 ```
 
 ใน package มี wrapper สองตัวที่ generate มาให้: `python3 audit.py` เท่ากับ `forge audit <package>` และ `python3 studio.py` เท่ากับ `forge audit <package> --write`. ทั้งคู่เป็น runner บาง ๆ ที่ import `forge.audit` จึงต้องติดตั้ง builder (`pip install -e`) หรือตั้ง `PYTHONPATH` ไปที่ checkout ก่อน. กฎทั้งหมดอยู่ที่ `forge/audit.py` ที่เดียว
@@ -28,7 +29,7 @@ Exit code: `0` = package เป็น `draft`, `1` = มี error (กฎ static
 | `schema_vocabulary` | keyword ใน embedded schema (inputs / outputs / refusal) ที่อยู่นอก JSON Schema 2020-12 vocabularies เพราะ validator ไม่สนใจ keyword นั้น | warning: `draft` ผ่าน, `--strict` fail |
 | `tools` | ชื่อ tool อยู่ใน catalog `patterns/tools-0.146.0.json` (baseline ปัจจุบัน; `tools-0.138.0.json` และ `tools-0.116.0.json` คงไว้เป็นหลักฐาน) หรือเป็น qualified MCP tool จาก pack; catalog รวม tool แบบ conditional ไม่ได้ยืนยันว่าเปิดอยู่บน daemon | warning: `draft` ผ่าน, `--strict` fail |
 | `single_worker` | เฉพาะ target Atlas: `.thclaws/agents/` และ `.thclaws/agent_workflow/` ต้องว่าง และ AGENTS.md ห้ามสั่ง `WorkflowRun` เพราะ `/agent/run` ไม่มี subagent factory | error |
-| manifest layer | `thclaws agent validate` ผ่าน; binary ต้องเป็น baseline `0.146.0` (M17; M12 เดิม 0.138.0) ยกเว้น standalone T0 ที่รับรองคู่ version+revision เพิ่มเติม (รุ่นอื่น = fail จนกว่าจะตรวจ DESIGN §4 ใหม่); รันโดยตั้ง `PYTHONPYCACHEPREFIX` นอก package จึงไม่ทิ้ง bytecode | passed / failed / skipped |
+| manifest layer | `thclaws agent validate` ผ่าน; binary ต้องเป็น baseline `0.146.0` (M17; M12 เดิม 0.138.0) ยกเว้น standalone T0 ที่รับรองคู่ version+revision เพิ่มเติม (รุ่นอื่น = fail จนกว่าจะตรวจ DESIGN §4 ใหม่); รันโดยตั้ง `PYTHONPYCACHEPREFIX` นอก package จึงไม่ทิ้ง bytecode; M22: `--allow-unverified-runtime` ยังรัน validate บน binary อื่นและบันทึก `runtime: unverified` (ดู "Unverified runtime (M22)") | passed / failed / skipped |
 
 `single_worker` ผูกกับ `TARGET_RULES` ใน `forge/audit.py` (ปัจจุบัน `atlas-worker`, `atlas-workflow`) ไม่ใช่กฎสากล; `rules_for(target)` บอกชุดกฎของ target นั้น เพื่อให้ M9 มี `.thclaws/agents/` และ `run.js` ที่ generate จาก spec ได้โดยไม่ต้องแก้กฎ Atlas. ไฟล์ role/workflow ที่เพิ่มเองยังถูกกฎ `inventory` จับทุก target
 
@@ -42,6 +43,7 @@ Exit code: `0` = package เป็น `draft`, `1` = มี error (กฎ static
 ## สถานะ
 
 - `unverified` → `draft` เมื่อไม่มี finding ระดับ error และ `thclaws agent validate` ผ่าน
+- M22: report มี `static_audit.thclaws_validate.runtime: verified|unverified` และ `revision` ทุกครั้งที่ validate รัน (ไม่มีเมื่อ `skipped`); บน unverified runtime ต้องเปิด flag จึงถึง `draft`, แถว guarantee ที่พึ่ง runtime ลดเป็น `Declared`, และสถานะไม่เกิน `candidate`
 - ไม่มี binary: กฎ static ผ่านแต่ `audit.manifest = skipped` → คง `unverified` ตาม DESIGN §7 และ report ระบุเหตุผล
 - warning ไม่กัน `draft` แต่ถูกบันทึกใน `static_audit.findings`; ต้องแก้ก่อน `shippable` (M19 `--security` รัน static audit ด้วย `--strict` ในรอบเดียวกัน)
 - `builder-build-report.schema.json` บังคับว่า `draft` ต้องมี `audit.spec` / `manifest` / `static = passed` และมี `static_audit`; `audit.manifest` ต้องเท่ากับ `static_audit.thclaws_validate.status`; `audit.static = passed` ต้องไม่มี finding ระดับ error และถ้า `strict` ต้องไม่มี finding เลย; report ที่อ้าง `draft` หรือ `shippable` โดยหลักฐานไม่รองรับจะไม่ผ่าน schema (gate M5 ทดสอบ report ปลอมทั้ง 8 แบบ)
@@ -192,7 +194,8 @@ Content scan ตรวจ regular files ยกเว้น `.thclaws/state/`, `.
 รายละเอียด regex อยู่ใน DESIGN §7; การไม่พบ pattern ไม่ใช่หลักฐานว่าไม่มี secret ทุกรูปแบบ.
 
 `shippable` ต้องมี live evidence ในรอบเดียวกัน (`--live --security`): live ผ่านเป็น `candidate`,
-`compatibility.status: matched`, strict static ไม่มี finding และ security ผ่าน จึงเลื่อนสถานะได้.
+`compatibility.status: matched`, strict static ไม่มี finding และ security ผ่าน
+และ `static_audit.thclaws_validate.runtime` ต้องไม่ใช่ `unverified` (M22) จึงเลื่อนสถานะได้.
 ไม่ใช้ `candidate` ที่บันทึกไว้จากรอบก่อน; `--security` อย่างเดียวได้สูงสุด `draft`
 หรือคง `unverified` เมื่อไม่มี binary. Live ยังต้องมี provider key ตาม M6/M9.
 
@@ -217,3 +220,63 @@ CLI และ studio; native ตรวจ baseline validation และ live gol
 Exit `0` = offline + native ผ่านทั้งหมด; `1` = assertion/การตรวจล้มเหลว (รวม binary ไม่ตรง baseline);
 `2` = offline ผ่านแต่ไม่มี thclaws หรือเป็น CLI-only build ที่ไม่มี `--serve` จึงประกาศ SKIP.
 Synthetic promotion เป็นหลักฐานของกฎเท่านั้น; scripted provider ไม่ใช่หลักฐานพฤติกรรมของ model จริง.
+
+
+## Unverified runtime (M22)
+
+**Verified runtime** คือ binary ที่ผ่านกฎ [DESIGN §4](DESIGN.md#verified-vs-unverified-runtime-m22-2026-11-01):
+Atlas/export ตรวจบรรทัดแรกของ `--version` เท่ากับ `thclaws 0.146.0`; standalone ตรวจคู่ version+revision ตาม tier.
+**Unverified runtime** คือ binary อื่นที่ตอบ `--version` ได้ ไม่ว่าใหม่กว่าหรือเก่ากว่า ใช้กฎเดียวกัน.
+
+เปิดด้วย `--allow-unverified-runtime` บน `forge audit`, `forge live-test`, `forge export`;
+runner `audit.py` และ `studio.py` ใน package รับ flag นี้ด้วย. ไม่มี environment variable override;
+`THCLAWS_BIN` เลือก binary เท่านั้น. ไม่มี flag = พฤติกรรมเดิม ยกเว้น field ใหม่ `runtime`/`revision`.
+Builder ยังเรียก `thclaws agent validate` จริง และใช้ผลของ binary นั้นตัดสิน manifest layer.
+
+Report บันทึก `static_audit.thclaws_validate.runtime: verified|unverified` และ `revision`
+(token แรกหลัง `revision:` หรือ `null`) เมื่อ status เป็น `passed`/`failed`; ไม่มีทั้งสอง field เมื่อ `skipped`.
+เมื่อเปิด flag และ validate ผ่านบน unverified runtime จะพิมพ์:
+
+```text
+thclaws agent validate: passed on UNVERIFIED runtime <version> (baseline 0.146.0); runtime guarantees downgraded
+package_status=draft (PASS) on UNVERIFIED runtime
+```
+
+Guarantee matrix ลดเฉพาะแถว `tool_allowlist`, `no_shell`, `output_write_scope`, `collect_files`
+ที่เป็น `Enforced` ให้เป็น `Declared` โดยเพิ่ม prefix `Runtime <version> not reviewed against DESIGN §4: `
+หน้า basis เดิม. แถวอื่นคงเดิม รวม `output_schema` ที่ live audit ตรวจเอง.
+กฎ deterministic และ idempotent; matrix คำนวณใหม่ทุก audit จาก spec จึงคืนแถวเดิมเมื่อ re-audit บน verified runtime.
+การลดเกิดตอน audit ไม่ใช่ generate; `--write` บันทึก matrix ที่ลดแล้ว.
+
+สถานะไม่เกิน `candidate` และไม่มีทางถึง `shippable` บน unverified runtime แม้ security ผ่าน;
+เมื่อ synthetic/live candidate ไม่ถูก promote เพราะ runtime, security detail คือ:
+
+```text
+runtime <version> is not a verified baseline; shippable requires a verified runtime
+```
+
+Schema ปฏิเสธ `shippable` ที่ `runtime: unverified` และปฏิเสธ `runtime`/`revision` เมื่อ validation `skipped`.
+Fields ใหม่นี้ optional เพื่อรองรับ report รูปแบบก่อน M22; กฎระดับ report คือ `runtime` ต้องไม่ใช่ `unverified`
+ก่อนเป็น `shippable` (ผล `passed` ที่ไม่มี flag เกิดได้เฉพาะ verified runtime).
+Live audit บันทึก `live_audit.runtime: {version, revision, verified}` จาก validate ในรอบเดียวกัน;
+เป็น sibling ของ `provenance` ซึ่งยังเป็น map ต่อ pack. Export บันทึก identity และ warning ตาม [export.md](export.md).
+
+Exit code คงเดิม: `0` = การตรวจที่รันผ่าน (`draft`/`candidate`), `1` = failed, `2` = explicit skip
+เช่นไม่มี binary หรือขอ live แต่ไม่มี key; unverified runtime ไม่ใช่ skip เพราะมีการตรวจจริง.
+Gate ของ repo ยังเข้มตาม baseline/คู่ที่รับรอง และ `builder/` ไม่รับ flag นี้.
+ไม่มี auto re-baseline; การรับรองรุ่นอื่นต้อง review DESIGN §4 แบบ M17.
+
+```bash
+python3 scripts/check_m22_unverified_runtime.py
+```
+
+Gate ตรวจกฎ downgrade/schema/promotion/export/CLI แบบ offline เสมอ; ไม่มี thClaws → exit `2` พร้อม SKIP.
+เมื่อมี binary ต้องเป็น baseline ที่ตรวจแล้วทั้ง version+revision มิฉะนั้น exit `1`.
+Native path สร้าง wrapper script ที่ปลอมเฉพาะ `--version` เป็น `0.999.0`/`0000000` และส่ง validate/pack ให้ binary baseline จริง.
+ใช้ fixtures `text-reviewer-standalone`, `invoice-reviewer` และ `note-writer-standalone` (T1 เพิ่ม `output_write_scope`);
+ตรวจไม่มี flag/มี flag, matrix เป็น `Declared`, report round-trip, security ceiling, live skip/block และ export archive/sha256.
+Exit `0` เมื่อ offline + native ผ่าน; assertion หรือการตรวจใดล้มเหลว → `1`.
+ไม่ใช้ provider key และไม่เปิด loopback server; URL ใน export เป็นเพียง binding.
+นี่พิสูจน์กฎของ builder ไม่ใช่พฤติกรรมของ thClaws รุ่นอื่น และไม่มี live evidence กับ provider จริงบน unverified runtime.
+
+`UNVERIFIED runtime` บนทุกบรรทัดสถานะคือคำเตือน ไม่ใช่การรับรอง.

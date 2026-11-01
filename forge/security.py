@@ -111,11 +111,16 @@ def security_audit(package: Path, report: dict, *, packs_dir: Path | None = None
     spec = json.loads((package / "agentspec.json").read_text(encoding="utf-8"))
     findings, scanned = security_findings(package, spec, report, packs_dir=packs_dir)
     status = "failed" if findings else "passed"
-    if (not findings and report["package_status"] == "candidate"
-            and report["compatibility"]["status"] == "matched" and report["static_audit"]["strict"]):
+    validate = report["static_audit"]["thclaws_validate"]
+    unverified = validate.get("runtime") == "unverified"
+    eligible = (not findings and report["package_status"] == "candidate"
+                and report["compatibility"]["status"] == "matched" and report["static_audit"]["strict"])
+    if eligible and not unverified:
         report["package_status"] = "shippable"
         detail = ("compatibility matched, strict static audit clean, live evidence and security checks "
                   "passed in this run")
+    elif eligible:
+        detail = f"runtime {validate['version']} is not a verified baseline; shippable requires a verified runtime"
     elif not findings:
         detail = ("security checks passed; shippable requires live evidence in the same run "
                   "(forge audit --live --security) and a passing thclaws agent validate")

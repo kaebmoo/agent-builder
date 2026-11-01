@@ -104,7 +104,7 @@ ATLAS_ROOT="$HOME/Documents/GitHub/atlas-control-plane-daa0f49" PATH="$THCLAWS_P
 - ห้าม commit ค่า key, `.env`, `out/`, `pack-conformance.json` หรือ `builder/work`/`builder/out` (ทั้งหมด gitignored อยู่แล้ว)
 - ถ้า M10 ยัง fail บน Mac ให้เก็บ `report['detail']` และ `type(exc).__name__` จาก `forge/pack_test.py` ก่อนเสนอแก้; อย่าแก้ harness โดยไม่รู้สาเหตุ
 - ถ้า M11 live fail ให้อ่าน `out/m11-live/report.json` (`final_text`, assertion ที่ fail) แล้วรายงาน; การแก้ prompt/skill ของ `builder/` ต้องรัน live ซ้ำอย่างน้อย 3 รอบตามกติกา M7b ก่อนอ้างว่าแก้แล้ว
-- ถ้า binary ไม่ใช่ `0.146.0/9f69995` ให้หยุดและรายงาน ไม่ build รุ่นอื่นเองและไม่เพิ่มคู่ version+revision
+- ถ้า binary ไม่ใช่ `0.146.0/9f69995` ให้หยุดและรายงาน ไม่ build รุ่นอื่นเองและไม่เพิ่มคู่ version+revision; ห้ามใช้ `--allow-unverified-runtime` (M22) เพื่อให้ gate ผ่าน เพราะ gate ของ repo ตรวจ baseline แบบ fail 1 โดยตั้งใจ flag นั้นเป็นทางเลือกของผู้ใช้ package ไม่ใช่หลักฐานของ repo (ดู [audit.md](audit.md#unverified-runtime-m22))
 - เมื่อผ่านครบ ให้บันทึกผลลง `docs/PLAN.md` (ย่อหน้าผล Mac ใหม่: วันที่, checkout, model, binary version+revision, exit code ทุก gate ทั้งสองโหมด, path evidence) และ `CHANGELOG.md` แล้วค่อย commit เมื่อผู้ใช้สั่งตาม `CLAUDE.md`
 
 ## รูปแบบรายงานผล

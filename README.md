@@ -29,7 +29,7 @@ User goal → Discovery (7 questions) → AgentSpec (SSOT)
 - [docs/getting-started.md](docs/getting-started.md) — คู่มือเริ่มต้นสำหรับมือใหม่: ติดตั้ง, generate/audit ครั้งแรก, เขียน spec เอง, รันจริง, เอาไปใช้กับ Atlas, ข้อจำกัดและสิ่งที่ต้องทำเอง
 - [docs/getting-started.en.md](docs/getting-started.en.md) — English version of the getting-started guide (same sections, incl. limitations and what operators must do themselves)
 - [docs/DESIGN.md](docs/DESIGN.md) — design baseline (AgentSpec, target/pattern matrix, guarantee matrix, audit 2 ชั้น)
-- [docs/PLAN.md](docs/PLAN.md) — milestones M0–M17, M19 และ M21 (M18/M20 เสนอ) พร้อม definition of done และ check script ต่อ milestone
+- [docs/PLAN.md](docs/PLAN.md) — milestones M0–M17, M19, M21 และ M22 (M18/M20 เสนอ) พร้อม definition of done และ check script ต่อ milestone
 - [AGENTS.md](AGENTS.md) — กติกาสำหรับ coding agent ที่ทำงานใน repo นี้
 - [docs/generator.md](docs/generator.md) — M4 generator, CLI, build report และข้อจำกัด
 - [docs/audit.md](docs/audit.md) — M5 static audit และ M19 security audit: กฎ, สถานะ, wrappers และ gate
@@ -38,6 +38,8 @@ User goal → Discovery (7 questions) → AgentSpec (SSOT)
 - [builder/README.md](builder/README.md) — M11 builder-agent workspace: interview, `confirmed_by`, `build.py` และ gate
 
 ## สถานะ
+
+M22 (2026-11-01): flag `--allow-unverified-runtime` บน `forge audit`/`live-test`/`export` ให้ binary นอก baseline/คู่ที่รับรองยังตรวจได้ โดย report บันทึก `runtime: unverified`, ลดแถว guarantee ที่พึ่ง runtime เป็น Declared, สถานะไม่เกิน `candidate`, export เขียน `deployment.runtime.verified: false`; ไม่มี flag = พฤติกรรมเดิม; gate `check_m22_unverified_runtime.py` (wrapper script, ไม่ใช้ key). ไม่ใช่การรับรองรุ่นใหม่ — re-baseline ยังเป็นงานแบบ M17.
 
 M21 (2026-11-01): pack อิสระ 3 ตัว `sqlite-readonly` (SQLite `mode=ro` + authorizer), `csv-readonly` (CSV/TSV ในโฟลเดอร์ที่กำหนด) และ `datetime-tools` (เวลา/timezone/วันทำการ ไม่มี env) ใช้ stdlib เท่านั้น ไม่ผูก repo อื่น พร้อมตัวอย่าง spec และ gate `check_m21_example_packs.py` (ดู [คู่มือ pack](docs/getting-started.md#9-ลองต่อได้อีก)); gate ตรวจถึง native `draft` ไม่รวม live evidence.
 

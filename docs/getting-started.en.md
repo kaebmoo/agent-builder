@@ -62,7 +62,14 @@ thclaws --version                    # must print thclaws 0.146.0 / revision: 9f
 ```
 
 Other versions are rejected on purpose: the builder checks the version+revision pair and fails loudly until someone has reviewed
-the new version's behaviour (see [DESIGN §4](DESIGN.md)). Build details and caveats are in [local-test-plan.md](local-test-plan.md).
+the new version's behaviour (see [DESIGN §4](DESIGN.md)).
+
+Since M22, another thClaws version can be checked with `--allow-unverified-runtime` on `forge audit` / `forge live-test` /
+`forge export`: the builder still runs the checks, records `runtime: unverified`, downgrades `Enforced` rows for
+`tool_allowlist`/`no_shell`/`output_write_scope`/`collect_files` to `Declared`, and caps status at `candidate`
+(`shippable` is unreachable). See [audit.md](audit.md#unverified-runtime-m22).
+
+Build details and caveats are in [local-test-plan.md](local-test-plan.md).
 
 ### Level C: provider key
 
@@ -353,7 +360,7 @@ A desktop build is required because the CLI-only build has no `--serve`.
 
 ## 10. Short Q&A
 
-- **Why do I only get `unverified`?** No `thclaws` to validate with. Set `THCLAWS_BIN` as in section 2 and run `forge audit --write` again
+- **Why do I only get `unverified`?** Two causes: (1) no `thclaws` to validate with (exit 2): set `THCLAWS_BIN` as in section 2 and run `forge audit --write` again; (2) a `thclaws` that is not the baseline `0.146.0`/`9f69995` (exit 1, line `is not the verified baseline`): if you must use that version, add `--allow-unverified-runtime` (M22) to reach `draft` with `runtime: unverified` in the report, runtime-dependent guarantee rows as `Declared` and a status capped at `candidate`; see [audit.md](audit.md#unverified-runtime-m22)
 - **Why does `candidate` not become `shippable` by itself?** The security audit must run in the same round as the live audit (`--live --security`); the builder does not trust an older status in the report
 - **Can I edit the package directly?** Standalone: no, fix the spec and generate again; Atlas: only `AGENTS.md` and `.thclaws/skills/<name>/SKILL.md`
 - **Where do keys live?** Only in the environment of the machine that runs the daemon or CLI. The spec declares variable names only, and the security audit reports any value found in a file
@@ -371,6 +378,7 @@ Summarized from [DESIGN §6](DESIGN.md) (the guarantee matrix is the builder's o
 | No deployment: no launcher, secret provisioning or monitoring; `deployment_verified` in the export is always `false` | Do the five manual steps in [export.md](export.md#ลำดับลงทะเบียน-ทำด้วยมือ): unpack the archive, start `thclaws --serve` with `THCLAWS_AUTO_MIGRATE=0` and the env names from the report, POST worker/workspace, add the node template, poll until `online`; write your own launchd/systemd unit and record the deployment check outside the builder (proposed M18, not started) |
 | The LLM never decides permissions, network, secrets, MCP or audit results (by design) | Always write those parts of the spec yourself; the builder-agent (section 8) only drafts them and a person confirms with `confirmed_by` |
 | `shippable` means the evidence inside the builder is complete, not deploy-ready; live + security must pass in the same round and the builder does not trust an older status in the report | Run `forge audit --live --security --write` every time before handing over, then let the operator verify egress, approval and deployment |
+| M22: a runtime outside the baseline can be checked with `--allow-unverified-runtime`, but runtime-dependent guarantee rows are only Declared and `shippable` is unreachable | Review every DESIGN §4 claim against that version’s source and re-baseline as in M17 for full certification |
 | Network egress is Not guaranteed at runtime: `network: none` is only a static check that no web tool is declared, `allowlist` only checks that hosts are declared | Use a firewall or egress proxy on the machine or network, matching `deployment.network`/`hosts` in `atlas-register.json` |
 | `no_file_writes` is Not guaranteed for declared writers, MCP servers and runtime state; Skill/MCP tools are outside the allowlist claim; T1 `output/**` is Enforced only for standalone `static-pipeline` | Run one daemon per package under its own OS user or sandbox and avoid file-writing MCP servers unless needed; runtime enforcement needs an upstream thClaws patch (DESIGN §10) |
 | T2 human approval is Not verified: the package carries an approval fragment, but nothing proves the runtime binds the approval to the tool arguments; calling `/agent/run` directly bypasses the gate | Deploy T2 on a dedicated daemon, route every run through the Atlas `human_gate`, and never expose the daemon for direct calls (proposed M20, not started) |
@@ -384,7 +392,7 @@ Summarized from [DESIGN §6](DESIGN.md) (the guarantee matrix is the builder's o
 
 | Project | Limitation | If you need it: what to do and how |
 |---|---|---|
-| thClaws (fork `kaebmoo/thClaws`) | Must be a desktop build at the baseline `0.146.0`/`9f69995` for the daemon, native gates and export archive; other versions fail with 1 by design; the CLI-only build has no `--serve` | Build the fork at that revision with `cargo build --features gui --bin thclaws`; moving versions requires reviewing every DESIGN §4 claim against the source first (as in M12/M17) |
+| thClaws (fork `kaebmoo/thClaws`) | Must be a desktop build at the baseline `0.146.0`/`9f69995` for the daemon, native gates and export archive; other versions fail with 1 by design unless `--allow-unverified-runtime` (M22) is enabled, which downgrades guarantees and caps status at `candidate`; the CLI-only build has no `--serve` | Build the fork at that revision with `cargo build --features gui --bin thclaws`; moving versions requires reviewing every DESIGN §4 claim against the source first (as in M12/M17) |
 | thClaws | The desktop app and `--serve` convert an opened folder into a host workspace in place (auto-migrate), so an Atlas package stops being an agent | Start the daemon with `THCLAWS_AUTO_MIGRATE=0` only; never open a package in the desktop app or run `thclaws bots migrate` on it; if it happened, redeploy from the archive |
 | thClaws | The built-in tool allowlist fails open if `.thclaws/settings.json` is missing or `THCLAWS_PROJECT_ROOT` is set; pack MCP servers must appear in `~/.config/thclaws/mcp_allowlist.json` with their full command line unless `THCLAWS_MCP_ALLOW_ALL=1`; the engine injects extra MCP servers when the machine has office apps or an AI Server hub | Start the daemon with CWD = the package folder, do not set `THCLAWS_PROJECT_ROOT`, provision mcp_allowlist from `.thclaws/mcp.json`, and check that `agent_info.agent.mcp_servers` matches `deployment.mcp_servers` |
 | Atlas control plane (`atlas-control-plane`) | The builder uses only `POST /agent/run`; schemas are pinned at revision `daa0f49`; `output_format: json` does not validate a schema; upserting a worker with a reused `base_url` overwrites the existing worker | The M8/M16 gates need a checkout at `daa0f49` (`ATLAS_ROOT`); use one URL per daemon or `--worker-id` matching the existing worker; validate output yourself as in 11.1 |

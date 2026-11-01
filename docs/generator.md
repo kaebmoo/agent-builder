@@ -58,6 +58,11 @@ Generator ไม่รัน MCP และไม่เลื่อนสถา�
 
 ## Gate และสถานะ
 
+M22: guarantee matrix ใน report ที่ generate อธิบาย verified baseline;
+`forge audit --allow-unverified-runtime` บน binary อื่นลดเฉพาะแถวที่พึ่ง runtime จาก `Enforced` เป็น `Declared`
+ตอน audit ไม่ใช่ตอน generate และสถานะไม่เกิน `candidate` (ไม่ถึง `shippable`).
+ดู [Unverified runtime (M22)](audit.md#unverified-runtime-m22).
+
 ```bash
 python3 scripts/check_m4_generate.py
 ```
@@ -113,4 +118,4 @@ T0 ที่ส่งมอบยังมี `output_write_scope: Not applicabl
 รองรับ native validation ของ standalone T0 บน thClaws 0.116.0 (`75edc48`), 0.121.0 (`35ccf16`),
 0.129.0 (`7a27129`), 0.138.0 (`d452ece`) และ 0.146.0 (`9f69995`) เท่านั้น; ต้องตรงทั้ง version และ revision. Atlas/export pin 0.146.0 (M17).
 `thclaws_baseline` ใน report คือ template/catalog baseline;
-ดู runtime ที่ใช้จริงใน `static_audit.thclaws_validate.version`.
+ดู runtime ที่ใช้จริงใน `static_audit.thclaws_validate.version`, `runtime` และ `revision`.
