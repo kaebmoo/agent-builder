@@ -597,7 +597,7 @@ M11 (`thclaws agent validate` ของ `builder/`) ผ่าน; M6/M7a skip (�
    ยังอ่านจาก cwd ของ process = bot dir. ผลบน host: `workspace_dir` = root → ไม่มี identity (อาการ M11) แต่ `collect_files` เห็นไฟล์;
    `workspace_dir` = bot dir → identity ครบ แต่ agent เขียนไฟล์ที่ root และ `collect_files` เดิน bot dir จึง**ไม่เห็น** → ไม่มีค่าใดที่ทำให้ contract `atlas-worker` สมบูรณ์.
 5. **`thclaws bots add`** (`bots/install.rs:30-80` → `cloud/cmd.rs:708-723`): รับเฉพาะ slug ของ Agent Template ใน catalogue thClaws.cloud และต้อง login token;
-   ไม่รับ archive หรือ path local. `bots.json` ออกแบบให้แก้มือได้ (`bots/mod.rs:34`) จึงมีทางติดตั้งมือ (แตก archive ของ `agent pack` ลง `.thclaws/bots/<slug>/` แล้วเติม `bots.json`) ที่ยังไม่ทดสอบ.
+   ไม่รับ archive หรือ path local. `bots.json` ออกแบบให้แก้มือได้ (`bots/mod.rs:34`) จึงมีทางติดตั้งมือ (แตก archive ของ `agent pack` ลง `.thclaws/bots/<slug>/` แล้วเติม `bots.json`) ที่ยังไม่ทดสอบ (ติดตั้งผ่าน catalogue ยืนยันด้วย binary `9f69995` ใน "Bot channel" M18b).
 6. `thclaws agent validate`/`pack` ต้องการ `manifest.json` ที่โฟลเดอร์ที่ชี้ (`cloud/agent_cli.rs:32-36,58-63,96-104`) และ pack strip `.thclaws/bots/` → ใน host workspace ต้องชี้ bot dir;
    archive เป็น agent เดี่ยว (v2 shape) เสมอ → output ของ generator และ `forge export` ไม่เปลี่ยนรูป.
 7. `thclaws -p`/`--cli` ที่ root ของ host workspace ก้าวเข้า `bots[0]` และตั้ง `THCLAWS_WORKSPACE_ROOT` (gui build, `bin/app.rs:1067-1095`); `thclaws agent run <dir>` (M9) ไม่อยู่ในเงื่อนไข migrate
@@ -732,6 +732,40 @@ Desktop build `cargo build --features gui --bin thclaws` (ไม่มี `kms_s
 **การตัดสินใจ (M17)**: baseline ของ Atlas/export/catalog = `0.146.0` (binary ต้องรายงาน `thclaws 0.146.0`); standalone T0 เพิ่มคู่ `0.146.0/9f69995` คงสี่คู่เดิมเป็นหลักฐานประวัติ; T1 เพิ่มคู่ `0.146.0/9f69995` และคง `0.138.0/d452ece` (แต่ละคู่พิสูจน์ด้วย gate M14 บน binary ของตน);
 `patterns/tools-0.138.0.json` คงไว้เป็นหลักฐาน และ static audit ใช้ `tools-0.146.0.json`; `forge/spec.py` เพิ่ม `docconvert` (ข้อ 1); basis ของ `tool_allowlist`/`output_write_scope` อ้าง `0.146.0` + gate M17 (ข้อ 6); pin `"officeApps": []` adopt แล้วใน follow-up ข้อ 5 (2026-10-31, ทุก package); **ไม่ adopt** เป็นโค้ด: host-root instructions (ข้อ 3, บันทึก + docs), allowlist format (ข้อ 4, docs);
 harness ไม่เปลี่ยน (isolation เดิมพอ — ข้อ 9); `check_m12_baseline.py` คงเป็น gate ประวัติของ `0.138.0/d452ece` (ตรวจว่าคู่และ catalog เดิมยังอยู่) และ `check_m17_baseline.py` เป็น gate ของ baseline นี้. binary `d452ece` ที่ `target/debug` ถูกแทนด้วย build `9f69995` แล้ว 2026-10-31 หลัง gate ทั้งหมดผ่าน (copy ทับแล้ว `codesign -s - -f`; PLAN M17 ข้อค้าง (2)). Native/live evidence อยู่ใน PLAN M17.
+
+### Bot channel: catalogue → `bots add` / `POST /bots` → run (M18b, 2026-11-01, thClaws 0.146.0 `9f69995`)
+
+ปลายทางที่สองของ package นอกจาก Atlas worker คือ **bot ที่ผู้ใช้ติดตั้งและใช้เอง** ใน host workspace ของ thClaws (desktop หรือ `--serve`) ผ่าน catalogue:
+archive จาก `thclaws agent pack` → catalogue → `thclaws bots add <slug>` หรือ host `POST /bots {"slug"}` → `.thclaws/bots/<slug>/` → ผู้ใช้คุยหรือรันผ่าน CLI/GUI.
+เดินครบรอบแรกบน Mac ด้วย desktop build `9f69995`, fixture `text-reviewer-standalone` (T0) และ catalogue stub บน loopback (PLAN "M18b ทำ (Mac)");
+source ที่อ่าน (path ใต้ `crates/core/src/`): `cloud/{cmd.rs,client.rs,pack.rs,agent_cli.rs}`, `bots/{install.rs,mod.rs,supervisor.rs}`, `server.rs`, `bin/app.rs`, `config.rs`.
+
+1. **Publish เป็น slash command เท่านั้น**: `thclaws cloud publish` ถูกถอดจาก CLI (`bin/app.rs` ไม่มี `CloudCmd::Publish`) เหลือ `/cloud publish` ใน session และถูกปฏิเสธใน multiuser workspace.
+   help ของ `thclaws agent pack` ระบุว่าให้ bytes ชุดเดียวกับที่ `/cloud publish` upload → archive ของ `forge export` คือสิ่งที่ catalogue เก็บ; ถ้า forge จะ publish เองต้องเรียก `POST /api/agents/publish` ด้วย token (`cloud/client.rs`) ไม่ใช่ subprocess.
+2. **Client contract ของ catalogue** (`cloud/client.rs`, `cloud/cmd.rs::get_lines`): `GET /api/agents/{slug}/download[?version=]` ต้องมี `Authorization: Bearer <token>`; response header `X-Agent-Version`, `X-Agent-SHA256` (ตรวจ sha256 ของ bytes ก่อนแตก),
+   `X-Agent-UUID` (ผูกกับ bot ที่ติดตั้ง กันเขียนทับ bot คนละตัว); `GET /api/agents`, `GET /api/auth/me`. URL จาก `--cloud-url` → `THCLAWS_CLOUD_URL` → `settings.json::cloud.url` → `https://thclaws.cloud`;
+   token จาก `THCLAWS_CLOUD_TOKEN` → secrets backend → `~/.config/thclaws/cloud-token`. catalogue ที่ตอบตามนี้บน loopback ใช้แทนของจริงได้ทั้ง `bots add` และ `POST /bots` (gate ทำแบบนี้ ไม่ต้องมี account).
+3. **`bots.json` ต้องมี agent อย่างน้อยหนึ่ง** (`BotsConfig::load`): host ที่ `bots: []` ถูกปฏิเสธทั้ง `bots add` และ `--serve` ด้วย `no agents listed`; host ใหม่ต้องมี bot `main` เปล่าก่อน (desktop สร้างให้ตาม M17 ข้อ 8; harness scaffold เอง).
+   `bots add` แตก archive ลง `.thclaws/bots/<slug>/` **ก่อน** อ่าน/เขียน `bots.json` → เมื่อล้มเหลวทิ้งโฟลเดอร์ที่ไม่อยู่ใน `bots.json` ไว้ (ยืนยันด้วย binary).
+4. **Install แยก identity กลับ** (`bots/install.rs::split_unified_manifest`): `manifest.json` ที่ติดตั้งไม่มี `id`/`name`/`description`/`author` (คง `preview`/`pricing` ที่ pack เติม) และ `.thclaws/settings.json` ได้ block `agent{id,name,description,uuid}`
+   โดย `uuid` มาจาก `X-Agent-UUID`; `restore_installer_settings` คัดลอก `gatewayProxy`/`gateway_use_for`/`cloudUrl`/`model` จาก settings เดิมถ้ามี. ไฟล์อื่น 17/19 byte-equal กับ archive; `--serve` เพิ่มเฉพาะ `.thclaws/state/`
+   → audit ทำกับ source package ตาม §8 เช่นเดียวกับ tree ที่แตกจาก archive.
+5. **model ที่ package pin ถูกแทนตอน install** (`bots/install.rs::seed_workspace_model` + `takes_workspace_model(pinned, current, reachable)`): เมื่อ `settings.json::model` ของ package ไม่ตรง model ของ workspace
+   (host root → bot ตัวแรก → `AppConfig` default `claude-sonnet-4-6`) และ provider ของ model ที่ pin **ไม่มี credential บนเครื่องที่ติดตั้ง** (`reachable` = false) จะเขียน model ของ workspace ทับ.
+   ยืนยันด้วย binary: `gpt-5.4` → `claude-sonnet-4-6` บน host เปล่า และ → `host-model-probe` เมื่อ host root pin ค่านั้น. ผลต่อ builder: `model.mode: pinned` การันตีเฉพาะ `thclaws agent run`/`-p` บน tree ที่ไม่ผ่าน install
+   และ Atlas node template (ส่ง `model` ต่อ request); สำหรับช่อง bot เป็น **Declared** — guarantee matrix ไม่มีแถว model และไม่เพิ่ม; live evidence ของช่องนี้ต้องบันทึก model จาก settings ที่ติดตั้ง
+   (ต่อจาก `retired_model_successor` (M12) และ policy gateway (M17 ข้อ 6): นี่คือทางที่สามที่ model ถูกแทนนอก builder).
+6. **Host API สำหรับติดตั้ง** (`server.rs::supervisor_router`): `POST /bots {"slug","version","force","blank"}` (Bearer `THCLAWS_API_TOKEN` ตาม `serve_token_gate`; `/healthz` เปิด) ดึงจาก catalogue ด้วย token ของ host process
+   ตอบ `{ok, slug, dir, newly_registered, log}` แล้ว supervisor spawn child ทันที; `GET /bots` รายงาน state `starting`/`ready` + `addr`; `GET /bots/templates`, `DELETE /bots/{slug}?purge`, `POST /bots/{slug}/restart`.
+   `/v1/*` และ `/agent/run` ถึง bot ใหม่ด้วย `?bot=<slug>` (M13 ข้อ 3); `/v1/agent/info.workspace_dir` = bot dir, `skills` = skill ของ package + built-in `extract-and-save`/`gui-shell`, `mcp_servers` = [].
+7. **Orchestrator ของ bot ไม่ถูกบังคับให้เดิน pipeline**: `-p` ใน bot dir ที่ติดตั้งตอบ golden case ตรงทั้งสองรอบ แต่รอบหนึ่งเรียก `WorkflowRun` (run.js, 3 subagent, 9.5 s) อีกรอบ model ตอบเองโดยไม่เรียก (1.6 s, 9 token).
+   role restriction (`tools:`/`writePaths:`) มีผลเฉพาะ subagent; orchestrator ยังมี built-in ทั้ง 62 ตัวแบบ `permissions=auto` (M9 บันทึกไว้แล้ว). รอบเดียวไม่ใช่หลักฐานตามกฎ 3 รอบ; gate M18b จึง**ไม่รวม** การรัน model.
+
+**การตัดสินใจ (M18b)**: (a) ช่อง bot เป็น target ระดับ deployment ไม่ใช่ target ใหม่ของ spec: package เดิม (standalone, layout v2) + archive ของ `forge export` ใช้ได้โดยไม่เปลี่ยน generator/contract.
+(b) builder ไม่ publish/ติดตั้งเอง; runbook ของช่องนี้ (PLAN M18b) คือ `forge export` → upload archive ไป catalogue (`/cloud publish` หรือ `POST /api/agents/publish`) → ผู้ใช้ `thclaws bots add <slug>` หรือ desktop.
+(c) เอกสาร deploy (getting-started §7) ระบุว่า model ที่ pin อาจถูกแทนตอน install (ข้อ 5) และ audit ทำกับ source package (ข้อ 4). (d) gate `check_m18b_bot_channel.py`: offline ตรวจเอกสาร + generate;
+native (desktop build `0.146.0`/`9f69995` เท่านั้น; binary อื่น → 1; ไม่มี binary หรือ CLI-only → 2) ทำ `agent pack` → catalogue stub → `bots add` (host เปล่า → `no agents listed` + โฟลเดอร์ค้าง, host ปกติ, host ที่ pin model)
+→ `--serve` + `POST /bots` → `/v1/agent/info?bot=` และเทียบ tree กับ archive; ไม่ใช้ provider key. ยังไม่ทำ: publish จริง, self-hosted catalogue, GUI, 3 รอบของ run (PLAN M18b).
 
 ### M9 compatibility follow-up (2026-09-16, thClaws 0.129.0 `7a27129`)
 

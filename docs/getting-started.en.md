@@ -281,6 +281,9 @@ That table is everything you may truthfully say about the package. Never claim m
 
 **Option 1: run it yourself (standalone).** Use the command from section 5 from your own script or cron. Input is JSON per the schema, output is JSON per the schema.
 Good for batch jobs or pipelines that need no orchestrator.
+Or install the package as a **thClaws bot** to chat with from the CLI or desktop: upload the `forge export` archive to a catalogue (`/cloud publish` inside a session; the CLI command is gone),
+then the user runs `thclaws bots add <slug>` or installs from the desktop into `.thclaws/bots/<slug>/`. Caveat: when the installing machine has no credential for the provider the spec pins,
+thClaws replaces the model with the host's model at install time, and audits must run against the source package, not the installed tree (DESIGN §4 "Bot channel").
 
 **Option 2: as an Atlas worker.** Write the spec with `target: atlas-worker` (with `routing.role`/`tags` and no `package_pattern`),
 then export after the audit:
