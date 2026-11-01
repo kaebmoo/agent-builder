@@ -492,14 +492,14 @@ native mode: m0=0 m1=0 m2=0 m3=0 m4=0 m5=0 m6=1 m7a=1 m7b=0 m8=1 m9=2 m10=0 m11=
 กับ `ATLAS_ROOT` = worktree `daa0f49`: M16 native + Atlas + provider exit=0 (golden cases 4/4 ผ่าน host, `called=['echo__reverse']`), M8 exit=0. Ruff ผ่าน.
 
 สถานะ 2026-10-31 และข้อค้างสำหรับใช้งานจริง (สำรวจ read-only บน `main` `8cd1b8c`; ไม่รัน gate ซ้ำเพราะ commit หลัง evidence 2026-10-29 มีแค่ docs):
-- Branch: remote `claude/*` ทั้ง 4 merge เข้า main ครบ (`git branch -r --no-merged main` ว่าง), PR #1 merged, ไม่มี PR/issue ค้าง; `main` ahead `origin/main` 1 commit (`8cd1b8c`) รอผู้ดูแล push;
+- Branch: remote `claude/*` ทั้ง 4 merge เข้า main ครบ (`git branch -r --no-merged main` ว่าง), PR #1 merged, ไม่มี PR/issue ค้าง; `main` ahead `origin/main` 1 commit (`8cd1b8c`) รอผู้ดูแล push → push แล้วและ main ตรงกับ origin ตั้งแต่ PR #2–#6 (2026-10-31 ถึง 2026-11-01);
   worktree ค้าง 3 อัน (`elated-brattain-a02eb7`, `sharp-goodall-d0102a`, scratchpad `sql-pin/agent-builder` detached `fcb347e`) เนื้องานอยู่ใน main แล้ว ลบ 2026-10-31.
 - งานตามแผน: M0–M16 เสร็จครบและมี gate; live evidence ทุก milestone ที่ต้องใช้ key ผ่านบน `d452ece` ด้วย `oai/gpt-5.4-mini`; รายการ "นอกแผน" ยังไม่เริ่มทั้งหมด.
 - ข้อค้าง เรียงตามผลต่อการใช้งานจริง (ตัวเลข M ชี้ milestone ที่เสนอในตาราง):
   (a) ไม่มี package ใดถึง `shippable` — security audit ไม่มี implementation (`forge/generate.py` เขียน `"security": "not_run"` เสมอ) สูงสุดคือ `candidate` → M19 → ทำแล้ว 2026-10-31 (M19; `shippable` ต้องมี live evidence ในรอบเดียวกัน).
   (b) `deployment_verified` เป็น `false` เสมอ และ `human_approval` ยัง Not verified — ไม่เคย deploy จริง, publisher ไม่เคยส่ง email/SFTP จริง, T2 daemon แยกไม่เคย provision → M18, M20.
   (c) fixture ทั้ง 7 pin `model.id: gpt-5.4` แต่ live evidence ทุกชิ้นใช้ `gpt-5.4-mini` (gateway ไม่มี gpt-5.4) → เปลี่ยน pin เป็น model ที่มีจริงแล้วรันซ้ำ 3 รอบ หรือหา access.
-  (d) pin ล้าหลังของจริงบนเครื่อง: thClaws source `9f69995` = v0.146.0 (15 commits หลัง `d452ece`; binary `target/debug` ยัง `d452ece` — rebuild เมื่อไร native gate ทุกตัว fail 1 ตามออกแบบ),
+  (d) pin ล้าหลังของจริงบนเครื่อง: thClaws source `9f69995` = v0.146.0 (15 commits หลัง `d452ece`; binary `target/debug` ยัง `d452ece` — rebuild เมื่อไร native gate ทุกตัว fail 1 ตามออกแบบ → แทนด้วย build `9f69995` แล้ว 2026-10-31 หลัง M17; native gate ทุกตัวรันบน `thclaws 0.146.0` ตั้งแต่นั้น),
       Atlas `../atlas-control-plane` `375ac85` ≠ `daa0f49` (schema ไม่เปลี่ยน; ใช้ worktree `atlas-control-plane-daa0f49`), AI `9edfa4d` ห่าง `d95dc28` 330 commits (pack `sql-readonly` monkeypatch AI รุ่นนั้น) → M17;
       โฟลเดอร์คู่ `AI`@`d95dc28` ตาม local-test-plan ข้อ 7 ยังไม่มีบนเครื่อง ต้องสร้างก่อนรัน M6/M7a ซ้ำ.
   (e) guarantee ที่ยัง Declared/Not guaranteed บน `/agent/run` (DESIGN §6): network egress, T1 `output/**` บน Atlas, Skill/MCP นอก allowlist claim, allowlist fail-open เมื่อ settings หาย/มี `THCLAWS_PROJECT_ROOT` — พึ่ง control ของเครื่อง/Atlas ห้ามอ้างเกินนี้.
@@ -509,7 +509,7 @@ native mode: m0=0 m1=0 m2=0 m3=0 m4=0 m5=0 m6=1 m7a=1 m7b=0 m8=1 m9=2 m10=0 m11=
       nightly/self-hosted job ที่มี binary หรืออย่างน้อย commit summary ที่ redact แล้วลง `docs/evidence/`; เติม pytest อย่างน้อย 1 test หรือถอดจาก CI.
   (i) pack จริงมี 2 (`sql-readonly`, `publisher-email-sftp`) + `echo` fixture; `google-weather` ยัง `missing` ทำให้ demo ของ builder-agent จบที่ `missing` เสมอ → M21 ทำแล้ว 2026-11-01: pack อิสระ sqlite-readonly / csv-readonly / datetime-tools; google-weather ยังไม่มี.
   (j) เล็ก: standalone รองรับเฉพาะ `static-pipeline`, T1 รับรองเฉพาะ `d452ece`, `must_call` ไม่มีใน schema, Atlas `output_format: json` ไม่ตรวจ schema, `.codex/hooks.json` ที่ commit มี absolute path `/Users/seal/...`.
-- รอผู้ดูแลตัดสินใจ: push `main`; thClaws — freeze binary `d452ece` เป็น runtime production (copy ออกจาก `target/debug` + บันทึก sha) หรือทำ M17 re-baseline (แนะนำ M17 เพราะ fork ไปแล้ว 2 release) — **ทำ M17 แล้ว 2026-10-31** (ย่อหน้า "M17 ทำ (Mac)"; binary `d452ece` ที่ `target/debug` ยังอยู่ รอผู้ดูแลแทนด้วย build `9f69995`);
+- รอผู้ดูแลตัดสินใจ: push `main`; thClaws — freeze binary `d452ece` เป็น runtime production (copy ออกจาก `target/debug` + บันทึก sha) หรือทำ M17 re-baseline (แนะนำ M17 เพราะ fork ไปแล้ว 2 release) — **ทำ M17 แล้ว 2026-10-31** (ย่อหน้า "M17 ทำ (Mac)"; binary `d452ece` ที่ `target/debug` ยังอยู่ รอผู้ดูแลแทนด้วย build `9f69995` → แทนแล้ว 2026-10-31: `target/debug/thclaws` เป็น `0.146.0`/`9f69995` ไม่มี build `d452ece` เหลือบนเครื่อง; M19 และ M21 รันบน binary นี้);
   ลำดับที่เสนอ M17 → M18 → M19 → M20 แล้วค่อย model pin / pack ตัวที่ 3 / CI evidence.
 
 M17 ทำ (Mac) 2026-10-31 (worktree `claude/admiring-perlman-c8e678` ฐาน `8cd1b8c` + PLAN จาก `7a29c7a`; thClaws source `~/Documents/GitHub/thClaws` ที่ `9f69995` = `v0.146.0-24-g9f69995`;
