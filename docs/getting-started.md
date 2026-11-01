@@ -62,6 +62,11 @@ thclaws --version                    # ต้องได้ thclaws 0.146.0 / r
 ```
 
 รุ่นอื่นใช้ไม่ได้โดยตั้งใจ: builder ตรวจคู่ version+revision แล้ว fail ชัดจนกว่าจะมีคนตรวจพฤติกรรมรุ่นใหม่ (ดู [DESIGN §4](DESIGN.md))
+
+ตั้งแต่ M22 ถ้ามี thClaws รุ่นอื่น ใช้ `--allow-unverified-runtime` กับ `forge audit` / `forge live-test` / `forge export` ได้:
+builder ยังตรวจจริง แต่บันทึก `runtime: unverified`, ลดแถว `tool_allowlist`/`no_shell`/`output_write_scope`/`collect_files`
+ที่เป็น `Enforced` ให้เป็น `Declared` และสถานะไม่เกิน `candidate` (ไม่ถึง `shippable`) — ดู [audit.md](audit.md#unverified-runtime-m22).
+
 รายละเอียดการ build และข้อควรระวังอยู่ใน [local-test-plan.md](local-test-plan.md)
 
 ### ระดับ C: มี provider key
@@ -371,6 +376,7 @@ spec ต้องมี block `confirmed_by` (ดู [builder/README.md](../buil
 | ไม่ deploy ให้: ไม่มี launcher, secret provisioning, monitoring; `deployment_verified` ใน export เป็น `false` เสมอ | ทำ 5 ขั้นใน [export.md](export.md#ลำดับลงทะเบียน-ทำด้วยมือ) ด้วยมือ: แตก archive, start `thclaws --serve` ด้วย `THCLAWS_AUTO_MIGRATE=0` + env ตามชื่อใน report, POST worker/workspace, ใส่ node template, poll ให้ `online`; เขียน launchd/systemd unit เองและบันทึกผลตรวจ deployment นอก builder (M18 ที่เสนอยังไม่ทำ) |
 | LLM ไม่ตัดสินเรื่อง permission, network, secret, MCP หรือผล audit (ตั้งใจออกแบบ) | เขียนส่วนเหล่านี้ใน spec เองเสมอ; builder-agent (ข้อ 8) ทำได้แค่ร่างแล้วให้คนยืนยันด้วย `confirmed_by` |
 | `shippable` แปลว่าหลักฐานใน builder ครบ ไม่ใช่ deploy-ready; ต้องมี live + security ในรอบเดียวกัน และ builder ไม่เชื่อสถานะเก่าใน report | รัน `forge audit --live --security --write` ทุกครั้งก่อนส่งต่อ แล้วให้ operator ตรวจ egress, approval และ deployment เอง |
+| M22: runtime ที่ไม่ใช่ baseline ใช้ได้ด้วย `--allow-unverified-runtime` แต่แถว guarantee ที่พึ่ง runtime เป็นแค่ Declared และไม่มีทางถึง `shippable` | review DESIGN §4 กับ source ของรุ่นนั้นแล้ว re-baseline แบบ M17 ถ้าต้องการคำรับรองเต็ม |
 | network egress เป็น Not guaranteed ที่ runtime: `network: none` ตรวจแค่ static ว่าไม่มี web tool, `allowlist` ตรวจแค่ว่าประกาศ host | ใช้ firewall หรือ egress proxy ของเครื่อง/เครือข่ายให้ตรงกับ `deployment.network`/`hosts` ใน `atlas-register.json` |
 | `no_file_writes` Not guaranteed สำหรับ writer ที่ประกาศ, MCP และ runtime state; Skill/MCP tools อยู่นอก allowlist claim; T1 `output/**` Enforced เฉพาะ standalone `static-pipeline` | รัน daemon แยกต่อ package ด้วย user หรือ sandbox ของ OS, ไม่ใส่ MCP ที่เขียนไฟล์ถ้าไม่จำเป็น; การบังคับใน runtime ต้อง patch thClaws upstream (DESIGN §10) |
 | human approval ของ T2 เป็น Not verified: package มี approval fragment แต่ไม่พิสูจน์ว่า runtime ผูก approval กับ tool arguments; เรียก `/agent/run` ตรงจะข้าม gate | deploy T2 บน daemon แยก ให้ทุก run เข้าทาง Atlas `human_gate` และไม่ expose daemon ให้เรียกตรง (M20 ที่เสนอยังไม่ทำ) |
@@ -384,7 +390,7 @@ spec ต้องมี block `confirmed_by` (ดู [builder/README.md](../buil
 
 | project | ข้อจำกัด | ถ้าต้องการ ต้องทำอะไร / อย่างไร |
 |---|---|---|
-| thClaws (fork `kaebmoo/thClaws`) | ต้องเป็น desktop build ที่ baseline `0.146.0`/`9f69995` สำหรับ daemon, native gate และ export archive; version อื่น fail 1 ตามออกแบบ; CLI-only build ไม่มี `--serve` | build fork ที่ revision นั้นด้วย `cargo build --features gui --bin thclaws`; จะย้าย version ต้อง review DESIGN §4 ทุก claim กับ source ก่อน (แบบ M12/M17) |
+| thClaws (fork `kaebmoo/thClaws`) | ต้องเป็น desktop build ที่ baseline `0.146.0`/`9f69995` สำหรับ daemon, native gate และ export archive; version อื่น fail 1 ตามออกแบบ เว้นแต่เปิด `--allow-unverified-runtime` (M22) ซึ่งลด guarantee และหยุดที่ `candidate`; CLI-only build ไม่มี `--serve` | build fork ที่ revision นั้นด้วย `cargo build --features gui --bin thclaws`; จะย้าย version ต้อง review DESIGN §4 ทุก claim กับ source ก่อน (แบบ M12/M17) |
 | thClaws | desktop app และ `--serve` แปลงโฟลเดอร์ที่เปิดเป็น host workspace ในที่เดิม (auto-migrate) ทำให้ package ของ Atlas ไม่ใช่ agent อีกต่อไป | start daemon ด้วย `THCLAWS_AUTO_MIGRATE=0` เท่านั้น ห้ามเปิด package ใน desktop app หรือรัน `thclaws bots migrate`; ถ้าเกิดขึ้นให้ deploy ใหม่จาก archive |
 | thClaws | allowlist ของ built-in tool fail-open ถ้า `.thclaws/settings.json` หายหรือตั้ง `THCLAWS_PROJECT_ROOT`; MCP ของ pack ต้องอยู่ใน `~/.config/thclaws/mcp_allowlist.json` ทั้ง command line เว้นแต่ตั้ง `THCLAWS_MCP_ALLOW_ALL=1`; engine ฉีด MCP เพิ่มเองเมื่อเครื่องมี office app หรือ AI Server hub | start daemon ด้วย CWD = โฟลเดอร์ package, ไม่ตั้ง `THCLAWS_PROJECT_ROOT`, provision mcp_allowlist ตาม `.thclaws/mcp.json`, ตรวจว่า `agent_info.agent.mcp_servers` ตรงกับ `deployment.mcp_servers` |
 | Atlas control plane (`atlas-control-plane`) | builder ใช้แค่ `POST /agent/run`; schema pin ที่ revision `daa0f49`; `output_format: json` ไม่ตรวจ schema; upsert worker ด้วย `base_url` ซ้ำจะทับ worker เดิม | gate M8/M16 ต้องใช้ checkout ที่ `daa0f49` (`ATLAS_ROOT`); ใช้ URL แยกต่อ daemon หรือ `--worker-id` ให้ตรง worker เดิม; validate output เองตามข้อ 11.1 |
