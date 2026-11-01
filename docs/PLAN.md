@@ -669,6 +669,7 @@ worktree ใต้ `.claude/worktrees/` ไม่มี `../AI`/`../atlas-contro
 ทำให้ export ตัวอย่าง sql-readonly ใน M18a ติด stale conformance; เป็นสภาพเครื่อง ไม่ใช่ regression ของรอบนี้ (M18a native = 2 บน main `7511cb9` ตาม PR #9). grep pattern secret และ `/Users/` ในไฟล์ไม่พบ.
 รอบแรกรันชนกับ smoke CI mode ที่รันพร้อมกัน (gate เขียน conformance file ร่วมกัน) จึงรันซ้ำเดี่ยวด้วย `--force` และ commit รอบสอง — อย่ารัน gate หลายตัวพร้อมกัน.
 ไม่ทำ: nightly/self-hosted CI job ที่มี binary (ไม่มี runner ที่มี thClaws; evidence native ยังมาจาก Mac เครื่องเดียว แต่ตอนนี้สรุปที่ redact แล้วอยู่ใน repo); ไม่แก้ DESIGN เพราะไม่มีพฤติกรรม thClaws เปลี่ยน.
+SonarCloud บน PR #11 (Security Rating C บน new code): S8707 `--out` ของ collector ต้อง realpath อยู่ใต้ repo ไม่งั้น exit 1 (แบบเดียวกับ `render_launcher.py` ใน PR #9), S8786 แถวตารางใน gate ตรวจด้วย `split(" | ")` 4 cell แทน regex `.* \| .*` ที่ backtrack, S9073 แยก assert ใน test; gate CI/native, pytest และ determinism ของ collector ไม่เปลี่ยน.
 
 ```text
 uvx ruff check . → All checks passed! (exit 0)

@@ -2,7 +2,8 @@
 """Run every scripts/check_m*.py and write one redacted markdown summary under docs/evidence/.
 
 File name: <YYYY-MM-DD>-<thclaws revision | nobinary>.md. The body carries no timestamp, so two runs
-with identical gate output produce identical bytes. Existing files are never overwritten without --force.
+with identical gate output produce identical bytes. Existing files are never overwritten without --force;
+--out must resolve inside the repository.
 """
 from __future__ import annotations
 
@@ -60,8 +61,15 @@ def main() -> int:
     parser.add_argument("--force", action="store_true", help="overwrite an existing file for today")
     args = parser.parse_args()
 
+    root = os.path.realpath(ROOT) + os.sep
+    out = os.path.realpath(args.out)
+    if not out.startswith(root):
+        print(f"--out must stay inside the repository ({ROOT}): {args.out}")
+        return 1
+    out_dir = Path(out)
+
     version_line, revision = thclaws_version()
-    target = args.out / f"{dt.date.today().isoformat()}-{revision}.md"
+    target = out_dir / f"{dt.date.today().isoformat()}-{revision}.md"
     if target.exists() and not args.force:
         print(f"refusing to overwrite {target} (use --force)")
         return 1
@@ -73,7 +81,7 @@ def main() -> int:
         rows.append(f"| {script.name} | {code} | {cell(first)} | {cell(last)} |")
 
     body = "\n".join(["# Milestone gate evidence", "", f"thclaws: {version_line}", "", HEADER, RULE, *rows, ""])
-    args.out.mkdir(parents=True, exist_ok=True)
+    out_dir.mkdir(parents=True, exist_ok=True)
     target.write_text(redact(body), encoding="utf-8")
     print(f"wrote {target}")
     return 0

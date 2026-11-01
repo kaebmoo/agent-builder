@@ -13,6 +13,7 @@ def test_generate_is_byte_identical(tmp_path: Path) -> None:
     generate(spec, first)
     generate(spec, second)
     listing = [sorted(p.relative_to(d) for p in d.rglob("*") if p.is_file()) for d in (first, second)]
-    assert listing[0] and listing[0] == listing[1]
+    assert listing[0]
+    assert listing[0] == listing[1]
     for relative in listing[0]:
         assert (first / relative).read_bytes() == (second / relative).read_bytes(), relative

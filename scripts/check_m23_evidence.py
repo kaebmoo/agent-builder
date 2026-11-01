@@ -17,7 +17,13 @@ sys.dont_write_bytecode = True
 
 from collect_evidence import HEADER, RULE, SECRET_PATTERNS
 
-ROW = re.compile(r"^\| check_m\w+\.py \| [012] \| .* \| .* \|$")
+GATE_CELL = re.compile(r"^\| check_m\w+\.py$")
+
+
+def row_ok(line: str) -> bool:
+    """Four cells; the collector escapes `|` inside a cell as `\\|`, so ` | ` only separates cells."""
+    cells = line.split(" | ")
+    return len(cells) == 4 and bool(GATE_CELL.match(cells[0])) and cells[1] in {"0", "1", "2"} and cells[3].endswith(" |")
 
 
 def problems(path: Path) -> list[str]:
@@ -33,7 +39,7 @@ def problems(path: Path) -> list[str]:
     rows = [ln for ln in lines if ln.startswith("| check_m")]
     if not rows:
         found.append("no gate rows")
-    found.extend(f"bad row: {ln[:60]}" for ln in rows if not ROW.match(ln))
+    found.extend(f"bad row: {ln[:60]}" for ln in rows if not row_ok(ln))
     return found
 
 
