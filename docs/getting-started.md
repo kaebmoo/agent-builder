@@ -4,6 +4,7 @@
 ได้อะไรออกมา เอาไปใช้ที่ไหน และลองอะไรต่อได้ ทุกคำสั่งในหน้านี้รันทดสอบแล้วบน macOS
 (Python 3.14, thClaws 0.146.0) เอกสารเชิงลึกอยู่ที่ [README](../README.md), [agentspec.md](agentspec.md),
 [generator.md](generator.md), [audit.md](audit.md), [export.md](export.md)
+ฉบับภาษาอังกฤษ: [getting-started.en.md](getting-started.en.md)
 
 ## 1. agent-builder คืออะไร ใน 1 นาที
 
@@ -309,7 +310,7 @@ package_status=draft (PASS)
 
 **สิ่งที่ thClaws ทำไม่ได้ในขั้นนี้ (ตั้งใจออกแบบ)**
 
-- ประดิษฐ์ pack หรือ MCP ขึ้นเอง ใช้ได้เฉพาะ pack ที่คำสั่ง `--list-packs` พิมพ์ (วันนี้คือ `sql-readonly` และ `publisher-email-sftp`)
+- ประดิษฐ์ pack หรือ MCP ขึ้นเอง ใช้ได้เฉพาะ pack ที่คำสั่ง `--list-packs` พิมพ์ (วันนี้คือ 5 pack ตามตารางในข้อ 9 ไม่รวม `echo`)
   ขอความสามารถที่ไม่มี เช่น Google Weather report จะบอก `missing` ตรง ๆ ไม่เดาชื่อ tool
 - ตัดสินหรืออ้างผล audit เอง ทุกบรรทัดสถานะคัดลอกจากผลของ forge
 - live audit, export และ deploy ให้ Atlas ยังเป็นขั้นที่คุณสั่งเองตามข้อ 6–7
@@ -357,3 +358,38 @@ spec ต้องมี block `confirmed_by` (ดู [builder/README.md](../buil
 - **แก้ package ตรง ๆ ได้ไหม** standalone: ไม่ได้ ให้แก้ spec แล้ว generate ใหม่; Atlas: แก้ได้เฉพาะ `AGENTS.md` และ `.thclaws/skills/<name>/SKILL.md`
 - **key เก็บที่ไหน** ใน environment ของเครื่องที่รัน daemon หรือ CLI เท่านั้น spec ประกาศแค่ชื่อตัวแปร และ security audit จะฟ้องถ้าพบค่าในไฟล์
 - **`shippable` แปลว่า deploy ได้เลยไหม** ไม่ใช่ แปลว่าหลักฐานใน builder ครบ การ deploy, egress control และ human approval เป็นงานของ operator และ Atlas และ `deployment_verified` ใน export เป็น `false` เสมอจนกว่า operator จะตรวจเอง
+
+## 11. ข้อจำกัดและสิ่งที่ต้องทำเอง
+
+สรุปจาก [DESIGN §6](DESIGN.md) (guarantee matrix คือคำรับรองเดียวของ builder), [export.md](export.md) และ [PLAN](PLAN.md)
+ส่วน "สถานะ 2026-10-31" แยกเป็นสองกลุ่ม: ข้อจำกัดของ agent-builder เองที่ใช้กับทุกคน และข้อจำกัดที่เกิดจาก project หรือ dependency ภายนอกที่ builder ผูกอยู่
+
+### 11.1 ข้อจำกัดทั่วไปของ agent-builder
+
+| ข้อจำกัด | ถ้าต้องการ ต้องทำอะไร / อย่างไร |
+|---|---|
+| ไม่ deploy ให้: ไม่มี launcher, secret provisioning, monitoring; `deployment_verified` ใน export เป็น `false` เสมอ | ทำ 5 ขั้นใน [export.md](export.md#ลำดับลงทะเบียน-ทำด้วยมือ) ด้วยมือ: แตก archive, start `thclaws --serve` ด้วย `THCLAWS_AUTO_MIGRATE=0` + env ตามชื่อใน report, POST worker/workspace, ใส่ node template, poll ให้ `online`; เขียน launchd/systemd unit เองและบันทึกผลตรวจ deployment นอก builder (M18 ที่เสนอยังไม่ทำ) |
+| LLM ไม่ตัดสินเรื่อง permission, network, secret, MCP หรือผล audit (ตั้งใจออกแบบ) | เขียนส่วนเหล่านี้ใน spec เองเสมอ; builder-agent (ข้อ 8) ทำได้แค่ร่างแล้วให้คนยืนยันด้วย `confirmed_by` |
+| `shippable` แปลว่าหลักฐานใน builder ครบ ไม่ใช่ deploy-ready; ต้องมี live + security ในรอบเดียวกัน และ builder ไม่เชื่อสถานะเก่าใน report | รัน `forge audit --live --security --write` ทุกครั้งก่อนส่งต่อ แล้วให้ operator ตรวจ egress, approval และ deployment เอง |
+| network egress เป็น Not guaranteed ที่ runtime: `network: none` ตรวจแค่ static ว่าไม่มี web tool, `allowlist` ตรวจแค่ว่าประกาศ host | ใช้ firewall หรือ egress proxy ของเครื่อง/เครือข่ายให้ตรงกับ `deployment.network`/`hosts` ใน `atlas-register.json` |
+| `no_file_writes` Not guaranteed สำหรับ writer ที่ประกาศ, MCP และ runtime state; Skill/MCP tools อยู่นอก allowlist claim; T1 `output/**` Enforced เฉพาะ standalone `static-pipeline` | รัน daemon แยกต่อ package ด้วย user หรือ sandbox ของ OS, ไม่ใส่ MCP ที่เขียนไฟล์ถ้าไม่จำเป็น; การบังคับใน runtime ต้อง patch thClaws upstream (DESIGN §10) |
+| human approval ของ T2 เป็น Not verified: package มี approval fragment แต่ไม่พิสูจน์ว่า runtime ผูก approval กับ tool arguments; เรียก `/agent/run` ตรงจะข้าม gate | deploy T2 บน daemon แยก ให้ทุก run เข้าทาง Atlas `human_gate` และไม่ expose daemon ให้เรียกตรง (M20 ที่เสนอยังไม่ทำ) |
+| output schema บังคับเฉพาะใน live audit; Atlas ทำแค่ `json.loads` | validate output ด้วย `.thclaws/schemas/*.json` ฝั่งผู้บริโภคเอง |
+| standalone รองรับเฉพาะ `static-pipeline` (`batch-fanout`/`dynamic` ถูก reject); Atlas package เป็น node เดียว; `--layout host` รับเฉพาะ `prompt_json`/`assistant_json` และหนึ่ง package ต่อ host | งานหลายขั้นให้แยก spec ต่อ node แล้วประกอบ workflow ใน Atlas เอง; pattern dynamic ยังไม่มีทางทำ |
+| แก้ไฟล์ใน package ตรงไม่ได้ (audit ฟ้อง `drift`) ยกเว้น `AGENTS.md`/`SKILL.md` ของ Atlas package; ยังไม่มี `must_call` ใน schema | แก้ spec แล้ว generate ใหม่; ถ้าต้องยืนยันว่า tool ถูกเรียก ดูจาก SSE evidence ของ live audit |
+| หลักฐาน native/live อยู่ใน `out/` (gitignored) บนเครื่องที่รัน; GitHub CI ตรวจจริงแค่ M0–M3 + ruff | รัน gate ใน `scripts/` เองด้วย `THCLAWS_BIN` ก่อนเชื่อสถานะ หรือตั้ง self-hosted runner ที่มี binary และ key |
+| pack ตัวอย่างอิสระ 3 ตัว (M21) ไม่ใช่ service ที่ harden: ไม่มี OS sandbox, ไม่มี row-level access control, `csv-readonly` อ่านทั้งไฟล์เข้า memory | ใช้กับข้อมูลที่ให้ agent อ่านได้ทั้งหมดอยู่แล้ว; ถ้าต้อง harden ให้ copy pack ไปแก้แล้ว `forge pack test` ใหม่ |
+
+### 11.2 ข้อจำกัดที่ผูกกับ project หรือ dependency ภายนอก
+
+| project | ข้อจำกัด | ถ้าต้องการ ต้องทำอะไร / อย่างไร |
+|---|---|---|
+| thClaws (fork `kaebmoo/thClaws`) | ต้องเป็น desktop build ที่ baseline `0.146.0`/`9f69995` สำหรับ daemon, native gate และ export archive; version อื่น fail 1 ตามออกแบบ; CLI-only build ไม่มี `--serve` | build fork ที่ revision นั้นด้วย `cargo build --features gui --bin thclaws`; จะย้าย version ต้อง review DESIGN §4 ทุก claim กับ source ก่อน (แบบ M12/M17) |
+| thClaws | desktop app และ `--serve` แปลงโฟลเดอร์ที่เปิดเป็น host workspace ในที่เดิม (auto-migrate) ทำให้ package ของ Atlas ไม่ใช่ agent อีกต่อไป | start daemon ด้วย `THCLAWS_AUTO_MIGRATE=0` เท่านั้น ห้ามเปิด package ใน desktop app หรือรัน `thclaws bots migrate`; ถ้าเกิดขึ้นให้ deploy ใหม่จาก archive |
+| thClaws | allowlist ของ built-in tool fail-open ถ้า `.thclaws/settings.json` หายหรือตั้ง `THCLAWS_PROJECT_ROOT`; MCP ของ pack ต้องอยู่ใน `~/.config/thclaws/mcp_allowlist.json` ทั้ง command line เว้นแต่ตั้ง `THCLAWS_MCP_ALLOW_ALL=1`; engine ฉีด MCP เพิ่มเองเมื่อเครื่องมี office app หรือ AI Server hub | start daemon ด้วย CWD = โฟลเดอร์ package, ไม่ตั้ง `THCLAWS_PROJECT_ROOT`, provision mcp_allowlist ตาม `.thclaws/mcp.json`, ตรวจว่า `agent_info.agent.mcp_servers` ตรงกับ `deployment.mcp_servers` |
+| Atlas control plane (`atlas-control-plane`) | builder ใช้แค่ `POST /agent/run`; schema pin ที่ revision `daa0f49`; `output_format: json` ไม่ตรวจ schema; upsert worker ด้วย `base_url` ซ้ำจะทับ worker เดิม | gate M8/M16 ต้องใช้ checkout ที่ `daa0f49` (`ATLAS_ROOT`); ใช้ URL แยกต่อ daemon หรือ `--worker-id` ให้ตรง worker เดิม; validate output เองตามข้อ 11.1 |
+| repo `kaebmoo/AI` (pack `sql-readonly`) | pack ห่อ MCP ของ AI ที่ revision `d95dc28` และต้องใช้ `mcp>=1.26,<2`; AI รุ่นปัจจุบันห่างกว่า 300 commits ไม่เคยทดสอบ | วาง checkout ของ AI ที่ `d95dc28` ชื่อ `AI` ข้าง agent-builder แล้ว `pip install -e ".[sql-pack]"`; งาน SQLite ทั่วไปใช้ `sqlite-readonly` แทนได้โดยไม่ต้องมี AI |
+| model provider / gateway | live audit ต้องมี key ของ provider แบบ OpenAI-compatible; fixture pin `gpt-5.4` แต่หลักฐานทั้งหมดใช้ `oai/gpt-5.4-mini`; builder-agent ผ่าน 4/6 รอบเพราะ model จบเทิร์นก่อนตอบครบ | ตั้ง `OPENAI_API_KEY` หรือ `OPENAI_COMPAT_API_KEY` + `OPENAI_COMPAT_BASE_URL` ใน environment; pin `model.id` เป็นรุ่นที่ gateway มีจริงแล้วรัน live 3 รอบ; model ที่แรงกว่าจะนิ่งกว่า |
+| เครื่องที่รัน (OS) | `datetime-tools` ต้องมี tz database ของเครื่อง; `publisher-email-sftp` ต้องมี OpenSSH `sftp` และ known_hosts ที่ operator provision; keychain ของ macOS อาจค้าง dialog ตอนเรียก binary ที่ path ใหม่ | ติดตั้ง tzdata/OpenSSH ตามเครื่อง; ตั้ง `THCLAWS_DISABLE_KEYCHAIN=1` ตอนรัน CLI |
+
+Milestone ที่เสนอเพื่อปิดข้อจำกัดเหล่านี้ (M18 deployment จริง, M20 T2 side-effect proof) อยู่ใน [PLAN](PLAN.md) และยังไม่เริ่ม
