@@ -29,17 +29,22 @@ User goal → Discovery (7 questions) → AgentSpec (SSOT)
 - [docs/getting-started.md](docs/getting-started.md) — คู่มือเริ่มต้นสำหรับมือใหม่: ติดตั้ง, generate/audit ครั้งแรก, เขียน spec เอง, รันจริง, เอาไปใช้กับ Atlas, ข้อจำกัดและสิ่งที่ต้องทำเอง
 - [docs/getting-started.en.md](docs/getting-started.en.md) — English version of the getting-started guide (same sections, incl. limitations and what operators must do themselves)
 - [docs/DESIGN.md](docs/DESIGN.md) — design baseline (AgentSpec, target/pattern matrix, guarantee matrix, audit 2 ชั้น)
-- [docs/PLAN.md](docs/PLAN.md) — milestones M0–M17, M19, M21 และ M22 (M18/M20 เสนอ) พร้อม definition of done และ check script ต่อ milestone
+- [docs/PLAN.md](docs/PLAN.md) — milestones M0–M17, M19, M21 และ M22 (M18a ครึ่ง static ทำแล้ว รอ host จริง; M20 เสนอ) พร้อม definition of done และ check script ต่อ milestone
 - [AGENTS.md](AGENTS.md) — กติกาสำหรับ coding agent ที่ทำงานใน repo นี้
 - [docs/generator.md](docs/generator.md) — M4 generator, CLI, build report และข้อจำกัด
 - [docs/audit.md](docs/audit.md) — M5 static audit และ M19 security audit: กฎ, สถานะ, wrappers และ gate
 - [docs/export.md](docs/export.md) — M8 `forge export`: atlas-register.json, workflow, archive และลำดับลงทะเบียน
+- [docs/deploy-runbook.md](docs/deploy-runbook.md) — M18a runbook สำหรับ host จริง: prerequisites, launcher systemd/launchd จาก `scripts/render_launcher.py`, ตรวจ daemon/Atlas, rollback, checklist ของ operator
 - [docs/packs.md](docs/packs.md) — M10 pack contract สำหรับผู้เขียน MCP ภายนอก: `forge pack new` / `discover` / `test`
 - [builder/README.md](builder/README.md) — M11 builder-agent workspace: interview, `confirmed_by`, `build.py` และ gate
 
 ## สถานะ
 
 M18b (2026-11-01): ช่อง bot ที่ผู้ใช้ติดตั้งเอง (archive ของ `forge export` → catalogue → `thclaws bots add` / host `POST /bots`) เดินครบบน desktop build `0.146.0`/`9f69995` ด้วย catalogue stub; DESIGN §4 "Bot channel" บันทึกว่า thClaws แทน model ที่ pin ตอน install เมื่อไม่มี credential ของ provider, แยก identity กลับเป็น `settings.json::agent`, และต้องการ `bots.json` ที่มี agent; gate `check_m18b_bot_channel.py` (ไม่ใช้ key; CLI-only build → 2). M18 เดิม (ช่อง Atlas) เป็น M18a ยังไม่เริ่ม.
+
+M18a static (2026-11-01): runbook [docs/deploy-runbook.md](docs/deploy-runbook.md) สำหรับ deploy package T0 บน host จริงผ่าน Atlas, template launcher `templates/deploy/` (systemd `.service`, launchd `.plist`, `.env.example`)
+ที่ `scripts/render_launcher.py` render จาก `atlas-register.json` เท่านั้น (daemon CWD, port/bind จาก `base_url`, ชื่อ env; ไม่มีค่า secret; deterministic) และ gate `check_m18a_deploy_runbook.py`
+ที่จบ exit 2 โดยตั้งใจจนกว่า operator จะส่ง `--host-evidence <dir>` จาก host จริง; ยังไม่มี deployment จริง `deployment_verified` ยัง `false` และ builder ไม่เคยตั้งค่านี้.
 
 M22 (2026-11-01): flag `--allow-unverified-runtime` บน `forge audit`/`live-test`/`export` ให้ binary นอก baseline/คู่ที่รับรองยังตรวจได้ โดย report บันทึก `runtime: unverified`, ลดแถว guarantee ที่พึ่ง runtime เป็น Declared, สถานะไม่เกิน `candidate`, export เขียน `deployment.runtime.verified: false`; ไม่มี flag = พฤติกรรมเดิม; gate `check_m22_unverified_runtime.py` (wrapper script, ไม่ใช้ key). ไม่ใช่การรับรองรุ่นใหม่ — re-baseline ยังเป็นงานแบบ M17.
 
@@ -84,6 +89,7 @@ python3 scripts/check_m15_tool_allowlist.py
 python3 scripts/check_m16_host_deploy.py
 python3 scripts/check_m19_security_audit.py
 python3 scripts/check_m21_example_packs.py
+python3 scripts/check_m18a_deploy_runbook.py
 python3 scripts/check_m12_baseline.py
 ```
 
