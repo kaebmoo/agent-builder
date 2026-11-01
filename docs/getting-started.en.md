@@ -360,7 +360,7 @@ A desktop build is required because the CLI-only build has no `--serve`.
 
 ## 10. Short Q&A
 
-- **Why do I only get `unverified`?** No `thclaws` to validate with. Set `THCLAWS_BIN` as in section 2 and run `forge audit --write` again
+- **Why do I only get `unverified`?** Two causes: (1) no `thclaws` to validate with (exit 2): set `THCLAWS_BIN` as in section 2 and run `forge audit --write` again; (2) a `thclaws` that is not the baseline `0.146.0`/`9f69995` (exit 1, line `is not the verified baseline`): if you must use that version, add `--allow-unverified-runtime` (M22) to reach `draft` with `runtime: unverified` in the report, runtime-dependent guarantee rows as `Declared` and a status capped at `candidate`; see [audit.md](audit.md#unverified-runtime-m22)
 - **Why does `candidate` not become `shippable` by itself?** The security audit must run in the same round as the live audit (`--live --security`); the builder does not trust an older status in the report
 - **Can I edit the package directly?** Standalone: no, fix the spec and generate again; Atlas: only `AGENTS.md` and `.thclaws/skills/<name>/SKILL.md`
 - **Where do keys live?** Only in the environment of the machine that runs the daemon or CLI. The spec declares variable names only, and the security audit reports any value found in a file

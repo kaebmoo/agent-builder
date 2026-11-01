@@ -358,7 +358,7 @@ spec ต้องมี block `confirmed_by` (ดู [builder/README.md](../buil
 
 ## 10. ถาม-ตอบสั้น
 
-- **ทำไมได้แค่ `unverified`** ไม่มี `thclaws` ให้ validate ตั้ง `THCLAWS_BIN` ตามข้อ 2 แล้วรัน `forge audit --write` ใหม่
+- **ทำไมได้แค่ `unverified`** สองสาเหตุ: (1) ไม่มี `thclaws` ให้ validate (exit 2) ตั้ง `THCLAWS_BIN` ตามข้อ 2 แล้วรัน `forge audit --write` ใหม่; (2) มี `thclaws` แต่ไม่ใช่ baseline `0.146.0`/`9f69995` (exit 1, บรรทัด `is not the verified baseline`) ถ้าต้องใช้รุ่นนั้นให้เพิ่ม `--allow-unverified-runtime` (M22) จะได้ `draft` โดย report บันทึก `runtime: unverified`, แถว guarantee ที่พึ่ง runtime เป็น `Declared` และสถานะไม่เกิน `candidate` ดู [audit.md](audit.md#unverified-runtime-m22)
 - **ทำไม `candidate` ไม่กลายเป็น `shippable` เอง** security audit ต้องรันในรอบเดียวกับ live (`--live --security`) builder ไม่เชื่อสถานะเก่าใน report
 - **แก้ package ตรง ๆ ได้ไหม** standalone: ไม่ได้ ให้แก้ spec แล้ว generate ใหม่; Atlas: แก้ได้เฉพาะ `AGENTS.md` และ `.thclaws/skills/<name>/SKILL.md`
 - **key เก็บที่ไหน** ใน environment ของเครื่องที่รัน daemon หรือ CLI เท่านั้น spec ประกาศแค่ชื่อตัวแปร และ security audit จะฟ้องถ้าพบค่าในไฟล์
