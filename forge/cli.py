@@ -15,6 +15,8 @@ from forge.audit import configure as configure_audit
 from forge.generate import ROOT, generate
 from forge.live_test import command as live_command
 from forge.live_test import configure as configure_live
+from forge.next_step import command as next_command
+from forge.next_step import configure as configure_next
 from forge.pack_author import discover, scaffold_pack
 from forge.pack_test import test_pack
 from forge.spec import load_spec
@@ -53,6 +55,7 @@ def main() -> int:
     configure_audit(commands.add_parser("audit", help="static audit of a package; --write records the verdict"))
     configure_live(commands.add_parser("live-test", help="isolated golden-case live audit"))
     configure_export(commands.add_parser("export", help="Atlas registration export: register file, workflow, archive"))
+    configure_next(commands.add_parser("next", help="read builder-build-report.json and print the next command to run"))
     pack = commands.add_parser("pack", help="capability pack authoring and conformance")
     pack_commands = pack.add_subparsers(dest="pack_command", required=True)
     test = pack_commands.add_parser("test", help="test an external MCP directly without an LLM")
@@ -79,6 +82,8 @@ def main() -> int:
         return pack_command(parser, args)
     if args.command == "audit":
         return audit_command(args)
+    if args.command == "next":
+        return next_command(args)
     try:
         report = generate(load_spec(args.spec), args.out)
     except (OSError, ValueError, TypeError, yaml.YAMLError, TemplateError, ValidationError) as error:
