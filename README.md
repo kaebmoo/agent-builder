@@ -26,8 +26,9 @@ User goal → Discovery (7 questions) → AgentSpec (SSOT)
 
 ## เอกสาร
 
+- [docs/getting-started.md](docs/getting-started.md) — คู่มือเริ่มต้นสำหรับมือใหม่: ติดตั้ง, generate/audit ครั้งแรก, เขียน spec เอง, รันจริง, เอาไปใช้กับ Atlas
 - [docs/DESIGN.md](docs/DESIGN.md) — design baseline (AgentSpec, target/pattern matrix, guarantee matrix, audit 2 ชั้น)
-- [docs/PLAN.md](docs/PLAN.md) — milestones M0–M17 และ M19 (M18/M20 เสนอ) พร้อม definition of done และ check script ต่อ milestone
+- [docs/PLAN.md](docs/PLAN.md) — milestones M0–M17, M19 และ M21 (M18/M20 เสนอ) พร้อม definition of done และ check script ต่อ milestone
 - [AGENTS.md](AGENTS.md) — กติกาสำหรับ coding agent ที่ทำงานใน repo นี้
 - [docs/generator.md](docs/generator.md) — M4 generator, CLI, build report และข้อจำกัด
 - [docs/audit.md](docs/audit.md) — M5 static audit และ M19 security audit: กฎ, สถานะ, wrappers และ gate
@@ -36,6 +37,8 @@ User goal → Discovery (7 questions) → AgentSpec (SSOT)
 - [builder/README.md](builder/README.md) — M11 builder-agent workspace: interview, `confirmed_by`, `build.py` และ gate
 
 ## สถานะ
+
+M21 (2026-11-01): pack อิสระ 3 ตัว `sqlite-readonly` (SQLite `mode=ro` + authorizer), `csv-readonly` (CSV/TSV ในโฟลเดอร์ที่กำหนด) และ `datetime-tools` (เวลา/timezone/วันทำการ ไม่มี env) ใช้ stdlib เท่านั้น ไม่ผูก repo อื่น พร้อมตัวอย่าง spec และ gate `check_m21_example_packs.py` (ดู [คู่มือ pack](docs/getting-started.md#9-ลองต่อได้อีก)); gate ตรวจถึง native `draft` ไม่รวม live evidence.
 
 M19 (2026-10-31): `forge audit --security` ตรวจ deterministic rules `strict`/`secrets`/`packs`/`egress`;
 `shippable` ต้องมี live evidence ในรอบเดียวกัน พร้อม gate `check_m19_security_audit.py`.
@@ -75,6 +78,7 @@ python3 scripts/check_m14_standalone_t1.py
 python3 scripts/check_m15_tool_allowlist.py
 python3 scripts/check_m16_host_deploy.py
 python3 scripts/check_m19_security_audit.py
+python3 scripts/check_m21_example_packs.py
 python3 scripts/check_m12_baseline.py
 ```
 
@@ -84,6 +88,7 @@ python3 scripts/check_m12_baseline.py
 ## ข้อกำหนดขั้นต่ำ
 
 - Python 3.11+
+- pack ตัวอย่างอิสระ `sqlite-readonly`, `csv-readonly`, `datetime-tools` ใช้ stdlib เท่านั้น ไม่ต้องติดตั้งเพิ่ม; `datetime-tools` ต้องมี tz database ของเครื่อง
 - thClaws baseline `0.146.0` revision `9f69995` สำหรับ Atlas/export/catalog (M17, 2026-10-31; เดิม 0.138.0/`d452ece` ใน M12 และ 0.116.0 ก่อนนั้น); standalone T0 รองรับคู่ version+revision 0.116.0/`75edc48`, 0.121.0/`35ccf16`, 0.129.0/`7a27129`, 0.138.0/`d452ece`, 0.146.0/`9f69995` (รุ่นอื่น fail จนกว่าจะตรวจ DESIGN §4 ใหม่); `thclaws agent validate` / `thclaws agent pack` ต้องอยู่ใน PATH หรือ `THCLAWS_BIN` สำหรับ M4 ขึ้นไป
 - standalone T1 (M14) รับรองคู่ 0.138.0/`d452ece` และ 0.146.0/`9f69995` (M17) (`STANDALONE_T1_THCLAWS_COMPATIBILITY`); คู่ T0 รุ่นเก่ายังเป็น T0 เท่านั้น
 - gate ส่วนที่ต้องสตาร์ท daemon (`thclaws --serve`: M6, M7b live, M8 poll, M11 live, M13, M15, M16) ต้องใช้ desktop build ของ thClaws (`thclaws --help` มี `bots`);

@@ -1,0 +1,34 @@
+min_tier: T0
+network: none
+hosts: []
+env: [SQLITE_READONLY_DB]
+tools: []
+mcp_servers:
+  - name: sqlite-readonly
+    command: python3
+    args: [scripts/server.py]
+    tools: [tables, schema, query]
+    mutating: []
+scripts: [server.py]
+skills: []
+fixture:
+  setup: fixture/setup.py
+  cases:
+    - {tool: sqlite-readonly__tables, args: {}, expect: ok}
+    - {tool: sqlite-readonly__schema, args: {table: invoices}, expect: ok}
+    - tool: sqlite-readonly__query
+      args: {sql: 'SELECT vendor, SUM(total) AS total FROM invoices GROUP BY vendor ORDER BY vendor'}
+      expect: ok
+    - tool: sqlite-readonly__query
+      args: {sql: 'WITH t AS (SELECT * FROM invoices) SELECT COUNT(*) AS n FROM t', max_rows: 5}
+      expect: ok
+    - tool: sqlite-readonly__query
+      args: {sql: "INSERT INTO invoices(vendor, total, issued_on) VALUES ('x', 1, '2026-08-01')"}
+      expect: error
+    - {tool: sqlite-readonly__query, args: {sql: 'DROP TABLE invoices'}, expect: error}
+    - {tool: sqlite-readonly__query, args: {sql: "ATTACH DATABASE ':memory:' AS m"}, expect: error}
+    - {tool: sqlite-readonly__query, args: {sql: 'SELECT 1; SELECT 2'}, expect: error}
+    - {tool: sqlite-readonly__query, args: {sql: 'SELECT * FROM missing'}, expect: error}
+    - {tool: sqlite-readonly__query, args: {sql: 'PRAGMA journal_mode=WAL'}, expect: error}
+    - {tool: sqlite-readonly__schema, args: {table: missing}, expect: error}
+    - {tool: sqlite-readonly__tables, args: {extra: true}, expect: error}

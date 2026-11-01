@@ -1,0 +1,41 @@
+min_tier: T0
+network: none
+hosts: []
+env: []
+tools: []
+mcp_servers:
+  - name: datetime-tools
+    command: python3
+    args: [scripts/server.py]
+    tools: [now, convert, diff, add_business_days]
+    mutating: []
+scripts: [server.py]
+skills: []
+fixture:
+  setup: fixture/setup.py
+  cases:
+    - {tool: datetime-tools__now, args: {}, expect: ok}
+    - {tool: datetime-tools__now, args: {timezone: Asia/Bangkok}, expect: ok}
+    - tool: datetime-tools__convert
+      args: {datetime: '2026-01-01T09:00:00', from_timezone: Asia/Bangkok, to_timezone: UTC}
+      expect: ok
+    - tool: datetime-tools__diff
+      args: {start: '2026-01-01T00:00:00', end: '2026-01-02T06:00:00', unit: hours}
+      expect: ok
+    - {tool: datetime-tools__add_business_days, args: {date: '2026-10-30', days: 2}, expect: ok}
+    - tool: datetime-tools__add_business_days
+      args: {date: '2026-11-02', days: -1, weekend: [friday, saturday]}
+      expect: ok
+    - tool: datetime-tools__convert
+      args: {datetime: '2026-01-01T09:00:00', from_timezone: Asia/Bangkok, to_timezone: Mars/Olympus}
+      expect: error
+    - tool: datetime-tools__convert
+      args: {datetime: tomorrow, from_timezone: UTC, to_timezone: UTC}
+      expect: error
+    - {tool: datetime-tools__diff, args: {start: yesterday, end: today, unit: days}, expect: error}
+    - tool: datetime-tools__diff
+      args: {start: '2026-01-01T00:00:00', end: '2026-01-02T00:00:00', unit: weeks}
+      expect: error
+    - {tool: datetime-tools__add_business_days, args: {date: '2026-10-30', days: two}, expect: error}
+    - {tool: datetime-tools__add_business_days, args: {date: '2026-13-01', days: 1}, expect: error}
+    - {tool: datetime-tools__now, args: {timezone: UTC, extra: 1}, expect: error}

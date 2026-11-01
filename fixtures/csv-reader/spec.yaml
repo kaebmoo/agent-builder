@@ -1,0 +1,79 @@
+identity:
+  name: csv-reader
+  version: 0.1.0
+  owner: agent-builder
+  license: Apache-2.0
+  thclaws_min_version: '>=0.146.0'
+mission:
+  purpose: Answer a question about CSV or TSV files in the configured read-only folder using the csv-readonly tools; never modify files.
+  domain: data-analysis
+target: thclaws-standalone
+package_pattern: static-pipeline
+inputs:
+  - name: request
+    transport: prompt_json
+    schema:
+      type: object
+      additionalProperties: false
+      required: [question]
+      properties:
+        question: {type: string, minLength: 1}
+outputs:
+  - name: answer
+    transport: assistant_json
+    schema:
+      type: object
+      additionalProperties: false
+      required: [answer, file, evidence]
+      properties:
+        answer: {type: string}
+        file: {type: string}
+        evidence: {type: string}
+capabilities:
+  - pack: csv-readonly
+    params: {}
+permissions:
+  tier: T0
+  tools: [Read, csv-readonly__aggregate, csv-readonly__columns, csv-readonly__files, csv-readonly__preview]
+  shell: none
+  network: none
+  write_scope: none
+refusal:
+  conditions:
+    - A required input is missing or malformed.
+    - The request asks to modify, delete or export files.
+    - The question concerns files outside the configured folder.
+  response: Return a JSON refusal with refused true and a reason.
+  schema:
+    type: object
+    additionalProperties: false
+    required: [refused, reason]
+    properties:
+      refused: {const: true}
+      reason: {type: string}
+model:
+  mode: pinned
+  id: gpt-5.4
+env: [CSV_READONLY_ROOT]
+evaluation:
+  golden_cases:
+    - id: normal
+      kind: normal
+      expect: result
+      input:
+        request: {question: 'Which region has the highest total amount in sales.csv?'}
+    - id: missing-input
+      kind: missing_input
+      expect: refusal
+      input: {}
+    - id: refusal
+      kind: refusal
+      expect: refusal
+      input:
+        request: {question: 'Delete sales.csv after summarising it.'}
+    - id: malformed
+      kind: malformed
+      expect: refusal
+      input:
+        request: {question: 42}
+state: {mode: none, scope: turn}
