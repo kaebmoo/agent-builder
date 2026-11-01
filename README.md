@@ -29,7 +29,7 @@ User goal → Discovery (7 questions) → AgentSpec (SSOT)
 - [docs/getting-started.md](docs/getting-started.md) — คู่มือเริ่มต้นสำหรับมือใหม่: ติดตั้ง, generate/audit ครั้งแรก, เขียน spec เอง, รันจริง, เอาไปใช้กับ Atlas, ข้อจำกัดและสิ่งที่ต้องทำเอง
 - [docs/getting-started.en.md](docs/getting-started.en.md) — English version of the getting-started guide (same sections, incl. limitations and what operators must do themselves)
 - [docs/DESIGN.md](docs/DESIGN.md) — design baseline (AgentSpec, target/pattern matrix, guarantee matrix, audit 2 ชั้น)
-- [docs/PLAN.md](docs/PLAN.md) — milestones M0–M17, M19, M21 และ M22 (M18a ครึ่ง static ทำแล้ว รอ host จริง; M20 เสนอ) พร้อม definition of done และ check script ต่อ milestone
+- [docs/PLAN.md](docs/PLAN.md) — milestones M0–M17, M19, M21–M23 (M18a ครึ่ง static ทำแล้ว รอ host จริง; M20 เสนอ) พร้อม definition of done และ check script ต่อ milestone
 - [AGENTS.md](AGENTS.md) — กติกาสำหรับ coding agent ที่ทำงานใน repo นี้
 - [docs/generator.md](docs/generator.md) — M4 generator, CLI, build report และข้อจำกัด
 - [docs/audit.md](docs/audit.md) — M5 static audit และ M19 security audit: กฎ, สถานะ, wrappers และ gate
@@ -39,6 +39,8 @@ User goal → Discovery (7 questions) → AgentSpec (SSOT)
 - [builder/README.md](builder/README.md) — M11 builder-agent workspace: interview, `confirmed_by`, `build.py` และ gate
 
 ## สถานะ
+
+M23 (2026-11-01): CI evidence — `scripts/collect_evidence.py` รัน gate ทุกตัวแล้วเขียนสรุปที่ redact แล้วลง [docs/evidence/](docs/evidence/) (ชื่อไฟล์ `<วันที่>-<thclaws revision>.md`, ไม่มี timestamp ในเนื้อไฟล์), gate `check_m23_evidence.py` ตรวจว่าไฟล์ evidence parse ได้และไม่มี secret, pytest มี test จริง 1 ตัว (`tests/test_generate_deterministic.py`) และ CI รัน `pytest -q` ตรง ๆ; ปิดข้อค้าง (h) ใน PLAN; ยังไม่มี nightly/self-hosted job ที่มี binary.
 
 M18b (2026-11-01): ช่อง bot ที่ผู้ใช้ติดตั้งเอง (archive ของ `forge export` → catalogue → `thclaws bots add` / host `POST /bots`) เดินครบบน desktop build `0.146.0`/`9f69995` ด้วย catalogue stub; DESIGN §4 "Bot channel" บันทึกว่า thClaws แทน model ที่ pin ตอน install เมื่อไม่มี credential ของ provider, แยก identity กลับเป็น `settings.json::agent`, และต้องการ `bots.json` ที่มี agent; gate `check_m18b_bot_channel.py` (ไม่ใช้ key; CLI-only build → 2). M18 เดิม (ช่อง Atlas) เป็น M18a ยังไม่เริ่ม.
 

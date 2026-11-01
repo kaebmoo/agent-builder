@@ -2,7 +2,7 @@ name: ci
 
 # gate — รัน check script ของทุก milestone ที่มีอยู่ (offline; check ที่ต้องใช้ thClaws/provider key
 #        ต้อง skip แบบประกาศชัด ไม่ผ่านเงียบ — ดู AGENTS.md)
-# lint — ruff + pytest
+# lint — ruff + pytest (tests/ มี test จริงตั้งแต่ M23)
 on:
   push:
     branches: [main]
@@ -51,4 +51,4 @@ jobs:
       - name: Ruff
         run: ruff check .
       - name: Pytest
-        run: pytest -q || [ $? -eq 5 ]   # 5 = no tests collected (ยังไม่มี test ก่อน M1)
+        run: pytest -q
