@@ -456,6 +456,20 @@
             },
             "detail": {
               "type": "string"
+            },
+            "runtime": {
+              "enum": [
+                "verified",
+                "unverified"
+              ],
+              "description": "M22: verified = the binary passes the DESIGN §4 baseline/pair rule; present only when thclaws agent validate ran (status passed or failed)."
+            },
+            "revision": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "First token after `revision:` in thclaws --version, or null; present with runtime."
             }
           }
         }
@@ -1130,6 +1144,79 @@
             "properties": {
               "status": {
                 "const": "matched"
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "package_status": {
+            "const": "shippable"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "static_audit": {
+            "properties": {
+              "thclaws_validate": {
+                "not": {
+                  "required": [
+                    "runtime"
+                  ],
+                  "properties": {
+                    "runtime": {
+                      "const": "unverified"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "required": [
+          "static_audit"
+        ],
+        "properties": {
+          "static_audit": {
+            "properties": {
+              "thclaws_validate": {
+                "properties": {
+                  "status": {
+                    "const": "skipped"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "static_audit": {
+            "properties": {
+              "thclaws_validate": {
+                "not": {
+                  "anyOf": [
+                    {
+                      "required": [
+                        "runtime"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "revision"
+                      ]
+                    }
+                  ]
+                }
               }
             }
           }

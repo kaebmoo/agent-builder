@@ -181,6 +181,55 @@ CWD=package โดยไม่มี `THCLAWS_PROJECT_ROOT`, settings หาย/
 `allowedTools: ["Read"]` + package เปิด HAL/media เห็น Skill, MCP และ HAL/media ครบ (ยืนยันข้อ 4 ด้วย binary); control ที่ถอด allowlist ทำให้ Bash รันได้; คืนไฟล์เดิมแล้ว Bash ถูกปฏิเสธอีกบน daemon เดิม (ข้อ 1); provider จริงผ่าน golden cases ของ package
 เดียวกัน (ไม่มี key → 2). ข้อจำกัดที่คงอยู่: allowlist ไม่ใช่ sandbox ของ MCP server, ไม่กรอง MCP tool ที่ server advertise, ไม่ครอบ daemon ที่ start จาก CWD อื่น และไม่ใช่ claim ของ standalone.
 
+### Verified vs unverified runtime (M22, 2026-11-01)
+
+นิยาม: **verified runtime** = binary ที่ผ่านกฎ §4 เดิม: Atlas/export ใช้บรรทัดแรกของ `thclaws --version` เท่ากับ
+`thclaws <THCLAWS_BASELINE>` (ปัจจุบัน `0.146.0`); standalone ใช้คู่ version+revision ในตารางของ tier.
+**unverified runtime** = binary อื่นใดที่ตอบ `--version` ได้ ไม่ว่าใหม่กว่าหรือเก่ากว่า ใช้กฎเดียวโดยไม่เทียบลำดับ version.
+"ใหม่กว่า" ไม่ใช่ "ปลอดภัยกว่า": 0.138.0 → 0.146.0 เปลี่ยน 12 จุดที่ review ใน M17.
+
+เหตุผล (PLAN M22): ก่อน M22 binary นอกคู่ที่รับรองทำให้ manifest layer `failed` (exit 1), live audit ถูก block และ
+`forge export` exit 1 โดย builder ไม่บันทึกอะไร ทั้งที่ package รันบน binary นั้นได้เพราะ builder ไม่อยู่ใน runtime path.
+M22 ยืดหยุ่นแบบ "บันทึกความไม่รู้" ไม่ใช่ปล่อยผ่าน; หลักการเดิมยังคงอยู่: พูดเฉพาะสิ่งที่พิสูจน์แล้ว.
+
+โหมดเปิดด้วย flag `--allow-unverified-runtime` บน `forge audit`, `forge live-test`, `forge export` เท่านั้น;
+runner `audit.py`/`studio.py` ใน package ส่ง argv ผ่าน `configure()` เดิมจึงรับ flag ได้. ไม่มี environment variable override.
+ไม่มี flag = พฤติกรรมเดิมทุกประการ ยกเว้น field ใหม่ `runtime`/`revision`.
+
+พฤติกรรม:
+
+1. `thclaws_validate` ทุกโหมดอ่าน `--version` แล้วบันทึก `static_audit.thclaws_validate.runtime: verified | unverified`
+   และ `revision` (token แรกหลัง `revision:` หรือ `null`) เมื่อ status เป็น `passed`/`failed`; ไม่มีสอง field นี้เมื่อ `skipped`.
+   ไม่มี flag + unverified → `failed` พร้อม detail เดิม. มี flag + unverified → รัน `thclaws agent validate` จริงและให้ status ตามผล;
+   เมื่อผ่าน `forge audit` พิมพ์ `thclaws agent validate: passed on UNVERIFIED runtime <version> (baseline <THCLAWS_BASELINE>); runtime guarantees downgraded`
+   และบรรทัดสถานะท้าย (`package_status=...`) ต่อด้วย ` on UNVERIFIED runtime`.
+2. Guarantee matrix (§6) ลดตอน audit ไม่ใช่ตอน generate เพราะ generate ไม่รู้ binary: เมื่อ flag เปิดและ runtime unverified
+   แถวที่ status `Enforced` และพึ่งพฤติกรรม runtime ที่ §4 ตรวจไว้ — `tool_allowlist`, `no_shell`, `output_write_scope`, `collect_files` —
+   ลดเป็น `Declared` และ basis นำหน้าด้วย `Runtime <thclaws_validate.version> not reviewed against DESIGN §4: `.
+   กฎนี้ deterministic และ idempotent เพราะทำเฉพาะแถว `Enforced`; แถวอื่น (`Static check` / `Not guaranteed` / `Not verified` /
+   `Not applicable` / `No evidence` / `Evidence`) คงเดิม. `--write` บันทึกแถวที่ลดแล้ว; audit ซ้ำบน binary verified คืนแถวเดิม
+   เพราะ matrix render ใหม่จาก spec ทุกครั้ง.
+3. สถานะถึง `draft` ได้เพราะ thClaws รุ่นนั้นรับ manifest จริง และถึง `candidate` ได้เมื่อ live ผ่านบน binary นั้น;
+   `shippable` ไม่ได้: security audit (§7) เพิ่มเงื่อนไข `static_audit.thclaws_validate.runtime` ต้องไม่ใช่ `unverified` และเมื่อไม่ promote
+   `detail` ระบุ `runtime <version> is not a verified baseline; shippable requires a verified runtime`.
+   Report schema ปฏิเสธ `shippable` ที่ `runtime: unverified`; field ที่ไม่มี = validation ไม่ได้รัน ซึ่ง status `passed` โดยไม่มี flag
+   เกิดได้เฉพาะบน verified runtime.
+4. Live audit ปลด block เองเมื่อ manifest `passed` ด้วย flag; `live_audit.runtime: {version, revision, verified}` คัดลอก identity ของ runtime
+   จาก `thclaws_validate` ในรอบเดียวกัน ไม่ใส่ใน `live_audit.provenance` ซึ่งเป็น map ต่อ pack ที่มี shape ตายตัว — implement ใน slice 02.
+5. Export: ไม่มี flag ปฏิเสธ binary unverified ด้วยข้อความเดิม และปฏิเสธ report ที่บันทึก `runtime: unverified`.
+   มี flag → สร้าง archive ด้วย binary นั้น (self-check archive เทียบ `generated_files`/byte ยังทำ), `atlas-register.json` เพิ่ม
+   `deployment.runtime: {version, revision, verified, baseline}` (`null` เมื่อไม่มี binary) และพิมพ์ warning;
+   binary verified → `verified: true` — implement ใน slice 02.
+6. Exit code ไม่เปลี่ยนความหมาย: `0` draft/candidate, `1` failed, `2` skip; unverified ไม่ใช่ skip เพราะมีการตรวจจริงเกิดขึ้น.
+
+ไม่เปลี่ยน: gate `scripts/check_*` ทุกตัวยังตรวจ baseline/คู่ที่รับรองแบบ fail 1 เพราะเป็นหลักฐานของ repo ไม่ใช่ของผู้ใช้;
+`builder/` `build.py` ไม่รับ flag; ไม่มี auto re-baseline และไม่เพิ่มคู่ compatibility (ต้องเป็นงานแบบ M17 พร้อม review §4).
+Gate ของ milestone คือ `check_m22_unverified_runtime.py`: ไม่มี binary → 2; มี binary → wrapper script ที่ `--version` พิมพ์
+`thclaws 0.999.0` / `revision: 0000000 (fake)` แล้ว exec binary จริงสำหรับ argument อื่น.
+
+Risk: ผู้ใช้อาจอ่าน `candidate` บน runtime unverified เป็นการรับรอง → ทุกบรรทัดสถานะต้องมีคำว่า `UNVERIFIED runtime`
+และ basis ของแถวที่ลดต้องมีคำว่า `not reviewed` ชัดเจน.
+
 ## 5. Capability pack
 
 pack คือความสามารถสำเร็จรูปที่ประกอบเข้า package ได้ อยู่ใน `packs/<name>/pack.yaml` ประกาศ: MCP servers / skills / scripts ที่เพิ่ม, env ที่ต้องการ (ชื่อ), tier ต่ำสุดที่ต้องใช้, fixture สำหรับ live audit ที่รันได้โดยไม่ต้องมีข้อมูลจริง
@@ -282,7 +331,7 @@ Worker และ policy pin worker/workspace เป็น placeholder ที่ 
 
 static audit: schema ของ spec, manifest ที่ generate, permission declaration vs pack, env names, MCP/skill มีอยู่จริง, refusal surface ครบ, AGENTS.md มี section บังคับ (Mission / Must / Refuse / Output) และประโยค "ตอบ JSON ล้วน" เมื่อ output เป็น `assistant_json`, `thclaws agent validate` ผ่าน
 live audit: start daemon ชั่วคราวแบบ isolated, ยิง `/agent/run` จริงด้วย golden cases (normal / missing input / refusal / malformed); `expect: result` validate กับ schema ของ `assistant_json` output เดียว และ `expect: refusal` validate กับ `refusal.schema`, แล้วเก็บ SSE tool/skill events เป็น evidence. ถ้า response ผ่านทั้ง expected และ opposite branch schema ให้ fail เป็น ambiguous; result ที่มีหลาย output หรือ `collect_files` อย่างเดียวอยู่นอก live-audit scope ของ M6 จนกว่าจะมี output selector contract
-สถานะ: `draft` (static ผ่าน) → `candidate` (live ผ่าน) → `shippable` (compatibility + security ผ่าน) ไม่มี API key = อยู่ที่ draft ห้ามบอกว่า deploy-ready
+สถานะ: `draft` (static ผ่าน) → `candidate` (live ผ่าน) → `shippable` (compatibility + security ผ่าน) ไม่มี API key = อยู่ที่ draft ห้ามบอกว่า deploy-ready; บน unverified runtime (M22) สถานะหยุดที่ `candidate`
 
 **Security audit (M19)**: `forge audit <package> --security` ตรวจแบบ deterministic บน static audit ที่รันด้วย
 `strict=True` ในรอบเดียวกัน ไม่เรียก LLM และไม่ต้องใช้ provider key. "security passed" หมายถึงผ่านครบทั้งสี่ finding rules:
@@ -308,7 +357,9 @@ live audit: start daemon ชั่วคราวแบบ isolated, ยิง `
   `none` ครอบคลุมด้วย M1 และ rule `packs`
 
 เลื่อนเป็น `shippable` ก็ต่อเมื่อในรอบเดียวกัน `package_status == candidate` (live ผ่าน),
-`compatibility.status == matched`, `static_audit.strict == true` และไม่มี static finding พร้อม security passed.
+`compatibility.status == matched`, `static_audit.strict == true` และไม่มี static finding พร้อม security passed
+และ `static_audit.thclaws_validate.runtime` ไม่ใช่ `unverified` (M22); เมื่อไม่ promote เพราะ runtime ให้ `detail` ระบุ
+`runtime <version> is not a verified baseline; shippable requires a verified runtime`.
 `--security` โดยไม่มี `--live` บันทึกผล security ได้แต่สถานะไม่เกิน `draft`; ไม่ใช้ `candidate` ที่เก็บจากรอบก่อน.
 Security audit ไม่พิสูจน์ network egress enforcement, runtime isolation, deployment (`deployment_verified` ใน export
 ยังเป็น false), human approval (`human_approval` คงเดิม) หรือ MCP server behaviour นอก pack conformance;
@@ -316,6 +367,7 @@ Security audit ไม่พิสูจน์ network egress enforcement, runtim
 
 Report ใช้ `audit.security` ∈ `not_run | passed | failed`; `security_audit` =
 `{status, strict: true, findings[], scanned_files, detail}` มีเมื่อและเฉพาะเมื่อ `audit.security != not_run`.
+`static_audit.thclaws_validate` = `{status, version, detail}` + `runtime`/`revision` เมื่อ validation รัน (M22).
 Exit code ของ `forge audit --security`: `1` เมื่อ static / manifest / live / security ใด failed;
 `2` เมื่อ manifest skipped (ไม่มี binary) หรือขอ live แล้ว skipped (เช่นไม่มี key); `0` ในกรณีอื่น.
 Gate ของ milestone นี้คือ `scripts/check_m19_security_audit.py` (เขียนใน slice ถัดไป).
