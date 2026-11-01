@@ -131,6 +131,21 @@ package_status=draft (PASS)
 
 ความหมายของ exit code ทุกคำสั่งและทุก gate ใน repo เหมือนกัน: `0` ผ่าน, `1` ไม่ผ่าน, `2` ข้ามเพราะขาดของภายนอก (binary หรือ key)
 
+ไม่แน่ใจว่าต้องรันอะไรต่อ ไม่ว่าจะอยู่ขั้นไหน ให้ถาม builder:
+
+```bash
+.venv/bin/forge next out/text-reviewer
+```
+
+```
+out/text-reviewer: package_status=unverified target=thclaws-standalone
+audit: spec=passed manifest=not_run static=not_run live=not_run security=not_run
+next: forge audit out/text-reviewer --write
+why: static audit and thclaws agent validate have not run; status stays unverified until both pass (needs thclaws 0.146.0 on PATH or THCLAWS_BIN)
+```
+
+`forge next` อ่าน `builder-build-report.json` อย่างเดียว ไม่เปลี่ยนสถานะ ใช้ซ้ำได้ทุกขั้นจนถึงขั้น export (Atlas) หรือ run (standalone) ซึ่งเป็นจุดที่ operator รับช่วงต่อ
+
 ## 4. เขียน spec ของตัวเอง
 
 ก่อนเขียน ตอบ 7 ข้อนี้กับตัวเอง (ชุดเดียวกับที่ builder-agent ใช้สัมภาษณ์):

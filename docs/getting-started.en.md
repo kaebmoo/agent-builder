@@ -133,6 +133,21 @@ package_status=draft (PASS)
 
 Exit codes mean the same for every command and every gate in the repo: `0` pass, `1` fail, `2` skipped because something external is missing (binary or key).
 
+Not sure what to run next, at any stage? Ask the builder:
+
+```bash
+.venv/bin/forge next out/text-reviewer
+```
+
+```
+out/text-reviewer: package_status=unverified target=thclaws-standalone
+audit: spec=passed manifest=not_run static=not_run live=not_run security=not_run
+next: forge audit out/text-reviewer --write
+why: static audit and thclaws agent validate have not run; status stays unverified until both pass (needs thclaws 0.146.0 on PATH or THCLAWS_BIN)
+```
+
+`forge next` only reads `builder-build-report.json`; it never changes the status. Use it at every stage up to export (Atlas) or run (standalone), where the operator takes over.
+
 ## 4. Write your own spec
 
 Before writing, answer these seven questions for yourself (the same set the builder-agent uses to interview you):
