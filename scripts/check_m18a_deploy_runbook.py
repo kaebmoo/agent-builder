@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import subprocess
 import sys
@@ -32,12 +33,13 @@ from forge.spec import load_spec
 
 RUNBOOK = ROOT / 'docs' / 'deploy-runbook.md'
 FIXTURE = ROOT / 'fixtures' / 'sql-reader' / 'spec.yaml'
-BASE_URL = 'http://worker.example.invalid:4317'
+RENDERER = ROOT / 'scripts' / 'render_launcher.py'
+BASE_URL = 'https://worker.example.invalid:4317'
 WORKSPACE_DIR = '/srv/atlas/sql-reader'
 # Every step the runbook must name (task list of PLAN M18a); each string must appear verbatim.
 RUNBOOK_STEPS = (
     'cargo build --features gui', 'THCLAWS_DISABLE_KEYCHAIN=1', 'thclaws --version', '9f69995',
-    '.sha256', 'atlas-register.json', 'deployment.env', 'render_launcher.py',
+    '.sha256', 'atlas-register.json', 'deployment.env', RENDERER.name,
     'THCLAWS_AUTO_MIGRATE=0', 'THCLAWS_API_TOKEN', 'THCLAWS_MCP_ALLOW_ALL', 'mcp_allowlist.json',
     '/v1/agent/info', 'deployment.package_root', 'deployment.mcp_servers',
     'POST /api/workers', 'POST /api/workspaces', 'node_template', '/poll', '`online`',
@@ -83,11 +85,11 @@ def check_templates(work, register):
     files = render(work / 'export')
     assert files == render(work / 'export'), 'rendering is not deterministic'
     out = work / 'rendered'
-    subprocess.run([sys.executable, str(ROOT / 'scripts' / 'render_launcher.py'), str(work / 'export'), '--out', str(out)],
-                   check=True, capture_output=True, text=True)
+    subprocess.run([sys.executable, str(RENDERER), str(work / 'export'), '--out', str(out)],
+                   cwd=work, check=True, capture_output=True, text=True)
     assert {p.name: p.read_text(encoding='utf-8') for p in out.iterdir()} == files, 'CLI output differs from render()'
-    refused = subprocess.run([sys.executable, str(ROOT / 'scripts' / 'render_launcher.py'), str(work / 'export'),
-                              '--out', str(out)], check=False, capture_output=True, text=True)
+    refused = subprocess.run([sys.executable, str(RENDERER), str(work / 'export'),
+                              '--out', str(out)], cwd=work, check=False, capture_output=True, text=True)
     assert refused.returncode == 1 and 'already exists' in refused.stderr, 'renderer overwrote an existing directory'
     deployment = register['deployment']
     names = [*DAEMON_ENV, *deployment['env']]
@@ -139,7 +141,8 @@ def check_host_evidence(folder):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--host-evidence', type=Path, help='operator evidence directory from a real host (runbook §11)')
+    parser.add_argument('--host-evidence', type=Path,
+                        help='operator evidence directory from a real host, inside this repo, e.g. out/m18a-evidence/<date> (runbook §11)')
     args = parser.parse_args()
     check_runbook()
     with tempfile.TemporaryDirectory(prefix='forge-m18a-') as temporary:
@@ -153,7 +156,11 @@ def main():
               'operator files from docs/deploy-runbook.md §11 after a real Atlas deployment; the builder never '
               'sets deployment_verified')
         return 2
-    check_host_evidence(args.host_evidence)
+    evidence = os.path.realpath(args.host_evidence)
+    if not evidence.startswith(str(ROOT) + os.sep):  # runbook §11: evidence lives in the gitignored out/ tree of this repo
+        print(f'M18a FAIL: --host-evidence must be inside {ROOT} (runbook §11): {args.host_evidence}')
+        return 1
+    check_host_evidence(Path(evidence))
     return 0
 
 

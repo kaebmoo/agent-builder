@@ -34,7 +34,7 @@ export THCLAWS_DISABLE_KEYCHAIN=1 PATH="$HOME/Documents/GitHub/thClaws/target/de
 ```
 
 ได้จาก export: `atlas-register.json`, `<name>-<version>.tar.gz` + `.sha256` (และ `atlas-workflow.json` เฉพาะ target `atlas-workflow`).
-ได้จาก `render_launcher.py` (อ่านเฉพาะ `atlas-register.json`; deterministic; ไม่มีค่า secret):
+ได้จาก `render_launcher.py` (อ่านเฉพาะ `atlas-register.json`; path ทั้งสองต้องอยู่ใต้ working directory; deterministic; ไม่มีค่า secret):
 
 - `<name>.service` (systemd): `WorkingDirectory` = `deployment.daemon_cwd`, `EnvironmentFile=/etc/thclaws/<name>.env`, `Environment=THCLAWS_AUTO_MIGRATE=0`
   และ `THCLAWS_DISABLE_KEYCHAIN=1` เป็นค่าคงที่, `ExecStart=<bin> --serve --bind <bind> --port <port>` โดย port มาจาก `worker.base_url`
@@ -187,7 +187,7 @@ curl -fsS -H "Authorization: Bearer $ATLAS_TOKEN" "$ATLAS/api/workflow-runs/$RUN
 ## 11. หลักฐานสำหรับ gate (`--host-evidence`)
 
 `scripts/check_m18a_deploy_runbook.py` ตรวจ runbook และ template แบบ static แล้วจบที่ exit 2 (`M18a SKIP … real host not available`) เพราะ builder ไม่มี host จริง.
-operator ที่ทำข้อ 1–10 บน host จริงแล้ว ให้รวบรวมไฟล์ต่อไปนี้ไว้ในโฟลเดอร์หนึ่ง (เช่น `out/m18a-evidence/<วันที่>/` ซึ่ง gitignored; ห้ามใส่ค่า token หรือ secret ใด ๆ):
+operator ที่ทำข้อ 1–10 บน host จริงแล้ว ให้รวบรวมไฟล์ต่อไปนี้ไว้ในโฟลเดอร์หนึ่งใต้ repo (gate รับเฉพาะ path ใน repo เช่น `out/m18a-evidence/<วันที่>/` ซึ่ง gitignored; ห้ามใส่ค่า token หรือ secret ใด ๆ):
 
 | ไฟล์ | ที่มา | gate ตรวจ |
 |---|---|---|
