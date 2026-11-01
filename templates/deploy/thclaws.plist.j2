@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Rendered by scripts/render_launcher.py from atlas-register.json (M18a). Re-render instead of editing by hand.
+     Package {{ name }}{% if archive %} ({{ archive }}){% endif %}: WorkingDirectory = deployment.daemon_cwd, package at {{ package_root }}.
+     launchd has no EnvironmentFile, so /bin/sh sources {{ env_file }} (mode 0600, owner thclaws) before exec;
+     it must define: {{ env_names | join(', ') }}. Install under /Library/LaunchDaemons/{{ label }}.plist.
+     See docs/deploy-runbook.md. Nothing here verifies the deployment; deployment_verified stays false in the export. -->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>{{ label }}</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/sh</string>
+    <string>-c</string>
+    <string>set -a; . "{{ env_file }}"; set +a; exec "{{ thclaws_bin }}" --serve --bind {{ bind }} --port {{ port }}</string>
+  </array>
+  <key>WorkingDirectory</key>
+  <string>{{ daemon_cwd }}</string>
+  <key>EnvironmentVariables</key>
+  <dict>
+    {% for key, value in fixed_env.items() %}
+    <key>{{ key }}</key>
+    <string>{{ value }}</string>
+    {% endfor %}
+  </dict>
+  <key>UserName</key>
+  <string>thclaws</string>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+  <key>StandardOutPath</key>
+  <string>/var/log/thclaws/{{ name }}.log</string>
+  <key>StandardErrorPath</key>
+  <string>/var/log/thclaws/{{ name }}.log</string>
+</dict>
+</plist>

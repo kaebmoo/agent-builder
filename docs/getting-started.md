@@ -297,6 +297,8 @@ thClaws จะแทน model ด้วย model ของ host ตอนติ�
 แตก archive บนเครื่อง worker → start `thclaws --serve` ด้วย `THCLAWS_AUTO_MIGRATE=0` และ env ตามชื่อใน report →
 `POST /api/workers` และ `/api/workspaces` → ใส่ node template ลง workflow → poll ให้ `online`
 ข้อควรระวังสำคัญ: ห้ามเปิดโฟลเดอร์ package ด้วย thClaws desktop app เพราะมันจะแปลงโครงสร้างในที่เดิมจน Atlas เรียกไม่ตรง
+บน host จริงใช้ [deploy-runbook.md](deploy-runbook.md) (M18a): prerequisites, launcher systemd/launchd ที่ `scripts/render_launcher.py` render จาก `atlas-register.json`
+(ชื่อ env เท่านั้น ไม่มีค่า), ขั้นตรวจ daemon/Atlas, rollback และ checklist ที่ operator ติ๊ก `deployment_verified` เองนอก builder
 
 **แบบ 3: ให้ thClaws สร้าง agent ให้** คุยกับ thClaws เป็นภาษาคนแล้วให้มันเขียน spec และรัน builder แทนคุณ ดูข้อ 8 ถัดไป
 

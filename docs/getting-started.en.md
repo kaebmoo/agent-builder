@@ -299,6 +299,8 @@ and an archive `.tar.gz` + `.sha256`. The operator then performs five manual ste
 unpack the archive on the worker machine → start `thclaws --serve` with `THCLAWS_AUTO_MIGRATE=0` and the env names from the report →
 `POST /api/workers` and `/api/workspaces` → put the node template into a workflow → poll until `online`.
 Important: never open the package folder in the thClaws desktop app. It converts the folder in place and Atlas will no longer reach the agent.
+On a real host follow [deploy-runbook.md](deploy-runbook.md) (M18a, Thai): prerequisites, systemd/launchd launchers that `scripts/render_launcher.py` renders from
+`atlas-register.json` (env names only, never values), daemon and Atlas checks, rollback, and the checklist where the operator ticks `deployment_verified` outside the builder.
 
 **Option 3: let thClaws build the agent for you.** Talk to thClaws in plain language and let it write the spec and run the builder. See section 8.
 

@@ -63,6 +63,8 @@ guarantee matrix ใน build report คือคำรับรองเดี�
 
 ## ลำดับลงทะเบียน (ทำด้วยมือ)
 
+ฉบับสำหรับ host จริงพร้อม launcher systemd/launchd (`scripts/render_launcher.py`), rollback และ checklist ของ operator อยู่ที่ [deploy-runbook.md](deploy-runbook.md) (M18a); ห้าขั้นด้านล่างคือสัญญาขั้นต่ำ
+
 1. แตก archive ที่ `deployment.package_root` บนเครื่อง worker ตรวจ sha256 แล้ว start `thclaws --serve` จาก directory นั้น
    พร้อม `THCLAWS_API_TOKEN`, **`THCLAWS_AUTO_MIGRATE=0`** และ env ตามชื่อใน `deployment.env`. Package ต้องคงเป็น single-agent workspace
    (DESIGN §4 "Host + bots layout", §8): desktop build ของ thClaws 0.138.0+ (ตรวจถึง 0.146.0) จะแปลงโฟลเดอร์ที่เปิดด้วย `--serve`/desktop เป็น host workspace ในที่เดิม
