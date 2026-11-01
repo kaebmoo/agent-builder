@@ -109,11 +109,13 @@ def main() -> int:
             total = sum(check_package(fixture, out) for fixture in ("text-reviewer-standalone", "sql-reader"))
             bad = subprocess.run([sys.executable, "-m", "forge.cli", "next", str(out / "missing")], cwd=ROOT,
                                  capture_output=True, text=True, check=False)
-            assert bad.returncode == 1 and bad.stdout.startswith("next FAIL:"), bad
+            if bad.returncode != 1 or not bad.stdout.startswith("next FAIL:"):
+                raise ValueError(f"non-package should fail with exit 1: {bad}")
         for path, phrases in DOCS.items():
             text = (ROOT / path).read_text(encoding="utf-8")
             missing = [phrase for phrase in phrases if phrase not in text]
-            assert not missing, f"{path} lacks {missing}"
+            if missing:
+                raise ValueError(f"{path} lacks {missing}")
     except (AssertionError, OSError, ValueError, KeyError) as exc:
         print(f"M24 FAIL: {exc}")
         return 1
