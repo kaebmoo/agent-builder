@@ -39,6 +39,8 @@ User goal → Discovery (7 questions) → AgentSpec (SSOT)
 
 ## สถานะ
 
+M18b (2026-11-01): ช่อง bot ที่ผู้ใช้ติดตั้งเอง (archive ของ `forge export` → catalogue → `thclaws bots add` / host `POST /bots`) เดินครบบน desktop build `0.146.0`/`9f69995` ด้วย catalogue stub; DESIGN §4 "Bot channel" บันทึกว่า thClaws แทน model ที่ pin ตอน install เมื่อไม่มี credential ของ provider, แยก identity กลับเป็น `settings.json::agent`, และต้องการ `bots.json` ที่มี agent; gate `check_m18b_bot_channel.py` (ไม่ใช้ key; CLI-only build → 2). M18 เดิม (ช่อง Atlas) เป็น M18a ยังไม่เริ่ม.
+
 M22 (2026-11-01): flag `--allow-unverified-runtime` บน `forge audit`/`live-test`/`export` ให้ binary นอก baseline/คู่ที่รับรองยังตรวจได้ โดย report บันทึก `runtime: unverified`, ลดแถว guarantee ที่พึ่ง runtime เป็น Declared, สถานะไม่เกิน `candidate`, export เขียน `deployment.runtime.verified: false`; ไม่มี flag = พฤติกรรมเดิม; gate `check_m22_unverified_runtime.py` (wrapper script, ไม่ใช้ key). ไม่ใช่การรับรองรุ่นใหม่ — re-baseline ยังเป็นงานแบบ M17.
 
 M21 (2026-11-01): pack อิสระ 3 ตัว `sqlite-readonly` (SQLite `mode=ro` + authorizer), `csv-readonly` (CSV/TSV ในโฟลเดอร์ที่กำหนด) และ `datetime-tools` (เวลา/timezone/วันทำการ ไม่มี env) ใช้ stdlib เท่านั้น ไม่ผูก repo อื่น พร้อมตัวอย่าง spec และ gate `check_m21_example_packs.py` (ดู [คู่มือ pack](docs/getting-started.md#9-ลองต่อได้อีก)); gate ตรวจถึง native `draft` ไม่รวม live evidence.

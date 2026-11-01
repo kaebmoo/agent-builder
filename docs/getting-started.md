@@ -279,6 +279,9 @@ package_status=draft (PASS)
 
 **แบบ 1: รันเองบนเครื่อง (standalone)** ใช้คำสั่งในข้อ 5 จาก script หรือ cron ของคุณ input เป็น JSON ตาม schema, output เป็น JSON ตาม schema
 เหมาะกับงาน batch หรือ pipeline ที่ไม่ต้องมี orchestrator
+หรือติดตั้ง package เป็น **bot ของ thClaws** ไว้คุยผ่าน CLI/desktop: upload archive จาก `forge export` ไป catalogue (ทำใน session ด้วย `/cloud publish`; CLI ไม่มีคำสั่งนี้แล้ว)
+แล้วผู้ใช้สั่ง `thclaws bots add <slug>` หรือติดตั้งจาก desktop ลง `.thclaws/bots/<slug>/` ข้อควรรู้: ถ้าเครื่องที่ติดตั้งไม่มี credential ของ provider ที่ spec pin
+thClaws จะแทน model ด้วย model ของ host ตอนติดตั้ง และต้อง audit กับ source package ไม่ใช่ tree ที่ติดตั้ง (DESIGN §4 "Bot channel")
 
 **แบบ 2: เป็น worker ของ Atlas** เขียน spec ให้ `target: atlas-worker` (มี `routing.role`/`tags` และไม่มี `package_pattern`)
 แล้ว export หลัง audit:
