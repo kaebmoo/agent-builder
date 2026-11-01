@@ -182,6 +182,11 @@ def native(packages, packs, binary):
     return 0
 
 
+def unchanged(before):
+    if snapshot(ROOT / 'packs') != before:
+        raise AssertionError('gate changed the checkout packs tree')
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--timeout', type=float, default=30,
@@ -198,7 +203,7 @@ def main():
                 }):
                     packs = base / 'packs'
                     packages = offline(base, packs, args.timeout)
-                    assert snapshot(ROOT / 'packs') == before, 'gate changed the checkout packs tree'
+                    unchanged(before)
                     print('M21 offline PASS: 3 packs conformant, negative descriptors rejected, '
                           '3 example packages deterministic/strict-clean/security-passed, read-only probes held')
                     binary = shutil.which(os.environ.get('THCLAWS_BIN', 'thclaws'))
@@ -211,7 +216,7 @@ def main():
                     print('M21 scope: live evidence (candidate/shippable) is out of this gate\'s scope')
                     return code
         finally:
-            assert snapshot(ROOT / 'packs') == before, 'gate changed the checkout packs tree'
+            unchanged(before)
     except (AssertionError, ValueError, OSError, StopIteration, subprocess.SubprocessError) as exc:
         print(f'M21 FAIL: {type(exc).__name__}: {exc}')
         return 1

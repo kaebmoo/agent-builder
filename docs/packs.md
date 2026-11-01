@@ -24,6 +24,9 @@ forge pack test <name>                                  # 2. conformance โด�
 รวมถึงตัวอย่างอิสระ [`packs/sqlite-readonly`](../packs/sqlite-readonly/README.md) (T0, SQLite ไฟล์ใดก็ได้ อ่านอย่างเดียวด้วย `mode=ro` + authorizer),
 [`packs/csv-readonly`](../packs/csv-readonly/README.md) (T0, CSV/TSV ใต้โฟลเดอร์เดียว) และ
 [`packs/datetime-tools`](../packs/datetime-tools/README.md) (T0, ไม่มี env) — ทั้งสามใช้ stdlib เท่านั้น ไม่ผูกกับ repo อื่น (M21).
+แต่ละ pack ถือสำเนา MCP stdio shell (`handle` + loop อ่าน stdin) ของตัวเองโดยตั้งใจ ไม่มี shared module
+เพื่อให้ copy pack เดียวไปใช้ได้ทันที จึงยกเว้นไฟล์ `server.py` ทั้งสามจาก copy-paste detection ของ SonarCloud
+ใน `.sonarcloud.properties` (bug และ code smell ยังถูกตรวจตามปกติ).
 
 ## สิ่งที่ `forge pack new` และ `forge pack discover` ทำ และไม่ทำ
 
