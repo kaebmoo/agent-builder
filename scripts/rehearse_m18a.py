@@ -28,9 +28,11 @@ import time
 import urllib.error
 import urllib.request
 from contextlib import ExitStack, contextmanager
+from dataclasses import dataclass, field
 from datetime import date, datetime
 from itertools import islice
-from pathlib import Path
+from pathlib import Path, PurePosixPath
+from typing import NamedTuple
 from urllib.parse import urlsplit
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -49,7 +51,16 @@ from forge.pack_test import FixtureUnavailable, setup_fixture, test_pack
 from forge.packs import read_pack
 from forge.spec import load_spec
 
-FIXTURE = ROOT / 'fixtures' / 'sqlite-reader' / 'spec.yaml'
+SPEC_NAME = 'spec.yaml'
+WORKERS_PATH = '/api/workers'
+OPERATOR_STEP = 'operator step'
+DEFAULT_MODEL = 'oai/gpt-5.4-mini'
+DEFAULT_BASE_URL = 'http://127.0.0.1:4319'
+MISSING_THCLAWS = '/nonexistent/thclaws'
+OPENAI_COMPAT_PROVIDER = ('OPENAI_COMPAT_API_KEY', 'OPENAI_COMPAT_BASE_URL')
+OPENAI_PROVIDER = ('OPENAI_API_KEY', None)
+REHEARSAL_ROOT = ROOT / 'out' / 'm18a-rehearsal'
+FIXTURE = ROOT / 'fixtures' / 'sqlite-reader' / SPEC_NAME
 PACK = ROOT / 'packs' / 'sqlite-readonly'
 FORBIDDEN_ENV = {'THCLAWS_PROJECT_ROOT', 'THCLAWS_OFFICE_APPS'}
 OUT_ROOT = os.path.realpath(ROOT / 'out')
@@ -73,6 +84,40 @@ def passed(step):
     print(f'M18a REHEARSAL PASS: {step}', flush=True)
 
 
+class BaseURL(NamedTuple):
+    url: str
+    port: int
+
+
+def base_url_value(value):
+    message = ('--base-url must be an http(s) URL with a hostname, '
+               'no credentials/query/fragment and port 1–65535')
+    try:
+        parts = urlsplit(value)
+        if (parts.scheme not in ('http', 'https') or not parts.hostname
+                or parts.username is not None or parts.password is not None or '?' in value or '#' in value):
+            raise ValueError(message)
+        port = parts.port if parts.port is not None else {'http': 80, 'https': 443}[parts.scheme]
+        if not 1 <= port <= 65535:
+            raise ValueError(message)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(message) from exc
+    return BaseURL(value, port)
+
+
+def out_name(value):
+    if not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9._-]{0,63}', value):
+        raise argparse.ArgumentTypeError('--out must be a single folder name of 1–64 letters/digits/._-')
+    return value
+
+
+def launchd_package_root(value):
+    path = PurePosixPath(value)
+    if not path.is_absolute() or '..' in path.parts or '\0' in value:
+        raise Failure('--package-root must be an absolute POSIX path without ..')
+    return value
+
+
 def choose_out(base, day):
     candidate, suffix = base / day, 1
     while candidate.exists() or candidate.is_symlink():
@@ -90,9 +135,8 @@ def inside_out(path, label):
 
 
 def output_path(selected):
-    path = selected
-    if path is None:
-        path = choose_out(ROOT / 'out/m18a-rehearsal', date.today().isoformat())
+    path = (REHEARSAL_ROOT / selected if selected is not None
+            else choose_out(REHEARSAL_ROOT, date.today().isoformat()))
     if path.exists() or path.is_symlink():
         raise Failure('--out already exists')
     return inside_out(path, '--out')
@@ -116,11 +160,12 @@ def read_dotenv(path):
 
 def provider_names(model):
     if model.startswith('oai/'):
-        return ('OPENAI_COMPAT_API_KEY', 'OPENAI_COMPAT_BASE_URL')
-    return ('OPENAI_API_KEY',)
+        return OPENAI_COMPAT_PROVIDER
+    return OPENAI_PROVIDER
 
 
 def provider_values(names, path):
+    names = [name for name in names if name is not None]
     fallback = read_dotenv(path) if any(name not in os.environ for name in names) else {}
     values = {name: os.environ.get(name, fallback.get(name, '')) for name in names}
     for name, value in values.items():
@@ -129,7 +174,7 @@ def provider_values(names, path):
     return values
 
 
-def preflight(model, base_url):
+def preflight(model, port):
     os.environ.setdefault('THCLAWS_DISABLE_KEYCHAIN', '1')
     binary = shutil.which(os.environ.get('THCLAWS_BIN', 'thclaws'))
     if binary is None:
@@ -142,10 +187,6 @@ def preflight(model, base_url):
                    f'requires thclaws {THCLAWS_BASELINE} revision 9f69995')
     values = provider_values(provider_names(model), ROOT / '.env')
     SECRET_VALUES.extend(values.values())
-    parts = urlsplit(base_url)
-    if parts.scheme not in ('http', 'https') or not parts.hostname or parts.username or parts.password:
-        raise Failure('--base-url must be an http(s) URL without credentials')
-    port = parts.port or {'http': 80, 'https': 443}[parts.scheme]
     # The host is the constant loopback address; only the port comes from --base-url.
     connection = http.client.HTTPConnection('127.0.0.1', port, timeout=1)
     try:
@@ -197,12 +238,12 @@ def atlas_preflight(mode, token):
     if not base:
         raise Skip('ATLAS_URL must be set for --atlas prod')
     try:
-        atlas_call(base, token, 'GET', '/api/workers')
+        atlas_call(base, token, 'GET', WORKERS_PATH)
     except Failure as exc:
         if str(exc).startswith(('GET /api/workers: HTTP 401 ', 'GET /api/workers: HTTP 403 ')):
             raise Skip('Atlas refused the request; set ATLAS_TOKEN') from exc
         raise
-    except (OSError, urllib.error.URLError, http.client.HTTPException) as exc:
+    except (OSError, http.client.HTTPException) as exc:
         raise Skip('Atlas at ATLAS_URL not reachable') from exc
     return None, base
 
@@ -263,9 +304,9 @@ def no_token(body, token):
 
 
 def register_atlas(base, token, daemon_token, register, created, out):
-    workers = atlas_call(base, token, 'GET', '/api/workers')['workers']
+    workers = atlas_call(base, token, 'GET', WORKERS_PATH)['workers']
     collision_guard(workers, register['worker'])
-    response = atlas_call(base, token, 'POST', '/api/workers', {**register['worker'], 'token': daemon_token})
+    response = atlas_call(base, token, 'POST', WORKERS_PATH, {**register['worker'], 'token': daemon_token})
     # A mismatched id must never authorize deleting somebody else's worker.
     if response['worker']['id'] != register['worker']['id']:
         raise Failure('Atlas returned a different worker id')
@@ -327,7 +368,7 @@ def run_workflow(base, token, workflow_id, package, out, timeout):
                 raise Failure(f'workflow run not terminal after {timeout:g} s')
             try:
                 body = atlas_call(base, token, 'GET', f'/api/workflow-runs/{run_id}', timeout=min(30, remaining))
-            except (OSError, urllib.error.URLError) as exc:
+            except OSError as exc:
                 if time.monotonic() >= deadline:
                     raise Failure(f'workflow run not terminal after {timeout:g} s') from exc
                 raise
@@ -388,9 +429,9 @@ def live_audit(package, out, binary, provider, model):
     log = out / 'live-audit.log'
     with log.open('w', encoding='utf-8') as stream:
         result = subprocess.run(
-            [sys.executable, '-m', 'forge.cli', 'audit', str(package), '--live', '--security', '--write',
+            [sys.executable, '-m', 'forge.cli', 'audit', '.', '--live', '--security', '--write',
              '--provider-key-env', provider_names(model)[0]],
-            cwd=ROOT, env={**os.environ, **provider, 'THCLAWS_BIN': binary},
+            cwd=package, env={**os.environ, **provider, 'THCLAWS_BIN': binary},
             stdout=stream, stderr=subprocess.STDOUT, check=False,
         )
     report = json.loads((package / 'builder-build-report.json').read_text(encoding='utf-8'))
@@ -486,9 +527,7 @@ def self_command(files, package_root, home):
 
 
 def start_daemon(files, package_root, home, out):
-    settings = home / '.config/thclaws/settings.json'
-    settings.parent.mkdir(parents=True)
-    settings.write_text(json.dumps({'browserEnabled': False}) + '\n', encoding='utf-8')
+    # The service user's HOME stays empty: the package pins browserEnabled false (DESIGN §4 9f69995 item 13).
     argv, cwd, env = self_command(files, package_root, home)
     with (out / 'daemon.log').open('w', encoding='utf-8') as log:
         return subprocess.Popen(argv, cwd=cwd, env=env, stdout=log, stderr=subprocess.STDOUT,
@@ -612,7 +651,8 @@ def withdraw_atlas(base, token, kind, identifier):
 
 
 def restore_package(daemon, archive, package_root):
-    failed = package_root.with_name(package_root.name + '.failed-' + datetime.now().strftime('%Y%m%d%H%M%S'))
+    path = PurePosixPath(package_root)
+    failed = path.with_name(path.name + '.failed-' + datetime.now().strftime('%Y%m%d%H%M%S'))
     if daemon == 'launchd':
         q = lambda path: shlex.quote(str(path))
         print(f'sudo mv {q(package_root)} {q(failed)}', flush=True)
@@ -634,7 +674,7 @@ def rollback(args, process, port, base, token, created, archive, package_root):
         try:
             detail = action()
             results.append({'step': step, 'ok': not operator,
-                            'detail': 'operator step' if operator else (detail or 'completed')})
+                            'detail': OPERATOR_STEP if operator else (detail or 'completed')})
         except STEP_ERRORS as exc:
             results.append({'step': step, 'ok': False,
                             'detail': redact(f'{type(exc).__name__}: {exc}', SECRET_VALUES)})
@@ -707,20 +747,20 @@ def failure_message(exc, values):
 def must_refuse(action):
     try:
         action()
-    except (ValueError, FileExistsError):
+    except (argparse.ArgumentTypeError, ValueError, FileExistsError):
         return
     raise AssertionError('operation should have refused')
 
 
 def rollback_failed(results):
-    return any(not step['ok'] and step['detail'] != 'operator step' for step in results)
+    return any(not step['ok'] and step['detail'] != OPERATOR_STEP for step in results)
 
 
 def offline_checks(work):
-    checks = 0
-    copied = copy_spec(FIXTURE, work / 'spec.yaml', 'oai/gpt-5.4-mini')
-    assert copied['model']['id'] == 'oai/gpt-5.4-mini', 'model copy'
-    assert (work / 'spec.yaml').read_text() == replace_model(FIXTURE.read_text(), 'oai/gpt-5.4-mini')
+    checks = argument_offline_checks()
+    copied = copy_spec(FIXTURE, work / SPEC_NAME, DEFAULT_MODEL)
+    assert copied['model']['id'] == DEFAULT_MODEL, 'model copy'
+    assert (work / SPEC_NAME).read_text() == replace_model(FIXTURE.read_text(), DEFAULT_MODEL)
     for text in ('model:\n  id: changed\n', FIXTURE.read_text() * 2):
         must_refuse(lambda text=text: replace_model(text, 'test'))
     checks += 1
@@ -738,10 +778,10 @@ def offline_checks(work):
     previous = os.environ.get('A')
     try:
         os.environ['A'] = 'environment wins'
-        assert provider_values(('A',), dotenv) == {'A': 'environment wins'}, 'environment precedence'
+        assert provider_values(('A', None), dotenv) == {'A': 'environment wins'}, 'environment precedence'
         os.environ['A'] = ''
         try:
-            provider_values(('A',), dotenv)
+            provider_values(('A', None), dotenv)
         except Skip:
             pass
         else:
@@ -765,7 +805,8 @@ def offline_checks(work):
         must_refuse(lambda name=name: write_env(work / 'forbidden.env', {name}, {name: 'bad'}))
     sourced = subprocess.run(['/bin/sh', '-c', 'set -a; . "$1"; set +a; env -0', 'sh', str(env_file)],
                              env={'PATH': os.defpath}, capture_output=True, check=True)
-    actual = dict(entry.decode().split('=', 1) for entry in sourced.stdout.split(b'\0') if entry)
+    actual = {name: value for entry in sourced.stdout.split(b'\0') if entry
+              for name, value in [entry.decode().split('=', 1)]}
     assert all(actual.get(name) == value for name, value in values.items()), 'env shell round trip'
     checks += 1
 
@@ -789,10 +830,10 @@ def offline_checks(work):
     write_report(package, audit_package(package, packs_dir=packs))
     package_root = Path(os.path.realpath(work / 'srv/sqlite-reader'))
     register, code = export(package, work / 'export', packs_dir=packs,
-                            base_url='http://127.0.0.1:4319', workspace_dir=str(package_root))
+                            base_url=DEFAULT_BASE_URL, workspace_dir=str(package_root))
     assert code == 2 and register['package']['archive'] is None, 'offline export must skip archive'
     assert not list((work / 'export').glob('*.tar.gz')), 'offline export produced archive'
-    files = render(work / 'export', thclaws_bin='/nonexistent/thclaws', env_file=str(env_file))
+    files = render(work / 'export', thclaws_bin=MISSING_THCLAWS, env_file=str(env_file))
     assert example_names(files['sqlite-reader.env.example']) == {*DAEMON_ENV, *register['deployment']['env']}
     checks += 1
     argv, cwd, env = self_command(files, package_root, work / 'home')
@@ -801,17 +842,39 @@ def offline_checks(work):
     assert cwd == str(package_root), 'plist cwd'
     assert all(env.get(name) == value for name, value in FIXED_ENV.items()), 'plist fixed env'
     assert not FORBIDDEN_ENV & env.keys(), 'forbidden plist env'
-    assert context(register, thclaws_bin='/nonexistent/thclaws', env_file=str(env_file))['port'] == 4319
+    assert context(register, thclaws_bin=MISSING_THCLAWS, env_file=str(env_file))['port'] == 4319
     checks += 1
     checks += atlas_offline_checks(work)
     return checks
 
 
+def argument_offline_checks():
+    assert base_url_value(DEFAULT_BASE_URL) == BaseURL(DEFAULT_BASE_URL, 4319)
+    assert base_url_value('https://h.invalid') == BaseURL('https://h.invalid', 443)
+    assert base_url_value('http://h.invalid').port == 80
+    assert arguments([]).base_url == BaseURL(DEFAULT_BASE_URL, 4319), 'argparse default conversion'
+    for value in ('http://user:password@h.invalid', 'http://@h.invalid', 'http://h.invalid?x=1',
+                  'http://h.invalid#fragment', 'ftp://h.invalid', 'http://h.invalid:0',
+                  'http://h.invalid:65536', 'http:///missing-host'):
+        must_refuse(lambda value=value: base_url_value(value))
+    assert out_name('2026-11-02-7') == '2026-11-02-7'
+    for value in ('', '.', '..', 'a/b', '../x', 'a' * 65):
+        must_refuse(lambda value=value: out_name(value))
+    assert provider_names(DEFAULT_MODEL) == ('OPENAI_COMPAT_API_KEY', 'OPENAI_COMPAT_BASE_URL')
+    assert provider_names('gpt-5.4') == ('OPENAI_API_KEY', None)
+    assert all(isinstance(names, tuple) and len(names) == 2
+               for names in (provider_names(DEFAULT_MODEL), provider_names('gpt-5.4')))
+    assert launchd_package_root('/srv/atlas/sqlite-reader') == '/srv/atlas/sqlite-reader'
+    for value in ('relative/path', '/srv/../sqlite-reader'):
+        must_refuse(lambda value=value: launchd_package_root(value))
+    return 4
+
+
 def atlas_offline_checks(work):
     checks = 0
     assert not rollback_failed([{'ok': True, 'detail': 'completed'}])
-    assert not rollback_failed([{'ok': True, 'detail': 'completed'}, {'ok': False, 'detail': 'operator step'}])
-    assert rollback_failed([{'ok': False, 'detail': 'failed'}, {'ok': False, 'detail': 'operator step'}])
+    assert not rollback_failed([{'ok': True, 'detail': 'completed'}, {'ok': False, 'detail': OPERATOR_STEP}])
+    assert rollback_failed([{'ok': False, 'detail': 'failed'}, {'ok': False, 'detail': OPERATOR_STEP}])
     checks += 1
     day = '2026-11-02'
     proof = dict.fromkeys(('archive', 'env', 'plist', 'info', 'atlas', 'run', 'rollback'), True)
@@ -882,7 +945,7 @@ def atlas_offline_checks(work):
 
 def self_check():
     previous = os.environ.get('THCLAWS_BIN')
-    os.environ['THCLAWS_BIN'] = '/nonexistent/thclaws'
+    os.environ['THCLAWS_BIN'] = MISSING_THCLAWS
     try:
         with tempfile.TemporaryDirectory(prefix='forge-m18a-self-check-') as temporary:
             checks = offline_checks(Path(temporary).resolve())
@@ -901,126 +964,159 @@ def self_check():
     return 0
 
 
-def arguments():
+def arguments(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--model', default='oai/gpt-5.4-mini')
-    parser.add_argument('--base-url', default='http://127.0.0.1:4317')
-    parser.add_argument('--out', type=Path,
-                        help='new evidence directory inside repo out/; default first free date')
-    parser.add_argument('--package-root', type=Path, help='deployment path; default depends on --daemon')
+    parser.add_argument('--model', default=DEFAULT_MODEL)
+    parser.add_argument('--base-url', type=base_url_value, default=DEFAULT_BASE_URL)
+    parser.add_argument('--out', type=out_name,
+                        help='new evidence folder name under out/m18a-rehearsal/; default first free date')
+    parser.add_argument('--package-root', help='deployment path; default depends on --daemon')
     parser.add_argument('--daemon', choices=('self', 'launchd'), default='self')
     parser.add_argument('--atlas', choices=('hermetic', 'prod'), default='hermetic')
     parser.add_argument('--live', action='store_true', help='also run live + security audit')
     parser.add_argument('--timeout', type=float, default=600,
                         help='workflow run wait and launchd waits timeout in seconds')
     parser.add_argument('--self-check', action='store_true', help='offline checks; ignores other flags')
-    return parser.parse_args()
+    return parser.parse_args(argv)
 
 
-def main():
-    args = arguments()
-    if args.self_check:
-        return self_check()
-    process, env_dir, home, out = None, None, None, None
-    archive, package_root, base, port = None, None, None, None
-    created, proof, errors, results = {}, {}, [], []
-    started = False
-    atlas_token = os.environ.get('ATLAS_TOKEN') or ''
+@dataclass
+class Rehearsal:
+    args: argparse.Namespace
+    out: Path | None = None
+    package_root: Path | str | None = None
+    binary: str | None = None
+    provider: dict = field(default_factory=dict)
+    port: int | None = None
+    atlas_root: Path | None = None
+    base: str | None = None
+    register: dict = field(default_factory=dict)
+    files: dict = field(default_factory=dict)
+    archive: Path | None = None
+    env_dir: Path | None = None
+    home: Path | None = None
+    env_file: Path | None = None
+    token: str = ''
+    atlas_token: str = ''
+    process: subprocess.Popen | None = None
+    created: dict = field(default_factory=dict)
+    proof: dict = field(default_factory=dict)
+    errors: list = field(default_factory=list)
+    results: list = field(default_factory=list)
+    atlas_stack: ExitStack = field(default_factory=ExitStack)
+    started: bool = False
+
+    def request_token(self):
+        return self.atlas_token if self.args.atlas == 'prod' else ''
+
+
+def prepare(state):
+    args = state.args
+    state.atlas_token = os.environ.get('ATLAS_TOKEN') or ''
     SECRET_VALUES.clear()
-    SECRET_VALUES.extend([atlas_token, *(os.environ.get(name, '') for name in provider_names(args.model))])
-    atlas_stack = ExitStack()
+    SECRET_VALUES.extend([state.atlas_token, *(os.environ.get(name, '')
+                                              for name in provider_names(args.model) if name is not None)])
+    if not 0 < args.timeout < float('inf'):
+        raise Failure('--timeout must be positive and finite')
+    state.out = output_path(args.out)
+    if args.daemon == 'self':
+        state.package_root = inside_out(args.package_root or state.out / 'srv/sqlite-reader',
+                                        '--package-root')
+    else:
+        state.package_root = launchd_package_root(args.package_root or '/srv/atlas/sqlite-reader')
+    state.binary, state.provider, state.port = preflight(args.model, args.base_url.port)
+    state.atlas_root, state.base = atlas_preflight(args.atlas, state.atlas_token)
+    conform_pack()
+    state.out.mkdir(parents=True)
+
+
+def build_export(state):
+    args, out = state.args, state.out
+    spec = copy_spec(FIXTURE, out / SPEC_NAME, args.model)
+    passed('spec copied with only model.id changed')
+    package = out / 'package'
+    build_package(spec, package)
+    if args.live:
+        live_audit(package, out, state.binary, state.provider, args.model)
+    state.register = export_package(package, out, args.base_url.url, state.package_root)
+    state.env_dir = private_temp('forge-m18a-env-')
+    state.env_file = state.env_dir / 'sqlite-reader.env'
+    state.files = render_deploy(out, state.binary, str(state.env_file) if args.daemon == 'self' else None)
+    state.archive = out / 'export' / state.register['package']['archive']
+    extract_archive(state.archive, state.package_root if args.daemon == 'self' else out / 'archive-check')
+    state.proof['archive'] = True
+    fixture = fixture_values(out, state.register['deployment']['env'])
+    names = example_names(state.files['sqlite-reader.env.example']) | state.provider.keys()
+    state.token = secrets.token_urlsafe(32)
+    SECRET_VALUES.append(state.token)
+    write_env(state.env_file, names, {**fixture, **state.provider, 'THCLAWS_API_TOKEN': state.token,
+                                      'THCLAWS_MCP_ALLOW_ALL': '1'})
+    passed('env file outside repo, mode 0600')
+    state.proof['env'] = True
+
+
+def deploy_daemon(state):
+    args = state.args
+    if args.daemon == 'self':
+        state.home = private_temp('forge-m18a-home-')
+        state.process = start_daemon(state.files, state.package_root, state.home, state.out)
+        state.started = True
+    else:
+        state.started = True
+        operator_commands(state.out, state.archive, state.package_root, state.env_file)
+    wait_ready(state.port, 30 if args.daemon == 'self' else args.timeout, state.process)
+    agent_info(state.port, state.token, state.package_root, state.register, state.out, args.daemon)
+    state.proof['info'] = True
+    if args.daemon == 'launchd':
+        installed = Path('/Library/LaunchDaemons/thclaws.sqlite-reader.plist')
+        state.proof['plist'] = (installed.is_file()
+                                and installed.read_bytes()
+                                == (state.out / 'deploy/thclaws.sqlite-reader.plist').read_bytes())
+
+
+def register_run(state):
+    if state.args.atlas == 'hermetic':
+        state.base = state.atlas_stack.enter_context(hermetic_atlas(state.atlas_root))
+    register_atlas(state.base, state.request_token(), state.token, state.register, state.created, state.out)
+    state.proof['atlas'] = True
+    run_workflow(state.base, state.request_token(), state.created['workflow'], state.out / 'package',
+                 state.out, state.args.timeout)
+    state.proof['run'] = True
+
+
+def rollback_rehearsal(state):
+    state.results = rollback(state.args, state.process, state.port, state.base, state.request_token(),
+                             state.created, state.archive, state.package_root)
+    state.proof['rollback'] = all(step['ok'] for step in state.results)
+    if rollback_failed(state.results):
+        state.errors.append(Failure('rollback incomplete; see rollback.json'))
+    elif state.proof['rollback']:
+        passed('rollback: daemon stopped, Atlas withdrawn, archive restored')
+
+
+def write_evidence(state):
+    out = state.out  # Validated by output_path before any rehearsal step.
     try:
-        if not 0 < args.timeout < float('inf'):
-            raise Failure('--timeout must be positive and finite')
-        out = output_path(args.out)
-        default_root = (Path('/srv/atlas/sqlite-reader') if args.daemon == 'launchd'
-                        else out / 'srv/sqlite-reader')
-        package_root = Path(os.path.realpath(args.package_root or default_root))
-        if args.daemon == 'self':  # self mode extracts and renames it; launchd only prints operator commands
-            package_root = inside_out(package_root, '--package-root')
-        binary, provider, port = preflight(args.model, args.base_url)
-        root, base = atlas_preflight(args.atlas, atlas_token)
-        conform_pack()
-        out.mkdir(parents=True)
-        spec = copy_spec(FIXTURE, out / 'spec.yaml', args.model)
-        passed('spec copied with only model.id changed')
-        package = out / 'package'
-        build_package(spec, package)
-        if args.live:
-            live_audit(package, out, binary, provider, args.model)
-        register = export_package(package, out, args.base_url, package_root)
-        env_dir = private_temp('forge-m18a-env-')
-        env_file = env_dir / 'sqlite-reader.env'
-        files = render_deploy(out, binary, str(env_file) if args.daemon == 'self' else None)
-        archive = out / 'export' / register['package']['archive']
-        extract_archive(archive, package_root if args.daemon == 'self' else out / 'archive-check')
-        proof['archive'] = True
-        fixture = fixture_values(out, register['deployment']['env'])
-        names = example_names(files['sqlite-reader.env.example']) | provider.keys()
-        token = secrets.token_urlsafe(32)
-        SECRET_VALUES.append(token)
-        write_env(env_file, names, {**fixture, **provider, 'THCLAWS_API_TOKEN': token,
-                                   'THCLAWS_MCP_ALLOW_ALL': '1'})
-        passed('env file outside repo, mode 0600')
-        proof['env'] = True
-        if args.daemon == 'self':
-            home = private_temp('forge-m18a-home-')
-            process = start_daemon(files, package_root, home, out)
-            started = True
-        else:
-            started = True
-            operator_commands(out, archive, package_root, env_file)
-        wait_ready(port, 30 if args.daemon == 'self' else args.timeout, process)
-        agent_info(port, token, package_root, register, out, args.daemon)
-        proof['info'] = True
-        if args.daemon == 'launchd':
-            installed = Path('/Library/LaunchDaemons/thclaws.sqlite-reader.plist')
-            proof['plist'] = (installed.is_file()
-                              and installed.read_bytes() == (out / 'deploy/thclaws.sqlite-reader.plist').read_bytes())
-        if args.atlas == 'hermetic':
-            base = atlas_stack.enter_context(hermetic_atlas(root))
-        register_atlas(base, atlas_token if args.atlas == 'prod' else '', token, register, created, out)
-        proof['atlas'] = True
-        run_workflow(base, atlas_token if args.atlas == 'prod' else '', created['workflow'], package, out,
-                     args.timeout)
-        proof['run'] = True
-    except (*STEP_ERRORS, KeyboardInterrupt) as exc:
-        errors.append(exc)
-    finally:
-        if started or created:
-            try:
-                results = rollback(args, process, port, base, atlas_token if args.atlas == 'prod' else '',
-                                   created, archive, package_root)
-                proof['rollback'] = all(step['ok'] for step in results)
-                if rollback_failed(results):
-                    errors.append(Failure('rollback incomplete; see rollback.json'))
-                elif proof['rollback']:
-                    passed('rollback: daemon stopped, Atlas withdrawn, archive restored')
-            except STEP_ERRORS as exc:
-                errors.append(exc)
-        # Keep Atlas available until withdrawal, then remove private state even after a failed step.
-        for cleanup in (atlas_stack.close, lambda: shutil.rmtree(home) if home is not None else None,
-                        lambda: shutil.rmtree(env_dir) if env_dir is not None else None):
-            try:
-                cleanup()
-            except STEP_ERRORS as exc:
-                errors.append(exc)
-        if out is not None and out.is_dir():
-            for action in (
-                lambda: write_json(out / 'rollback.json', results),
-                lambda: shutil.copyfile(out / 'export/atlas-register.json', out / 'atlas-register.json')
-                if (out / 'export/atlas-register.json').is_file() else None,
-                lambda: (out / 'checklist.md').write_text(
-                    checklist(args.daemon, args.atlas, proof, date.today().isoformat()), encoding='utf-8'),
-                lambda: secret_scan(out, SECRET_VALUES),
-            ):
-                try:
-                    action()
-                except STEP_ERRORS as exc:
-                    errors.append(exc)
-    if errors:
+        write_json(out / 'rollback.json', state.results)
+    except STEP_ERRORS as exc:
+        state.errors.append(exc)
+    try:
+        if (out / 'export/atlas-register.json').is_file():
+            shutil.copyfile(out / 'export/atlas-register.json', out / 'atlas-register.json')
+    except STEP_ERRORS as exc:
+        state.errors.append(exc)
+    try:
+        (out / 'checklist.md').write_text(
+            checklist(state.args.daemon, state.args.atlas, state.proof, date.today().isoformat()),
+            encoding='utf-8')
+    except STEP_ERRORS as exc:
+        state.errors.append(exc)
+
+
+def rehearsal_result(state):
+    if state.errors:
         code = 2
-        for exc in errors:
+        for exc in state.errors:
             if isinstance(exc, Skip):
                 print(f'M18a REHEARSAL SKIP: {redact(str(exc), SECRET_VALUES)} (exit 2)')
             elif isinstance(exc, FixtureUnavailable):
@@ -1035,9 +1131,60 @@ def main():
                 print(failure_message(exc, SECRET_VALUES))
                 code = 1
         return code
-    passed(f'evidence at {out}; next: python3 scripts/check_m18a_deploy_runbook.py --rehearsal {out} '
+    passed(f'evidence at {state.out}; next: python3 scripts/check_m18a_deploy_runbook.py '
+           f'--rehearsal {state.out} '
            '(exit 2 by design: dev machine, not host evidence)')
     return 0
+
+
+def finalize(state):
+    if state.started or state.created:
+        try:
+            rollback_rehearsal(state)
+        except STEP_ERRORS as exc:
+            state.errors.append(exc)
+    # Keep Atlas available until withdrawal, then remove private state even after a failed step.
+    try:
+        state.atlas_stack.close()
+    except STEP_ERRORS as exc:
+        state.errors.append(exc)
+    try:
+        if state.home is not None:
+            shutil.rmtree(state.home)
+    except STEP_ERRORS as exc:
+        state.errors.append(exc)
+    try:
+        if state.env_dir is not None:
+            shutil.rmtree(state.env_dir)
+    except STEP_ERRORS as exc:
+        state.errors.append(exc)
+    if state.out is not None and state.out.is_dir():
+        try:
+            write_evidence(state)
+        except STEP_ERRORS as exc:
+            state.errors.append(exc)
+        try:
+            secret_scan(state.out, SECRET_VALUES)
+        except STEP_ERRORS as exc:
+            state.errors.append(exc)
+    return rehearsal_result(state)
+
+
+def main():
+    args = arguments()
+    if args.self_check:
+        return self_check()
+    state = Rehearsal(args)
+    try:
+        prepare(state)
+        build_export(state)
+        deploy_daemon(state)
+        register_run(state)
+    except (*STEP_ERRORS, KeyboardInterrupt) as exc:
+        state.errors.append(exc)
+    finally:
+        code = finalize(state)
+    return code
 
 
 if __name__ == '__main__':

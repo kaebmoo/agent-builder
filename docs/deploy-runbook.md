@@ -20,6 +20,7 @@ T2 package (ต้องมี daemon แยกและ `human_gate`; M20), mon
 | runtime ของ pack ที่ `deployment.packs` ต้องการ (เช่น `python3` สำหรับ `sql-readonly` และ checkout ที่ `SQL_READONLY_AI_ROOT` ชี้) | ตาม README ของ pack; builder ไม่ติดตั้งให้ |
 | Atlas control plane ที่ operator มีสิทธิ์ `admin` และ Atlas ถึง host นี้ทาง network ที่ `worker.base_url` ระบุ | `curl -fsS <atlas>/api/workers` ด้วย token ของ Atlas; firewall เปิดเฉพาะ IP ของ Atlas มาที่ port ของ daemon |
 | ไม่มี org policy ที่ปิด external MCP หรือ `allow_serve` (DESIGN §4 M17 ข้อ 11) | ถ้ามี policy MCP ของ pack จะไม่ spawn และ reachability check ข้อ 7 จับได้ |
+| ตัดสินใจเรื่อง egress ตอน start: daemon ดึง marketplace และ model catalogue จาก `thclaws.ai` อย่างมากวันละครั้งต่อ service user (fail-silent; DESIGN §4 "Baseline 0.146.0 / 9f69995" ข้อ 13) | egress rules ของ host อนุญาต `thclaws.ai` หรือปิดโดยรู้ตัว; ไม่มี setting ใดปิด refresh นี้ |
 
 ## 2. บนเครื่อง dev: export และ render launcher
 
@@ -80,6 +81,7 @@ sudo -u thclaws "${EDITOR:-vi}" /etc/thclaws/sql-reader.env                   # 
 ค่าคงที่ที่ launcher ตั้งเองและห้ามเอาออก: `THCLAWS_AUTO_MIGRATE=0` (กัน auto-migrate ของ desktop build, DESIGN §4 M13 (b)) และ `THCLAWS_DISABLE_KEYCHAIN=1` (M17 ข้อ 9).
 ห้ามตั้ง `THCLAWS_PROJECT_ROOT` (allowedTools fail-open, DESIGN §4 "Tool allowlist") และ `THCLAWS_OFFICE_APPS` (ทับ `officeApps: []` ของ package).
 ถ้าเครื่องมี AI Server hub ที่ `127.0.0.1:9000` ให้ตั้ง `LITELLM_BASE_URL` หรือถอด hub มิฉะนั้น `aiserver-rag` จะโผล่ใน inventory และข้อ 7 fail (M17 ข้อ 5).
+ไม่มี env ใดปิด refresh ของ marketplace/model catalogue ตอน start (ข้อ 1); ห้ามตั้ง `THCLAWS_INSTALL_SOURCE`/`THCLAWS_MARKETPLACE_URL` เพื่อระงับ เพราะ marketplace-only mode ปฏิเสธ MCP server ของ pack (DESIGN §4 M17 ข้อ 11).
 
 ## 5. ติดตั้งและ start launcher
 
@@ -252,7 +254,7 @@ python3 scripts/check_m18a_deploy_runbook.py --rehearsal out/m18a-rehearsal/<dat
    เตรียม synthetic SQLite fixture สำหรับ pack.
 3. ข้อ 4: สร้าง env file mode 0600 ใน temp dir mode 0700 นอก repo แล้วลบเมื่อจบ; ไม่เก็บค่า secret ในหลักฐาน.
 4. ข้อ 5: `--daemon self` start ตาม `ProgramArguments`/`WorkingDirectory`/`EnvironmentVariables` ของ plist ที่ render ทุกตัว
-   พร้อม temp service-user `HOME` ซึ่ง `~/.config/thclaws/settings.json` ตั้ง `browserEnabled: false`;
+   พร้อม temp service-user `HOME` ที่ว่าง;
    `--daemon launchd` รอ operator ติดตั้งและ start แล้วเทียบ plist ที่ติดตั้งกับไฟล์ที่ render.
 5. ข้อ 6–7: ตรวจ `/healthz` และ `/v1/agent/info`, บันทึก `agent-info.json`, register worker → workspace → workflow แล้ว poll ให้ `online`
    และตรวจ MCP inventory. ก่อน register ตรวจว่าไม่มี worker id อื่นใช้ `base_url` เดียวกัน.
@@ -265,21 +267,23 @@ Prerequisites ที่ขาดแล้วจบ exit 2: binary ไม่ม�
 อ่านจาก environment หรือ `.env` โดยไม่พิมพ์ค่า), port มี listener อยู่แล้ว (harness ไม่หยุด daemon ที่ตนไม่ได้ start),
 hermetic Atlas root ไม่มีหรือไม่ใช่ `daa0f49`, หรือ `--atlas prod` ไม่ตั้ง `ATLAS_URL`/ติดต่อไม่ได้/ไม่มีสิทธิ์ (ตรวจ `ATLAS_TOKEN`).
 หากพบ worker อื่นใช้ `base_url` เดียวกันจบ exit 1 ก่อนเขียน registration เพราะ Atlas upsert ด้วย id หรือ base_url.
-harness เขียนไฟล์เฉพาะใต้ `out/` ของ repo: `--out` และ `--package-root` ของ `--daemon self` ที่ resolve ออกนอก `out/` จบ exit 1 โดยไม่สร้างอะไร.
+`--out` รับเฉพาะชื่อโฟลเดอร์ใต้ `out/m18a-rehearsal/` (มี separator หรือ `..` → argparse ปฏิเสธ exit 2); `--package-root` ของ `--daemon self`
+ต้อง resolve อยู่ใต้ `out/` (exit 1); กับ `--daemon launchd` เป็น path บน host ที่ต้อง absolute และไม่มี `..` และใช้เป็นข้อความเท่านั้น;
+`--base-url` ตรวจโดย argparse (http/https, port 1–65535) และค่าเริ่มต้นคือ `http://127.0.0.1:4319`.
 ขั้นที่ล้มเหลวจริงจบ exit 1 หลัง cleanup; launchd รอเกิน `--timeout` แล้วยังไม่ขึ้นจบ exit 2.
 
 ใน launchd mode คำสั่ง sudo ของข้อ 3–5 และข้อ 9 (`bootout`, `mv`, re-extract) พิมพ์ให้ operator ทำเท่านั้น harness ไม่รันเอง;
 ขั้นที่สังเกตได้ครบสามารถจบ exit 0 แต่ไม่ถือว่าการพิมพ์ restore เป็นหลักฐานว่า operator ทำแล้ว.
 บน macOS ไม่มี `/srv` ถ้าไม่ได้ตั้ง `/etc/synthetic.conf` จึงควรส่ง `--package-root <dir>`.
-operator ต้องเตรียม HOME/config ของ service user เอง รวม `browserEnabled: false` ก่อน start.
+ไม่ต้องตั้ง browser ระดับ user: package pin `browserEnabled: false` และ project layer ทับ user layer (DESIGN §4 "Baseline 0.146.0 / 9f69995" ข้อ 13).
 
 หลักฐานอยู่ใต้ `out/m18a-rehearsal/<date>/` (เลือก suffix `-2`, `-3`, … เมื่อชื่อซ้ำ), gitignored ทั้งหมดและไม่มีค่า secret:
 ชุดข้อ 11 ห้าไฟล์ (`atlas-register.json`, `agent-info.json`, `poll.json`, `atlas-run.json`, `checklist.md`) พร้อม
 `artifacts.json`, `rollback.json`, `daemon.log` (self mode), `spec.yaml`, `deploy/`, `export/`, `package/`, `fixture/`, `srv/`
 (package root ค่าเริ่มต้นของ self mode); launchd มี `archive-check/` สำหรับตรวจ archive และ package root ตามที่ operator เลือก.
 
-ข้อที่ rehearsal ไม่ติ๊กเสมอ: host ไม่ใช่เครื่อง dev, firewall/egress (DESIGN §6; daemon ยังติดต่อ thClaws marketplace ตอน start:
-`[marketplace] auto-refreshed`), และ `deployment_verified`; `--daemon self` ไม่ติ๊ก launcher install และ `--daemon launchd`
+ข้อที่ rehearsal ไม่ติ๊กเสมอ: host ไม่ใช่เครื่อง dev, firewall/egress (DESIGN §6; daemon ดึง marketplace และ model catalogue จาก
+`thclaws.ai` ตอน start ตาม DESIGN §4 "Baseline 0.146.0 / 9f69995" ข้อ 13: `[marketplace] auto-refreshed`), และ `deployment_verified`; `--daemon self` ไม่ติ๊ก launcher install และ `--daemon launchd`
 ไม่ติ๊ก rollback เพราะ move aside/re-extract เป็น operator step ที่ยังไม่ได้สังเกตผล.
 
 ข้อจำกัดที่พบ 2026-11-02: Atlas เก็บ rehearsal worker `wrk_sqlite-reader` ไว้ `offline` หลัง rollback เพราะมี job history (ข้อ 9);

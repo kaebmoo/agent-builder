@@ -160,13 +160,12 @@ def check_rehearsal(folder):
     daemon, atlas = daemon[1], atlas[1]
     items = [line for line in lines if line.startswith(('- [x] ', '- [ ] '))]
     assert len(items) == 10, 'rehearsal checklist must have exactly 10 items'
-    always_unticked = ('host ไม่ใช่เครื่อง dev', '`deployment_verified`: ')
-    allowed_unticked = (*always_unticked, 'firewall/egress',
-                        'launcher ติดตั้งจากไฟล์' if daemon == 'self' else 'ขั้น rollback ข้อ 9')
-    for item in items:
-        if item.startswith('- [x] ') and any(name in item for name in always_unticked):
+    always_unticked = {0, 9}
+    allowed_unticked = {0, 5, 9} | ({3} if daemon == 'self' else {8})
+    for index, item in enumerate(items):
+        if item.startswith('- [x] ') and index in always_unticked:
             fail(f'a rehearsal cannot tick: {item[:40]}')
-        if item.startswith('- [ ] ') and not any(name in item for name in allowed_unticked):
+        if item.startswith('- [ ] ') and index not in allowed_unticked:
             fail(f'rehearsal did not prove: {item[:60]}')
     assert FORBIDDEN[0] not in checklist, 'rehearsal checklist claims deployment_verified'
     print(f'M18a REHEARSAL on dev machine: evidence at {folder} (daemon={daemon}, atlas={atlas}): '

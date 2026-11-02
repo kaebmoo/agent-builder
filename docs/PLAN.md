@@ -730,11 +730,14 @@ gate `check_m18a_deploy_runbook.py --rehearsal <dir>` (exit 2 เสมอเม
 พบและแก้ agent-info shape bug ใน gate และ runbook §6/§11: raw body มี `mcp_servers` ที่ top level แต่ Atlas ห่อเป็น `agent_info.agent.mcp_servers`;
 gate รับทั้ง top level และ `agent.mcp_servers` เพื่อคง synthetic host evidence เดิม.
 Atlas ปฏิเสธลบ worker ที่มี job history จึงลบ workflow/workspace แล้วเก็บ worker ไว้โดย poll ต้อง `offline`;
-daemon ติดต่อ marketplace ตอน start (`[marketplace] auto-refreshed`) จึงยังไม่พิสูจน์ firewall/egress;
+daemon `--serve` ดึง marketplace (`[marketplace] auto-refreshed`) และ model catalogue จาก `thclaws.ai` ตอน start (DESIGN §4 "Baseline 0.146.0 / 9f69995" ข้อ 13) จึงยังไม่พิสูจน์ firewall/egress; ไม่มี setting หรือ env ปิด refresh ทั้งสอง และ marketplace-only env ปฏิเสธ MCP servers ของ pack ด้วย จึงไม่เสนอเพิ่มอะไรใน `render_launcher.FIXED_ENV`; runbook §1/§4 ให้ operator ตัดสินใจเรื่อง host egress;
 gateway ตอบ HTTP 429 เพราะไม่มี credits สำหรับ `gpt-5.4-mini` จึงใช้ `--model oai/Qwen3.8-27B` ในรอบที่บันทึก;
-self mode ตั้ง `browserEnabled: false` ใน settings ของ service user's HOME ชั่วคราว.
+native probe ยืนยันว่าไม่ต้องตั้ง `browserEnabled` ระดับ user: project layer ทับ user layer (`config.rs:1889-1891`), package pin `browserEnabled: false`; HOME ว่างและ HOME ที่ตั้ง `browserEnabled:false` ต่างได้ `mcp_servers=['sqlite-readonly']` จึงเอาการตั้งค่านี้ออกจาก harness และ runbook §12 แล้ว (DESIGN §4 "Baseline 0.146.0 / 9f69995" ข้อ 13).
 แก้ launchd exit ให้ operator step ที่ยังไม่สังเกตไม่ทำให้ run fail แต่ checklist rollback ยังไม่ติ๊ก;
 launchd mode ยังไม่ได้รัน (ต้องทำขั้น sudo โดย operator), self-check ตรวจเฉพาะ pure logic.
+SonarCloud fix round ของ PR #12 (reviewer ตรวจแล้ว แต่ยังไม่ได้ re-scan): `--base-url` ตรวจด้วย argparse type และส่งเฉพาะ int port ให้ connections (host คงที่ `127.0.0.1`, default `http://127.0.0.1:4319`); live audit รัน `forge audit .` โดย `cwd=package`.
+`--out` เป็นชื่อโฟลเดอร์เดียวใต้ `out/m18a-rehearsal/`, `--package-root` ของ self mode ต้องอยู่ใต้ `out/`, launchd root ใช้เป็นข้อความเท่านั้น; แยก `main()` เป็น phases ด้วย dataclass และใช้ constants / fixed-length provider tuple.
+gate `--rehearsal` เลือก items ด้วย index (0, 3 self, 5, 8 launchd, 9) โดย output เหมือนเดิมทุก byte; Sonar fix commit แรก `1d13a35` ยังเหลือ 4 vulnerabilities รอบนี้จึงทำตาม remedies ของผู้ใช้ และผล SonarCloud Quality Gate ยัง pending จนกว่าผู้ใช้ push.
 ผลรันทุกบรรทัดใน block ต่อไปนี้เป็น output ที่ reviewer รันบน Mac (native, thclaws 0.146.0 บน PATH):
 ```text
 rehearse_m18a.py --base-url http://127.0.0.1:4319 (model oai/gpt-5.4-mini, hermetic) = 1: M18a REHEARSAL FAIL: workflow run state failed: workflow node sqlite-reader job job_58ec769f2cbd42dd ended as failed (daemon.log: http 429 ... You have no credits remaining; rollback ok)
@@ -753,9 +756,19 @@ tampered copies of -4 (ticked deployment_verified / ticked host / unticked rollb
 no flag: CI = 2 and native = 2, byte-identical to before; --host-evidence synthetic ticked = 0, unticked = 1, byte-identical to before
 agent-info.json of -4: old expression agent.mcp_servers -> [], new -> ['sqlite-readonly'] (the shape bug)
 docs-reading gates CI m0/m5/m10/m11/m12/m13/m16/m17/m18b/m24 = 0/2/2/2/2/2/2/2/2/0 (unchanged); check_m8_export.py native (ATLAS_ROOT daa0f49) = 0; check_m21_example_packs.py native = 0
+SonarCloud fix round (uncommitted, reviewer native on the Mac):
+uvx ruff check . = 0; git diff --check = 0; pytest -q = 1 passed; rehearse_m18a.py --self-check = 0 (19 checks)
+check_m18a_deploy_runbook.py CI-mode outputs byte-identical to before: no flag = 2, --rehearsal -7 = 2, -6 = 1, --host-evidence synthetic = 0 / 1, tampered x4 = 1
+check_m17_baseline.py CI = 2 (unchanged), native = 0 after DESIGN item 13
+rehearse_m18a.py --model oai/Qwen3.8-27B (hermetic, default 4319) = 0 (2026-11-02-12); --live = 0 (2026-11-02-13, package_status=shippable)
+rehearse_m18a.py with an empty service-user HOME = 1 (2026-11-02-14: Atlas json.loads rejected the node output; inventory ['sqlite-readonly']; rollback ok), then = 0 (2026-11-02-15)
+--base-url http://127.0.0.1:4318 = 2 (busy port); --out ../x = 2 (argparse); --base-url ftp://127.0.0.1:4319 = 2 (argparse)
+check_m18a_deploy_runbook.py (native) --rehearsal out/m18a-rehearsal/2026-11-02-15 = 2:
+M18a REHEARSAL on dev machine: evidence at <repo>/out/m18a-rehearsal/2026-11-02-15 (daemon=self, atlas=hermetic): daemon served <repo>/out/m18a-rehearsal/2026-11-02-15/srv/sqlite-reader with MCP ['sqlite-readonly'], Atlas poll online, workflow run succeeded, checklist ticked only where the harness proved it; not host evidence (exit 2)
+--host-evidence out/m18a-rehearsal/2026-11-02-15 = 1: M18a FAIL: AssertionError: checklist has unticked items
 ```
 ไม่มี commit จาก agents ตามกติกาของผู้ใช้; `deployment_verified` คง `false` และ guarantee matrix ไม่มี claim เพิ่ม.
-ข้อค้าง: M18a host จริงตามย่อหน้าข้างบน; launchd mode ยังไม่ได้รัน; Qwen ผ่าน gateway ไม่นิ่ง (1 ใน 5 รอบ output ไม่ใช่ JSON ล้วนสำหรับ Atlas).
+ข้อค้าง: M18a host จริงตามย่อหน้าข้างบน; launchd mode ยังไม่ได้รัน; Qwen ผ่าน gateway ล้มเหลวที่ Atlas `json.loads` 2 ใน 9 รอบ hermetic ที่บันทึก; SonarCloud Quality Gate ยังไม่ตรวจซ้ำจนกว่าผู้ใช้ push.
 
 M24 ทำ (Mac) 2026-11-01 (branch `claude/m24-forge-next` ฐาน main `7511cb9`; ไม่ใช้ provider key; binary thclaws 0.146.0/`9f69995` ใช้เฉพาะสาธิตขั้น draft; ทำคู่ขนานกับ session CI evidence ข้อ (h) ซึ่งจอง M23):
 เพิ่ม `forge/next_step.py` (`decide(report, spec, pkg)` คืน (next, why) จาก `audit`, `package_status`, `static_audit.thclaws_validate`, `security_audit.detail`, `live_audit.detail` และ `agentspec.json` สำหรับเงื่อนไข live applicable;
