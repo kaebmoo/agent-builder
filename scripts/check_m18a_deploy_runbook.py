@@ -5,6 +5,7 @@ Static part (always): docs/deploy-runbook.md names every step, the launchers ren
 sql-reader export with every deployment env NAME and no value, THCLAWS_AUTO_MIGRATE=0 is literal, and nothing
 claims deployment_verified. Real-host part: the builder cannot run it; pass --host-evidence <dir> with the
 operator's files (see the runbook, "หลักฐานสำหรับ gate") to reach exit 0. Without it the gate ends at 2 by design.
+Pass --rehearsal <dir> for harness evidence from a dev machine (runbook §12); this always ends at exit 2.
 
 Exit 0 = static + operator evidence checked; 1 = failure; 2 = static passed, real host not available.
 """
@@ -116,8 +117,8 @@ def check_templates(work, register):
           f'{len(names)} env names, no values, THCLAWS_AUTO_MIGRATE=0 literal, daemon CWD and port from the export')
 
 
-def check_host_evidence(folder):
-    """Operator evidence contract from the runbook ("หลักฐานสำหรับ gate"). The builder never produces these files."""
+def check_evidence_json(folder):
+    """Shared JSON file contract for host evidence and dev-machine rehearsals."""
     folder = Path(folder)
 
     def read(name):
@@ -126,23 +127,61 @@ def check_host_evidence(folder):
     register, info, poll, run = read('atlas-register.json'), read('agent-info.json'), read('poll.json'), read('atlas-run.json')
     deployment = register['deployment']
     assert info['workspace_dir'] == deployment['package_root'], (info.get('workspace_dir'), deployment['package_root'])
-    servers = sorted(s['name'] for s in info.get('agent', {}).get('mcp_servers', []))
+    servers = sorted(s['name'] for s in info.get('mcp_servers', info.get('agent', {}).get('mcp_servers', [])))
     assert servers == deployment['mcp_servers'], (servers, deployment['mcp_servers'])
     assert poll['worker']['status'] == 'online', poll['worker'].get('status')
     assert poll['worker']['id'] == register['worker']['id'], poll['worker'].get('id')
     assert run['run']['state'] == 'succeeded', run['run'].get('state')
+    assert not deployment['deployment_verified'], 'the export in the evidence claims deployment_verified'
+    return deployment, servers
+
+
+def check_host_evidence(folder):
+    """Operator evidence contract from the runbook ("หลักฐานสำหรับ gate"). The builder never produces these files."""
+    folder = Path(folder)
+    deployment, servers = check_evidence_json(folder)
     checklist = (folder / 'checklist.md').read_text(encoding='utf-8')
     assert '[x]' in checklist and '[ ]' not in checklist, 'checklist has unticked items'
     assert 'deployment_verified' in checklist, 'checklist must end with the deployment_verified item'
-    assert not deployment['deployment_verified'], 'the export in the evidence claims deployment_verified'
     print(f"M18a PASS: operator evidence at {folder}: daemon served {deployment['package_root']} with MCP "
           f"{servers or 'none'}, Atlas poll online, workflow run succeeded, checklist fully ticked by the operator")
 
 
+def check_rehearsal(folder):
+    folder = Path(folder)
+    deployment, servers = check_evidence_json(folder)
+    checklist = (folder / 'checklist.md').read_text(encoding='utf-8')
+    lines = checklist.splitlines()
+    marker = lines[0] if lines else ''
+    daemon = re.search(r'\bdaemon=(self|launchd)(?=\s|;|$)', marker)
+    atlas = re.search(r'\batlas=(hermetic|prod)(?=\s|;|$)', marker)
+    assert marker.startswith('<!-- M18a rehearsal on a dev machine:') and daemon and atlas, \
+        'checklist.md is not a rehearsal checklist'
+    daemon, atlas = daemon[1], atlas[1]
+    items = [line for line in lines if line.startswith(('- [x] ', '- [ ] '))]
+    assert len(items) == 10, 'rehearsal checklist must have exactly 10 items'
+    always_unticked = {0, 9}
+    allowed_unticked = {0, 5, 9} | ({3} if daemon == 'self' else {8})
+    for index, item in enumerate(items):
+        if item.startswith('- [x] ') and index in always_unticked:
+            fail(f'a rehearsal cannot tick: {item[:40]}')
+        if item.startswith('- [ ] ') and index not in allowed_unticked:
+            fail(f'rehearsal did not prove: {item[:60]}')
+    assert FORBIDDEN[0] not in checklist, 'rehearsal checklist claims deployment_verified'
+    print(f'M18a REHEARSAL on dev machine: evidence at {folder} (daemon={daemon}, atlas={atlas}): '
+          f"daemon served {deployment['package_root']} with MCP {servers or 'none'}, Atlas poll online, "
+          'workflow run succeeded, checklist ticked only where the harness proved it; not host evidence (exit 2)')
+    return 2
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--host-evidence', type=Path,
-                        help='operator evidence directory from a real host, inside this repo, e.g. out/m18a-evidence/<date> (runbook §11)')
+    evidence_args = parser.add_mutually_exclusive_group()
+    evidence_args.add_argument('--host-evidence', type=Path,
+                              help='operator evidence directory from a real host, inside this repo, e.g. out/m18a-evidence/<date> (runbook §11)')
+    evidence_args.add_argument('--rehearsal', type=Path,
+                              help='harness evidence directory from scripts/rehearse_m18a.py inside this repo, '
+                              'e.g. out/m18a-rehearsal/<date> (runbook §12); always exit 2')
     args = parser.parse_args()
     check_runbook()
     with tempfile.TemporaryDirectory(prefix='forge-m18a-') as temporary:
@@ -151,6 +190,12 @@ def main():
         check_templates(work, register)
     if code == 2:
         print('M18a note: thclaws not on PATH, export produced no archive (templates do not need it)')
+    if args.rehearsal is not None:
+        evidence = os.path.realpath(args.rehearsal)
+        if not evidence.startswith(str(ROOT) + os.sep):
+            print(f'M18a FAIL: --rehearsal must be inside {ROOT} (runbook §12): {args.rehearsal}')
+            return 1
+        return check_rehearsal(Path(evidence))
     if args.host_evidence is None:
         print('M18a SKIP: static half passed; real host not available (exit 2). Pass --host-evidence <dir> with the '
               'operator files from docs/deploy-runbook.md §11 after a real Atlas deployment; the builder never '

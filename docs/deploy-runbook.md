@@ -20,6 +20,7 @@ T2 package (ต้องมี daemon แยกและ `human_gate`; M20), mon
 | runtime ของ pack ที่ `deployment.packs` ต้องการ (เช่น `python3` สำหรับ `sql-readonly` และ checkout ที่ `SQL_READONLY_AI_ROOT` ชี้) | ตาม README ของ pack; builder ไม่ติดตั้งให้ |
 | Atlas control plane ที่ operator มีสิทธิ์ `admin` และ Atlas ถึง host นี้ทาง network ที่ `worker.base_url` ระบุ | `curl -fsS <atlas>/api/workers` ด้วย token ของ Atlas; firewall เปิดเฉพาะ IP ของ Atlas มาที่ port ของ daemon |
 | ไม่มี org policy ที่ปิด external MCP หรือ `allow_serve` (DESIGN §4 M17 ข้อ 11) | ถ้ามี policy MCP ของ pack จะไม่ spawn และ reachability check ข้อ 7 จับได้ |
+| ตัดสินใจเรื่อง egress ตอน start: daemon ดึง marketplace และ model catalogue จาก `thclaws.ai` อย่างมากวันละครั้งต่อ service user (fail-silent; DESIGN §4 "Baseline 0.146.0 / 9f69995" ข้อ 13) | egress rules ของ host อนุญาต `thclaws.ai` หรือปิดโดยรู้ตัว; ไม่มี setting ใดปิด refresh นี้ |
 
 ## 2. บนเครื่อง dev: export และ render launcher
 
@@ -80,6 +81,7 @@ sudo -u thclaws "${EDITOR:-vi}" /etc/thclaws/sql-reader.env                   # 
 ค่าคงที่ที่ launcher ตั้งเองและห้ามเอาออก: `THCLAWS_AUTO_MIGRATE=0` (กัน auto-migrate ของ desktop build, DESIGN §4 M13 (b)) และ `THCLAWS_DISABLE_KEYCHAIN=1` (M17 ข้อ 9).
 ห้ามตั้ง `THCLAWS_PROJECT_ROOT` (allowedTools fail-open, DESIGN §4 "Tool allowlist") และ `THCLAWS_OFFICE_APPS` (ทับ `officeApps: []` ของ package).
 ถ้าเครื่องมี AI Server hub ที่ `127.0.0.1:9000` ให้ตั้ง `LITELLM_BASE_URL` หรือถอด hub มิฉะนั้น `aiserver-rag` จะโผล่ใน inventory และข้อ 7 fail (M17 ข้อ 5).
+ไม่มี env ใดปิด refresh ของ marketplace/model catalogue ตอน start (ข้อ 1); ห้ามตั้ง `THCLAWS_INSTALL_SOURCE`/`THCLAWS_MARKETPLACE_URL` เพื่อระงับ เพราะ marketplace-only mode ปฏิเสธ MCP server ของ pack (DESIGN §4 M17 ข้อ 11).
 
 ## 5. ติดตั้งและ start launcher
 
@@ -109,12 +111,13 @@ daemon ต้อง start จาก `deployment.daemon_cwd` (= `deployment.packa
 . /etc/thclaws/sql-reader.env   # ใน shell ของ operator เพื่อเอา token มาใช้ชั่วคราว; อย่า echo
 curl -fsS http://127.0.0.1:4317/healthz
 curl -fsS -H "Authorization: Bearer $THCLAWS_API_TOKEN" http://127.0.0.1:4317/v1/agent/info \
-  | python3 -c 'import json,sys;i=json.load(sys.stdin);print(i["workspace_dir"]);print(sorted(s["name"] for s in i.get("agent",{}).get("mcp_servers",[])))'
+  | python3 -c 'import json,sys;i=json.load(sys.stdin);print(i["workspace_dir"]);print(sorted(s["name"] for s in i.get("mcp_servers",[])))'
 test ! -e /srv/atlas/sql-reader/.thclaws/bots.json && echo still-single-agent
 ```
 
 ต้องได้: `workspace_dir` เท่ากับ `deployment.package_root` ทุกตัวอักษร (บน macOS ระวัง `/tmp` → `/private/tmp`), รายชื่อ MCP server เท่ากับ `deployment.mcp_servers`
 (ไม่มี `gridcraft`/`wordcraft`/`deckcraft`/`aiserver-rag` เกินมา) และไม่มี `.thclaws/bots.json`. ไม่ตรงข้อใด = หยุด ทำข้อ 9 แล้วหาสาเหตุ ไม่ลงทะเบียน.
+body ของ `/v1/agent/info` มี `mcp_servers` ที่ top level; poll ของ Atlas ห่อรายการนี้เป็น `agent_info.agent.mcp_servers` (ข้อ 7).
 ไฟล์ใน `package_root` นอก `.thclaws/state/` ต้องยังเท่ากับ archive (`tar -tzf` + เทียบ sha ของไฟล์ที่สงสัย) ยกเว้น `.thclaws/settings.json` ที่ประกาศ `workspaceVersion: 2` ไว้แล้วจึงไม่ถูกเขียนทับ (DESIGN §4 ข้อ 14).
 
 ## 7. ลงทะเบียนกับ Atlas
@@ -161,8 +164,11 @@ curl -fsS -H "Authorization: Bearer $ATLAS_TOKEN" "$ATLAS/api/workflow-runs/$RUN
 ทำเมื่อข้อ 6–8 ไม่ผ่าน, package ถูกแปลงเป็น host workspace, หรือจะถอน deployment:
 
 1. หยุดและปิด launcher: `sudo systemctl disable --now sql-reader` / `sudo launchctl bootout system/thclaws.sql-reader`
-2. ถอนจาก Atlas (ref `daa0f49` มี `DELETE /api/workers/<id>` และ `DELETE /api/workspaces/<id>`; ลบ workflow ที่อ้าง worker นี้ก่อน หรือปล่อยไว้แล้ว poll จะเป็น `offline`):
-   `curl -fsS -X DELETE -H "Authorization: Bearer $ATLAS_TOKEN" "$ATLAS/api/workspaces/wsp_sql-reader"` แล้ว `…/api/workers/wrk_sql-reader`
+2. ถอนจาก Atlas: ลบ workflow ที่อ้าง worker นี้ก่อน (`DELETE /api/workflows/<id>`) แล้วลบ workspace ด้วย
+   `curl -fsS -X DELETE -H "Authorization: Bearer $ATLAS_TOKEN" "$ATLAS/api/workspaces/wsp_sql-reader"`.
+   หลัง worker เคยรัน job แล้ว Atlas (ref `daa0f49` และ `375ac85`) ปฏิเสธ `DELETE /api/workers/<id>` ด้วย
+   `worker has N job(s) in history; deletion is blocked to preserve the audit trail`; ให้เก็บ worker ไว้และ poll หลังหยุด daemon ในขั้น 1 ต้องได้ `offline` เป็นหลักฐานการถอน.
+   ถ้าไม่มี job history จึงลบ worker ได้; เมื่อ deploy ซ้ำ Atlas upsert ด้วย worker id เดิม.
 3. เก็บ tree เดิมไว้สอบสวน: `sudo mv /srv/atlas/sql-reader /srv/atlas/sql-reader.failed-$(date +%Y%m%d%H%M)` (หรือลบเมื่อไม่ต้องการ); ห้าม `thclaws bots unmigrate` แล้วใช้ต่อ (DESIGN §8)
 4. แตกใหม่จาก archive ตามข้อ 3 เมื่อจะ deploy ซ้ำ; revoke `THCLAWS_API_TOKEN` เดิม (สร้างใหม่ใน env file) ถ้ามีโอกาสรั่ว
 5. บันทึกใน checklist ว่า rollback เพราะอะไร; `deployment_verified` ยังเป็น `false` ในไฟล์ export (ไม่มีอะไรต้องแก้ใน builder)
@@ -192,7 +198,7 @@ operator ที่ทำข้อ 1–10 บน host จริงแล้ว �
 | ไฟล์ | ที่มา | gate ตรวจ |
 |---|---|---|
 | `atlas-register.json` | สำเนาไฟล์ export ที่ใช้ deploy | `deployment.deployment_verified` ยัง `false`; ใช้ `package_root`/`mcp_servers`/`worker.id` เทียบไฟล์อื่น |
-| `agent-info.json` | body ของ `GET /v1/agent/info` (ข้อ 6) | `workspace_dir` = `deployment.package_root`; ชื่อ `agent.mcp_servers` = `deployment.mcp_servers` |
+| `agent-info.json` | body ของ `GET /v1/agent/info` (ข้อ 6) | `workspace_dir` = `deployment.package_root`; ชื่อใน `mcp_servers` (top level ของ body; gate รับ `agent.mcp_servers` ด้วย) = `deployment.mcp_servers` |
 | `poll.json` | body ของ `POST /api/workers/<id>/poll` (ข้อ 7) | `worker.status` = `online`, `worker.id` ตรง |
 | `atlas-run.json` | body ของ `GET /api/workflow-runs/<id>` (ข้อ 8) | `run.state` = `succeeded` |
 | `checklist.md` | checklist ข้อ 10 ที่ติ๊กครบ | ไม่มี `[ ]` เหลือ และมีข้อ `deployment_verified` |
@@ -202,3 +208,86 @@ python3 scripts/check_m18a_deploy_runbook.py --host-evidence out/m18a-evidence/2
 ```
 
 exit 0 ของ gate แปลว่า operator ส่งหลักฐานตามสัญญานี้และไฟล์สอดคล้องกัน ไม่ใช่ builder ยืนยัน deployment: `deployment_verified` ใน export ยังเป็น `false` และสถานะ package มาจาก build report เท่านั้น.
+
+## 12. ซ้อมบนเครื่อง dev (rehearsal)
+
+`scripts/rehearse_m18a.py` เดินข้อ 2–9 และเก็บชุดไฟล์ข้อ 11 บนเครื่อง dev เครื่องเดียวด้วย `sqlite-reader`
+(atlas-worker T0, pack `sqlite-readonly`, synthetic SQLite fixture). นี่เป็นส่วนหนึ่งของ M18a; host จริงยังไม่ทำ.
+โฟลเดอร์นี้ไม่ใช่ M18a host evidence: gate `--rehearsal` ตรวจแล้วจบ exit 2 เสมอเมื่อหลักฐานผ่าน ส่วน `--host-evidence`
+ปฏิเสธโฟลเดอร์ rehearsal เพราะ checklist มี `[ ]` เสมอ.
+
+hermetic Atlas (in-process จาก worktree ที่ pin):
+
+```bash
+THCLAWS_BIN='<0.146.0 desktop build>' ATLAS_ROOT=../atlas-control-plane-daa0f49 \
+  .venv/bin/python3 scripts/rehearse_m18a.py --base-url http://127.0.0.1:4319
+```
+
+Atlas ของ operator (`ATLAS_TOKEN` เป็น optional; ตั้งใน environment เมื่อ Atlas ต้องการ token):
+
+```bash
+# export ATLAS_TOKEN=...   # เฉพาะ Atlas ที่ต้องการ token; อย่าพิมพ์ค่าลง evidence
+ATLAS_URL=http://127.0.0.1:8787 THCLAWS_BIN='<0.146.0 desktop build>' \
+  .venv/bin/python3 scripts/rehearse_m18a.py --base-url http://127.0.0.1:4319 --atlas prod
+```
+
+launchd ให้ operator ทำคำสั่ง sudo ที่ harness พิมพ์ระหว่างรอ (ใช้ `--package-root <dir>` เลือก path ที่มีอยู่ได้):
+
+```bash
+ATLAS_URL=http://127.0.0.1:8787 THCLAWS_BIN='<0.146.0 desktop build>' \
+  .venv/bin/python3 scripts/rehearse_m18a.py --base-url http://127.0.0.1:4319 \
+  --daemon launchd --atlas prod --package-root '<dir>'
+```
+
+ตรวจหลักฐานที่เก็บแล้ว (`<date>` คือโฟลเดอร์ที่ harness รายงาน เช่น `2026-11-02-4`):
+
+```bash
+python3 scripts/check_m18a_deploy_runbook.py --rehearsal out/m18a-rehearsal/<date>
+```
+
+ลำดับงานและข้อของ runbook ที่อ้างถึง:
+
+1. ข้อ 2: test pack ให้ conformant, copy spec โดยเปลี่ยนเฉพาะ `model.id` ตาม `--model` (fixture ต้นฉบับคง `gpt-5.4`),
+   generate → audit ให้ได้ `draft` → export โดย `workspace_dir` เป็น realpath ของ package root → render launcher.
+   `--live` เพิ่ม live + security audit ก่อน export; default ไม่ทำขั้นนี้.
+2. ข้อ 3: ตรวจ `.sha256`, extract archive, ยืนยัน `workspaceVersion: 2` และไม่มี `.thclaws/bots.json`;
+   เตรียม synthetic SQLite fixture สำหรับ pack.
+3. ข้อ 4: สร้าง env file mode 0600 ใน temp dir mode 0700 นอก repo แล้วลบเมื่อจบ; ไม่เก็บค่า secret ในหลักฐาน.
+4. ข้อ 5: `--daemon self` start ตาม `ProgramArguments`/`WorkingDirectory`/`EnvironmentVariables` ของ plist ที่ render ทุกตัว
+   พร้อม temp service-user `HOME` ที่ว่าง;
+   `--daemon launchd` รอ operator ติดตั้งและ start แล้วเทียบ plist ที่ติดตั้งกับไฟล์ที่ render.
+5. ข้อ 6–7: ตรวจ `/healthz` และ `/v1/agent/info`, บันทึก `agent-info.json`, register worker → workspace → workflow แล้ว poll ให้ `online`
+   และตรวจ MCP inventory. ก่อน register ตรวจว่าไม่มี worker id อื่นใช้ `base_url` เดียวกัน.
+6. ข้อ 8: รัน golden case `normal` ด้วย `execution_mode: test`, รอ `succeeded`, เก็บผลและ validate artifact กับ output schema.
+7. ข้อ 9: rollback โดยหยุด daemon → ถอน workflow/workspace และลบ worker หรือยืนยัน poll `offline` เมื่อมี job history → เก็บ tree เดิมแล้วแตก archive ใหม่;
+   เขียน `rollback.json` และ `checklist.md` ตามขั้นที่พิสูจน์ได้ แล้ว secret scan ทั้ง evidence folder ก่อนรายงานผล.
+
+Prerequisites ที่ขาดแล้วจบ exit 2: binary ไม่มีหรือไม่ใช่ `0.146.0`/`9f69995`, provider credential ไม่ครบ
+(`OPENAI_COMPAT_API_KEY` + `OPENAI_COMPAT_BASE_URL` สำหรับ `oai/*`, `OPENAI_API_KEY` สำหรับ model อื่น;
+อ่านจาก environment หรือ `.env` โดยไม่พิมพ์ค่า), port มี listener อยู่แล้ว (harness ไม่หยุด daemon ที่ตนไม่ได้ start),
+hermetic Atlas root ไม่มีหรือไม่ใช่ `daa0f49`, หรือ `--atlas prod` ไม่ตั้ง `ATLAS_URL`/ติดต่อไม่ได้/ไม่มีสิทธิ์ (ตรวจ `ATLAS_TOKEN`).
+หากพบ worker อื่นใช้ `base_url` เดียวกันจบ exit 1 ก่อนเขียน registration เพราะ Atlas upsert ด้วย id หรือ base_url.
+`--out` รับเฉพาะชื่อโฟลเดอร์ใต้ `out/m18a-rehearsal/` (มี separator หรือ `..` → argparse ปฏิเสธ exit 2); `--package-root` ของ `--daemon self`
+ต้อง resolve อยู่ใต้ `out/` (exit 1); กับ `--daemon launchd` เป็น path บน host ที่ต้อง absolute และไม่มี `..` และใช้เป็นข้อความเท่านั้น;
+`--base-url` ตรวจโดย argparse (http/https, port 1–65535) และค่าเริ่มต้นคือ `http://127.0.0.1:4319`.
+ขั้นที่ล้มเหลวจริงจบ exit 1 หลัง cleanup; launchd รอเกิน `--timeout` แล้วยังไม่ขึ้นจบ exit 2.
+
+ใน launchd mode คำสั่ง sudo ของข้อ 3–5 และข้อ 9 (`bootout`, `mv`, re-extract) พิมพ์ให้ operator ทำเท่านั้น harness ไม่รันเอง;
+ขั้นที่สังเกตได้ครบสามารถจบ exit 0 แต่ไม่ถือว่าการพิมพ์ restore เป็นหลักฐานว่า operator ทำแล้ว.
+บน macOS ไม่มี `/srv` ถ้าไม่ได้ตั้ง `/etc/synthetic.conf` จึงควรส่ง `--package-root <dir>`.
+ไม่ต้องตั้ง browser ระดับ user: package pin `browserEnabled: false` และ project layer ทับ user layer (DESIGN §4 "Baseline 0.146.0 / 9f69995" ข้อ 13).
+
+หลักฐานอยู่ใต้ `out/m18a-rehearsal/<date>/` (เลือก suffix `-2`, `-3`, … เมื่อชื่อซ้ำ), gitignored ทั้งหมดและไม่มีค่า secret:
+ชุดข้อ 11 ห้าไฟล์ (`atlas-register.json`, `agent-info.json`, `poll.json`, `atlas-run.json`, `checklist.md`) พร้อม
+`artifacts.json`, `rollback.json`, `daemon.log` (self mode), `spec.yaml`, `deploy/`, `export/`, `package/`, `fixture/`, `srv/`
+(package root ค่าเริ่มต้นของ self mode); launchd มี `archive-check/` สำหรับตรวจ archive และ package root ตามที่ operator เลือก.
+
+ข้อที่ rehearsal ไม่ติ๊กเสมอ: host ไม่ใช่เครื่อง dev, firewall/egress (DESIGN §6; daemon ดึง marketplace และ model catalogue จาก
+`thclaws.ai` ตอน start ตาม DESIGN §4 "Baseline 0.146.0 / 9f69995" ข้อ 13: `[marketplace] auto-refreshed`), และ `deployment_verified`; `--daemon self` ไม่ติ๊ก launcher install และ `--daemon launchd`
+ไม่ติ๊ก rollback เพราะ move aside/re-extract เป็น operator step ที่ยังไม่ได้สังเกตผล.
+
+ข้อจำกัดที่พบ 2026-11-02: Atlas เก็บ rehearsal worker `wrk_sqlite-reader` ไว้ `offline` หลัง rollback เพราะมี job history (ข้อ 9);
+provider gateway ไม่มี credits สำหรับ `gpt-5.4-mini` (HTTP 429) จึงใช้ `--model oai/Qwen3.8-27B` ในรอบที่บันทึก;
+Qwen 1 ใน 5 รอบที่บันทึกล้มเหลวเพราะ Atlas `json.loads` (`output_format: json`) ปฏิเสธ node output แม้ session แสดง JSON ที่ valid หลัง thinking block (harness รายงาน exit 1 และ rollback ยังทำครบ);
+launchd mode ยังไม่ได้รันเพราะต้องให้ operator ทำขั้น sudo.
+rehearsal ไม่เพิ่ม claim ใดใน guarantee matrix และ `deployment_verified` คง `false`.
