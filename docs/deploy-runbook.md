@@ -265,6 +265,7 @@ Prerequisites ที่ขาดแล้วจบ exit 2: binary ไม่ม�
 อ่านจาก environment หรือ `.env` โดยไม่พิมพ์ค่า), port มี listener อยู่แล้ว (harness ไม่หยุด daemon ที่ตนไม่ได้ start),
 hermetic Atlas root ไม่มีหรือไม่ใช่ `daa0f49`, หรือ `--atlas prod` ไม่ตั้ง `ATLAS_URL`/ติดต่อไม่ได้/ไม่มีสิทธิ์ (ตรวจ `ATLAS_TOKEN`).
 หากพบ worker อื่นใช้ `base_url` เดียวกันจบ exit 1 ก่อนเขียน registration เพราะ Atlas upsert ด้วย id หรือ base_url.
+harness เขียนไฟล์เฉพาะใต้ `out/` ของ repo: `--out` และ `--package-root` ของ `--daemon self` ที่ resolve ออกนอก `out/` จบ exit 1 โดยไม่สร้างอะไร.
 ขั้นที่ล้มเหลวจริงจบ exit 1 หลัง cleanup; launchd รอเกิน `--timeout` แล้วยังไม่ขึ้นจบ exit 2.
 
 ใน launchd mode คำสั่ง sudo ของข้อ 3–5 และข้อ 9 (`bootout`, `mv`, re-extract) พิมพ์ให้ operator ทำเท่านั้น harness ไม่รันเอง;

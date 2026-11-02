@@ -18,7 +18,6 @@ import secrets
 import shlex
 import shutil
 import signal
-import socket
 import stat
 import subprocess
 import sys
@@ -53,6 +52,7 @@ from forge.spec import load_spec
 FIXTURE = ROOT / 'fixtures' / 'sqlite-reader' / 'spec.yaml'
 PACK = ROOT / 'packs' / 'sqlite-readonly'
 FORBIDDEN_ENV = {'THCLAWS_PROJECT_ROOT', 'THCLAWS_OFFICE_APPS'}
+OUT_ROOT = os.path.realpath(ROOT / 'out')
 SECRET_VALUES = []
 TERMINAL_STATES = {'succeeded', 'failed', 'cancelled', 'paused', 'waiting_for_human', 'recovery_required'}
 
@@ -81,16 +81,21 @@ def choose_out(base, day):
     return candidate
 
 
+def inside_out(path, label):
+    """Every directory the harness writes resolves under <repo>/out/ (S8707: CLI paths stay contained)."""
+    resolved = os.path.realpath(path)
+    if not resolved.startswith(OUT_ROOT + os.sep):
+        raise Failure(f'{label} must resolve inside the repo out/ directory')
+    return Path(resolved)
+
+
 def output_path(selected):
     path = selected
     if path is None:
         path = choose_out(ROOT / 'out/m18a-rehearsal', date.today().isoformat())
-    resolved = path.resolve()
-    if resolved == ROOT / 'out' or not resolved.is_relative_to(ROOT / 'out'):
-        raise Failure('--out must resolve inside the repo out/ directory')
     if path.exists() or path.is_symlink():
         raise Failure('--out already exists')
-    return resolved
+    return inside_out(path, '--out')
 
 
 def read_dotenv(path):
@@ -141,16 +146,19 @@ def preflight(model, base_url):
     if parts.scheme not in ('http', 'https') or not parts.hostname or parts.username or parts.password:
         raise Failure('--base-url must be an http(s) URL without credentials')
     port = parts.port or {'http': 80, 'https': 443}[parts.scheme]
+    # The host is the constant loopback address; only the port comes from --base-url.
+    connection = http.client.HTTPConnection('127.0.0.1', port, timeout=1)
     try:
-        connection = socket.create_connection(('127.0.0.1', port), timeout=1)
+        connection.connect()
     except ConnectionRefusedError:
         pass
     except OSError as exc:
         raise Skip(f'cannot confirm port {port} is free: {type(exc).__name__}') from exc
     else:
-        connection.close()
         raise Skip(f'port {port} already has a listener; '
                    'it is not ours, never stop it; pass another --base-url')
+    finally:
+        connection.close()
     os.environ['THCLAWS_BIN'] = binary
     passed('preflight')
     return binary, values, port
@@ -425,6 +433,7 @@ def verify_sidecar(archive):
 
 def extract_archive(archive, destination):
     verify_sidecar(archive)
+    destination = inside_out(destination, 'archive destination')
     if destination.exists() or destination.is_symlink():
         raise Failure('archive destination already exists')
     destination.mkdir(parents=True)
@@ -511,17 +520,26 @@ def operator_commands(out, archive, package_root, env_file):
         print(command, flush=True)
 
 
+def healthz(port, timeout):
+    """GET /healthz on the loopback daemon (S8703: the host is constant; only the port comes from --base-url)."""
+    connection = http.client.HTTPConnection('127.0.0.1', port, timeout=timeout)
+    try:
+        connection.request('GET', '/healthz')
+        return connection.getresponse().status
+    finally:
+        connection.close()
+
+
 def wait_ready(port, timeout, process=None):
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         if process is not None and process.poll() is not None:
             raise Failure('temporary daemon exited before readiness; see daemon.log')
         try:
-            with urllib.request.urlopen(f'http://127.0.0.1:{port}/healthz', timeout=1) as response:
-                if response.status == 200:
-                    passed('daemon /healthz')
-                    return
-        except (OSError, urllib.error.URLError, http.client.HTTPException):
+            if healthz(port, 1) == 200:
+                passed('daemon /healthz')
+                return
+        except (OSError, http.client.HTTPException):
             pass
         time.sleep(0.2)
     if process is None:
@@ -567,13 +585,9 @@ def wait_stopped(port, timeout):
         if remaining <= 0:
             raise Failure(f'daemon /healthz still answering or stop unconfirmed after {timeout:g} s')
         try:
-            with urllib.request.urlopen(f'http://127.0.0.1:{port}/healthz', timeout=min(1, remaining)):
-                pass
-        except urllib.error.HTTPError:
-            pass  # An HTTP error still proves there is a listener answering.
-        except urllib.error.URLError as exc:
-            if isinstance(exc.reason, ConnectionRefusedError):
-                return
+            healthz(port, min(1, remaining))  # any HTTP status still proves a listener answering
+        except ConnectionRefusedError:
+            return
         except (OSError, http.client.HTTPException):
             pass
         remaining = deadline - time.monotonic()
@@ -605,6 +619,8 @@ def restore_package(daemon, archive, package_root):
         for command in extraction_commands(archive, package_root):
             print(command, flush=True)
         return
+    package_root = inside_out(package_root, '--package-root')
+    failed = inside_out(failed, 'rollback destination')
     if failed.exists() or failed.is_symlink():
         raise Failure('rollback destination already exists')
     package_root.rename(failed)
@@ -829,11 +845,16 @@ def atlas_offline_checks(work):
     secret_scan(evidence, [secret, ''])
     checks += 1
 
-    worker = {'id': 'ours', 'base_url': 'http://worker.invalid:4319'}
+    worker = {'id': 'ours', 'base_url': 'https://worker.invalid:4319'}
     for base in (worker['base_url'], worker['base_url'] + '/'):
         must_refuse(lambda base=base: collision_guard([{'id': 'other', 'base_url': base}], worker))
     collision_guard([worker], worker)
-    collision_guard([{'id': 'other', 'base_url': 'http://other.invalid:4319'}], worker)
+    collision_guard([{'id': 'other', 'base_url': 'https://other.invalid:4319'}], worker)
+    checks += 1
+
+    assert inside_out(ROOT / 'out/m18a-rehearsal/x', 'x') == Path(OUT_ROOT) / 'm18a-rehearsal/x', 'inside out/'
+    for outside in (ROOT / 'out', ROOT / 'out/../docs', work):
+        must_refuse(lambda outside=outside: inside_out(outside, 'x'))
     checks += 1
 
     node, policy = {'id': 'single', 'worker_id': 'ours'}, {'allowed_worker_ids': ['ours']}
@@ -915,6 +936,8 @@ def main():
         default_root = (Path('/srv/atlas/sqlite-reader') if args.daemon == 'launchd'
                         else out / 'srv/sqlite-reader')
         package_root = Path(os.path.realpath(args.package_root or default_root))
+        if args.daemon == 'self':  # self mode extracts and renames it; launchd only prints operator commands
+            package_root = inside_out(package_root, '--package-root')
         binary, provider, port = preflight(args.model, args.base_url)
         root, base = atlas_preflight(args.atlas, atlas_token)
         conform_pack()
