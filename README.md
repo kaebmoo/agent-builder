@@ -48,6 +48,8 @@ M18a static (2026-11-01): runbook [docs/deploy-runbook.md](docs/deploy-runbook.m
 ที่ `scripts/render_launcher.py` render จาก `atlas-register.json` เท่านั้น (daemon CWD, port/bind จาก `base_url`, ชื่อ env; ไม่มีค่า secret; deterministic) และ gate `check_m18a_deploy_runbook.py`
 ที่จบ exit 2 โดยตั้งใจจนกว่า operator จะส่ง `--host-evidence <dir>` จาก host จริง; ยังไม่มี deployment จริง `deployment_verified` ยัง `false` และ builder ไม่เคยตั้งค่านี้.
 
+M18a rehearsal (2026-11-02): `scripts/rehearse_m18a.py` เดิน runbook §2–§9 บนเครื่อง dev (hermetic Atlas หรือ Atlas ของ operator); gate `--rehearsal <dir>` ตรวจโฟลเดอร์หลักฐานแล้วจบ exit 2 เสมอเมื่อผ่าน; M18a host จริง ยังไม่ทำ ดู [runbook §12](docs/deploy-runbook.md#12-ซ้อมบนเครื่อง-dev-rehearsal).
+
 M24 (2026-11-01): `forge next <package>` อ่าน `builder-build-report.json` แล้วบอกคำสั่งถัดไปหนึ่งคำสั่งพร้อมเหตุผล (static/validate → live → security → export หรือ run ตาม target) อ่านอย่างเดียว ไม่เลื่อนสถานะ ไม่อ้าง deploy-ready; gate `check_m24_forge_next.py` offline ล้วน
 
 M22 (2026-11-01): flag `--allow-unverified-runtime` บน `forge audit`/`live-test`/`export` ให้ binary นอก baseline/คู่ที่รับรองยังตรวจได้ โดย report บันทึก `runtime: unverified`, ลดแถว guarantee ที่พึ่ง runtime เป็น Declared, สถานะไม่เกิน `candidate`, export เขียน `deployment.runtime.verified: false`; ไม่มี flag = พฤติกรรมเดิม; gate `check_m22_unverified_runtime.py` (wrapper script, ไม่ใช้ key). ไม่ใช่การรับรองรุ่นใหม่ — re-baseline ยังเป็นงานแบบ M17.
